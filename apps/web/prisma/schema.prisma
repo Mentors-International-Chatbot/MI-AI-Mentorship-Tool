@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SystemPrompt {
+  id        String   @id @default(uuid())
+  version   String   // e.g., "1.0", "1.1-beta"
+  content   String
+  category  String   // e.g., "onboarding", "mentor_support"
+  active    Boolean  @default(false)
+  authorId  String   @map("author_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("system_prompts")
+}
+
+model Socio {
+  id                  String   @id @default(uuid())
+  whatsappPhoneNumber String   @unique @map("whatsapp_phone_number")
+  name                String
+  promptOverrides     Json?    @map("prompt_overrides") // Custom influence settings
+  metadata            Json?
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  messages            Message[]
+  summaries           Summary[]
+
+  @@map("socios")
+}
+
+model Mentor {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      String   // "mentor", "admin"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("mentors")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  socioId   String   @map("socio_id")
+  role      String   // "user", "assistant", "system"
+  content   String
+  timestamp DateTime @default(now())
+
+  socio     Socio    @relation(fields: [socioId], references: [id])
+
+  @@map("messages")
+}
+
+model Summary {
+  id            String   @id @default(uuid())
+  socioId       String   @map("socio_id")
+  weekStartDate DateTime @map("week_start_date")
+  content       String   // Markdown content
+  flags         Json?    // { "red": ["risk1"], "green": ["progress"] }
+  metrics       Json?    // { "revenue": 100, "expenses": 50 }
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  socio         Socio    @relation(fields: [socioId], references: [id])
+
+  @@map("summaries")
+}
