@@ -1,7 +1,8 @@
-import { PrismaClient, Socio, OnboardingStatus } from '@prisma/client';
+import { repo } from '@/lib/repo';
+import { Socio } from '@/lib/repo/types';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 
 // MVP Logic: Hardcoded toggle for now, can be database-driven later
 const REQUIRE_LEGAL_CONSENT = false;
@@ -12,20 +13,14 @@ export async function handleOnboarding(socio: Socio, incomingMessage: string) {
     switch (socio.status) {
         case 'NEW':
             if (REQUIRE_LEGAL_CONSENT) {
-                await prisma.socio.update({
-                    where: { id: socio.id },
-                    data: { status: 'AWAITING_CONSENT' },
-                });
+                await repo.updateSocio(socio.id, { status: 'AWAITING_CONSENT' });
                 await sendWhatsAppMessage(
                     socio.whatsappPhoneNumber,
                     "Hola, soy tu mentor virtual de Mentors International. Para continuar, por favor lee y acepta nuestros términos de uso. Responde 'ACEPTO' para iniciar."
                 );
             } else {
                 // Skip consent, go straight to Name
-                await prisma.socio.update({
-                    where: { id: socio.id },
-                    data: { status: 'AWAITING_NAME' },
-                });
+                await repo.updateSocio(socio.id, { status: 'AWAITING_NAME' });
                 await sendWhatsAppMessage(
                     socio.whatsappPhoneNumber,
                     "¡Hola! Soy tu mentor virtual de Mentors International 🤖. Estoy aquí para ayudarte a crecer tu negocio. Para empezar, ¿cómo te llamas?"
@@ -35,10 +30,7 @@ export async function handleOnboarding(socio: Socio, incomingMessage: string) {
 
         case 'AWAITING_CONSENT':
             if (message.toUpperCase() === 'ACEPTO') {
-                await prisma.socio.update({
-                    where: { id: socio.id },
-                    data: { status: 'AWAITING_NAME' },
-                });
+                await repo.updateSocio(socio.id, { status: 'AWAITING_NAME' });
                 await sendWhatsAppMessage(
                     socio.whatsappPhoneNumber,
                     "¡Gracias! Para empezar, ¿cómo te llamas?"
@@ -53,12 +45,9 @@ export async function handleOnboarding(socio: Socio, incomingMessage: string) {
 
         case 'AWAITING_NAME':
             // MVP: Accept whatever they type as the name
-            await prisma.socio.update({
-                where: { id: socio.id },
-                data: {
-                    name: message,
-                    status: 'ACTIVE'
-                },
+            await repo.updateSocio(socio.id, {
+                name: message,
+                status: 'ACTIVE'
             });
             await sendWhatsAppMessage(
                 socio.whatsappPhoneNumber,

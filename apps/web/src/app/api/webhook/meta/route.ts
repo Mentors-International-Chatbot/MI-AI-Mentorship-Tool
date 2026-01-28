@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { repo } from '@/lib/repo';
 import { handleOnboarding } from '@/lib/onboarding/service';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
+import { generateAIResponse } from '@/lib/ai/service';
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 
 // Verify Webhook (GET)
 export async function GET(req: NextRequest) {
@@ -34,18 +35,11 @@ export async function POST(req: NextRequest) {
                         if (!textBody) continue; // Skip non-text messages for MVP
 
                         // 1. Lookup Socio
-                        let socio = await prisma.socio.findUnique({
-                            where: { whatsappPhoneNumber: senderPhone },
-                        });
+                        let socio = await repo.getSocio(senderPhone);
 
                         // 2. New Socio? Create them.
                         if (!socio) {
-                            socio = await prisma.socio.create({
-                                data: {
-                                    whatsappPhoneNumber: senderPhone,
-                                    status: 'NEW',
-                                },
-                            });
+                            socio = await repo.createSocio(senderPhone);
                             // Immediate onboarding trigger
                             await handleOnboarding(socio, textBody);
                             continue;
@@ -55,8 +49,25 @@ export async function POST(req: NextRequest) {
                         if (socio.status !== 'ACTIVE') {
                             await handleOnboarding(socio, textBody);
                         } else {
-                            // TODO: AI Conversation Logic (LangChain) goes here
-                            await sendWhatsAppMessage(senderPhone, "Bot is Active! (AI integration pending)");
+                            // 1. Save User Message to DB
+                            await repo.addMessage({
+                                socioId: socio.id,
+                                role: 'user',
+                                content: textBody,
+                            });
+
+                            // 2. Generate AI Response
+                            const aiResponse = await generateAIResponse(socio, textBody);
+
+                            // 3. Save AI Message to DB
+                            await repo.addMessage({
+                                socioId: socio.id,
+                                role: 'assistant',
+                                content: aiResponse,
+                            });
+
+                            // 4. Send via WhatsApp
+                            await sendWhatsAppMessage(senderPhone, aiResponse);
                         }
                     }
                 }
