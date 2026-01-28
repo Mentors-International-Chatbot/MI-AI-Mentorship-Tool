@@ -3,8 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
 }
 
 model SystemPrompt {
@@ -19,13 +18,21 @@ model SystemPrompt {
   @@map("system_prompts")
 }
 
+enum OnboardingStatus {
+  NEW
+  AWAITING_CONSENT
+  AWAITING_NAME
+  ACTIVE
+}
+
 model Socio {
-  id                  String   @id @default(uuid())
-  whatsappPhoneNumber String   @unique @map("whatsapp_phone_number")
-  name                String
-  promptOverrides     Json?    @map("prompt_overrides") // Custom influence settings
+  id                  String           @id @default(uuid())
+  whatsappPhoneNumber String           @unique @map("whatsapp_phone_number")
+  name                String?          // Nullable until onboarding completes
+  status              OnboardingStatus @default(NEW)
+  promptOverrides     Json?            @map("prompt_overrides") // Custom influence settings
   metadata            Json?
-  createdAt           DateTime @default(now()) @map("created_at")
+  createdAt           DateTime         @default(now()) @map("created_at")
 
   messages            Message[]
   summaries           Summary[]
