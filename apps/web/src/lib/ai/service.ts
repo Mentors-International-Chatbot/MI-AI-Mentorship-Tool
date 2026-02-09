@@ -1,5 +1,5 @@
 
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
 import { repo } from '@/lib/repo';
 import { Socio, Message } from '@/lib/repo/types';
@@ -21,9 +21,9 @@ Estás hablando con un emprendedor.
 `;
 
 export async function generateAIResponse(socio: Socio, incomingText: string): Promise<string> {
-    // 1. Initialize Model (requires OPENAI_API_KEY env var)
-    const chat = new ChatOpenAI({
-        modelName: "gpt-4o-mini", // Cost effective for pilot
+    // 1. Initialize Model (requires ANTHROPIC_API_KEY env var)
+    const chat = new ChatAnthropic({
+        modelName: "claude-sonnet-4-20250514", // Cost effective for pilot
         temperature: 0.7,
     });
 
