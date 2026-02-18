@@ -1,3 +1,3 @@
-import { inMemoryRepo } from "./inMemoryRepo";
+import { prismaRepo } from "./prismaRepo";
 
-export const repo = inMemoryRepo;
+export const repo = prismaRepo;

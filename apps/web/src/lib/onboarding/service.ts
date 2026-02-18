@@ -2,8 +2,6 @@ import { repo } from '@/lib/repo';
 import { Socio } from '@/lib/repo/types';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
 
-// const prisma = new PrismaClient();
-
 // MVP Logic: Hardcoded toggle for now, can be database-driven later
 const REQUIRE_LEGAL_CONSENT = false;
 

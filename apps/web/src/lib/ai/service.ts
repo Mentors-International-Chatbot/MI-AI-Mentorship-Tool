@@ -23,8 +23,9 @@ Estás hablando con un emprendedor.
 export async function generateAIResponse(socio: Socio, incomingText: string): Promise<string> {
     // 1. Initialize Model (requires ANTHROPIC_API_KEY env var)
     const chat = new ChatAnthropic({
-        modelName: "claude-sonnet-4-20250514", // Cost effective for pilot
+        model: "claude-haiku-4-5-20251001", // Cost effective for pilot
         temperature: 0.7,
+        anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     // 2. Fetch Conversation History (Last 10 messages for context)
@@ -37,9 +38,10 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
         return new SystemMessage(msg.content);
     });
 
+    const systemPrompt = `${BASE_SYSTEM_PROMPT}\nNombre del Socio: ${socio.name || "Amigo"}`;
+
     const messages = [
-        new SystemMessage(BASE_SYSTEM_PROMPT),
-        new SystemMessage(`Nombre del Socio: ${socio.name || "Amigo"}`),
+        new SystemMessage(systemPrompt),
         ...previousMessages,
         new HumanMessage(incomingText),
     ];

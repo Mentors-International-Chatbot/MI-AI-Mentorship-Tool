@@ -4,8 +4,6 @@ import { handleOnboarding } from '@/lib/onboarding/service';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
 import { generateAIResponse } from '@/lib/ai/service';
 
-// const prisma = new PrismaClient();
-
 // Verify Webhook (GET)
 export async function GET(req: NextRequest) {
     const mode = req.nextUrl.searchParams.get('hub.mode');

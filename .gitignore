@@ -7,3 +7,5 @@ out
 .vercel
 apps/web/.next
 apps/web/node_modules
+*.db
+*.db-journal

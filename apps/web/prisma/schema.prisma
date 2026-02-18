@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model SystemPrompt {
@@ -28,14 +28,17 @@ enum OnboardingStatus {
 model Socio {
   id                  String           @id @default(uuid())
   whatsappPhoneNumber String           @unique @map("whatsapp_phone_number")
-  name                String?          // Nullable until onboarding completes
+  name                String?
+  businessName        String?          @map("business_name")
+  businessDescription String?          @map("business_description")
   status              OnboardingStatus @default(NEW)
-  promptOverrides     Json?            @map("prompt_overrides") // Custom influence settings
+  promptOverrides     Json?            @map("prompt_overrides")
   metadata            Json?
   createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
 
-  messages            Message[]
-  summaries           Summary[]
+  messages  Message[]
+  summaries Summary[]
 
   @@map("socios")
 }
@@ -55,9 +58,9 @@ model Message {
   socioId   String   @map("socio_id")
   role      String   // "user", "assistant", "system"
   content   String
-  timestamp DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
 
-  socio     Socio    @relation(fields: [socioId], references: [id])
+  socio Socio @relation(fields: [socioId], references: [id])
 
   @@map("messages")
 }
@@ -66,12 +69,12 @@ model Summary {
   id            String   @id @default(uuid())
   socioId       String   @map("socio_id")
   weekStartDate DateTime @map("week_start_date")
-  content       String   // Markdown content
-  flags         Json?    // { "red": ["risk1"], "green": ["progress"] }
-  metrics       Json?    // { "revenue": 100, "expenses": 50 }
+  content       String
+  flags         Json?
+  metrics       Json?
   createdAt     DateTime @default(now()) @map("created_at")
 
-  socio         Socio    @relation(fields: [socioId], references: [id])
+  socio Socio @relation(fields: [socioId], references: [id])
 
   @@map("summaries")
 }
