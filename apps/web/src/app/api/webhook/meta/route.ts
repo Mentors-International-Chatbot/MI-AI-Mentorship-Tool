@@ -47,25 +47,36 @@ export async function POST(req: NextRequest) {
                         if (socio.status !== 'ACTIVE') {
                             await handleOnboarding(socio, textBody);
                         } else {
-                            // 1. Save User Message to DB
                             await repo.addMessage({
                                 socioId: socio.id,
                                 role: 'user',
                                 content: textBody,
                             });
 
-                            // 2. Generate AI Response
                             const aiResponse = await generateAIResponse(socio, textBody);
 
-                            // 3. Save AI Message to DB
+                            // Save the clean text (markers stripped) to DB
                             await repo.addMessage({
                                 socioId: socio.id,
                                 role: 'assistant',
-                                content: aiResponse,
+                                content: aiResponse.text,
                             });
 
-                            // 4. Send via WhatsApp
-                            await sendWhatsAppMessage(senderPhone, aiResponse);
+                            // Process markers (flags, escalations, lesson completions)
+                            if (aiResponse.markers.flags.length > 0) {
+                                console.log(`[Flags] socio=${socio.id}`, aiResponse.markers.flags);
+                                // Future: save flags to a Flag table
+                            }
+                            if (aiResponse.markers.escalations.length > 0) {
+                                console.log(`[Escalation] socio=${socio.id}`, aiResponse.markers.escalations);
+                                // Future: create escalation records, notify mentor
+                            }
+                            if (aiResponse.markers.lessonsCompleted.length > 0) {
+                                console.log(`[LessonComplete] socio=${socio.id}`, aiResponse.markers.lessonsCompleted);
+                                // Future: advance socio progress
+                            }
+
+                            await sendWhatsAppMessage(senderPhone, aiResponse.text);
                         }
                     }
                 }

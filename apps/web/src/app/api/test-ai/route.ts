@@ -22,7 +22,10 @@ export async function POST(req: NextRequest) {
 
         const aiResponse = await generateAIResponse(fakeSocio, message);
 
-        return NextResponse.json({ response: aiResponse });
+        return NextResponse.json({
+            response: aiResponse.text,
+            markers: aiResponse.markers,
+        });
     } catch (error) {
         console.error('Test AI Error:', error);
         return NextResponse.json({ error: String(error) }, { status: 500 });
