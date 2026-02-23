@@ -3,7 +3,10 @@ name: Lesson Delivery Pipeline
 overview: Wire the existing 4-layer prompt system to actually teach lessons by creating structured lesson data (JSON), adding progress tracking to the database, and updating the router/webhook to deliver curriculum instead of defaulting to freeform Q&A.
 todos:
   - id: lessons-json
-    content: Create src/lib/lessons/data.ts with LessonData type and structured JSON for lessons 1-5 (from mentors_manual_key_points.txt)
+    content: Create src/lib/lessons/data.ts with LessonData type and structured JSON for lessons 1-5 (variable message count per lesson, not fixed at 4)
+    status: in_progress
+  - id: constants
+    content: Create src/lib/ai/prompts/constants.ts with RETEACH_THRESHOLD, MAX_LESSON_NUMBER, and other tunable values; update router and task prompts to reference it
     status: pending
   - id: prisma-progress
     content: Add SocioProgress model to Prisma schema, run migration, update Socio relation
@@ -21,7 +24,13 @@ todos:
     content: Update AI service to pass incomingText to router and progress to builder
     status: pending
   - id: webhook-markers
-    content: Update webhook to call completeLesson on [LESSON_COMPLETE] markers and advanceMessage after lesson delivery responses
+    content: Update webhook to parse scores from user message and call completeLesson with real scores on [LESSON_COMPLETE] markers; call advanceMessage after lesson delivery responses
+    status: pending
+  - id: seed-script
+    content: Create prisma/seed.ts that inserts the core system prompt (Layer 1) into the SystemPrompt table
+    status: pending
+  - id: test-endpoint
+    content: Update test-ai endpoint to accept optional mode and fake progress so LESSON_DELIVERY prompts can be tested without a real socio
     status: pending
 isProject: false
 ---
@@ -78,12 +87,13 @@ export interface LessonData {
 }
 ```
 
-**Message breakdown per lesson** (4 messages each, matching the Layer 3 `messageType` field):
+**Message count is per-lesson, not fixed.** Each lesson's `messages[]` array defines how many messages that lesson uses -- the router and builder read `lesson.messages.length` dynamically. Simpler lessons (e.g. Lesson 2: Separate Entities) might use 3 messages; complex ones (e.g. Lesson 5: Break-Even with 3 business models) might use 5-6. The suggested message types are a starting framework, not a constraint:
 
-- Message 1 (`escenario`): Hook the socio with a relatable everyday scenario
-- Message 2 (`explicación`): Teach the key concepts from the curriculum
-- Message 3 (`ejemplo`): Walk through the exercise with a concrete example
-- Message 4 (`pregunta`): Ask them to apply it + state the commitment
+- `escenario`: Hook the socio with a relatable everyday scenario
+- `explicación`: Teach key concepts from the curriculum
+- `ejemplo`: Walk through the exercise with a concrete example
+- `pregunta`: Ask them to apply it + state the commitment
+- `profundización`: Go deeper on a sub-topic (used when a lesson warrants extra messages)
 
 **Exported functions:**
 
@@ -167,7 +177,7 @@ The router currently ignores progress. Change `determineMode` to:
 ```
 if progress.currentMessageIndex > 0 AND < lesson.messages.length:
   → LESSON_DELIVERY (mid-lesson)
-  Special case: if on last message and user sent a score <= 3 → RETEACH
+  Special case: if on last message and user sent a score <= RETEACH_THRESHOLD → RETEACH
 
 if progress.currentMessageIndex == 0 AND currentLessonNumber <= 5:
   → LESSON_START (ready for next lesson)
@@ -175,6 +185,8 @@ if progress.currentMessageIndex == 0 AND currentLessonNumber <= 5:
 else:
   → FREEFORM_QUESTION
 ```
+
+**Configurable threshold:** The reteach trigger score is defined as a constant `RETEACH_THRESHOLD` (default: `3`) in a shared constants file (`src/lib/ai/prompts/constants.ts`). This makes it easy to adjust during testing -- bump it to 4 or 5 to trigger reteaching more aggressively, or lower it to 2 for a lighter touch. The router, task prompt builder, and checkin prompt all reference this single value.
 
 1. When returning `LESSON_START` or `LESSON_DELIVERY`, populate the `RouterResult.lesson` field with a full `LessonDeliveryState` built from the JSON data -- this is what the builder and content layer consume
 
@@ -194,6 +206,36 @@ for (const lessonNum of aiResponse.markers.lessonsCompleted) {
 ```
 
 Also advance the message index after each AI response in a lesson delivery context. The simplest approach: have `generateAIResponse` return the resolved `InteractionMode` alongside the text, so the webhook knows whether to call `advanceMessage`.
+
+### 3d. Score Parsing in the Webhook
+
+When the marker parser catches `[LESSON_COMPLETE:N]`, the webhook should also look at the recent conversation to extract the understanding and implementation scores the socio gave. Use the existing `parseScore()` function from the router module on the user's last 1-2 messages. Pass the parsed numbers to `repo.completeLesson(socio.id, lessonNum, { understanding: score })` instead of empty `{}`. This means the `SocioProgress` table has real data from day one.
+
+### 3e. `MAX_LESSON_NUMBER` Constant
+
+Add `MAX_LESSON_NUMBER = 5` to [constants.ts](apps/web/src/lib/ai/prompts/constants.ts). The router uses this to decide whether to start a new lesson or fall back to `FREEFORM_QUESTION`. When lessons 6-28 are structured later, bump the number. Keeps the boundary explicit and avoids the router trying to load lesson data that doesn't exist.
+
+## Step 4: Seed Script and Test Endpoint
+
+### 4a. Seed Script ([prisma/seed.ts](apps/web/prisma/seed.ts))
+
+Insert the core system prompt (Layer 1 text from [layers/core.ts](apps/web/src/lib/ai/prompts/layers/core.ts)) into the `SystemPrompt` table with `version: "1.0"`, `category: "core"`, `active: true`. This means the prompt can eventually be loaded from the DB instead of the constant, enabling version management and A/B testing without code deploys. Add a `"prisma": { "seed": "npx tsx prisma/seed.ts" }` entry to `package.json`.
+
+### 4b. Test Endpoint Enhancement ([api/test-ai/route.ts](apps/web/src/app/api/test-ai/route.ts))
+
+Expand the existing test endpoint to accept optional fields in the POST body:
+
+```typescript
+{
+  message: string;
+  mode?: InteractionMode;         // override router decision
+  lessonNumber?: number;          // fake progress
+  messageIndex?: number;          // fake progress
+  completedLessons?: number[];    // fake progress
+}
+```
+
+When `mode` is provided, skip the router entirely and build a `RouterResult` directly from the supplied fields. This lets you test `LESSON_START` for lesson 3, or `LESSON_DELIVERY` at message index 2, without needing a real socio in the database. Invaluable for prompt iteration.
 
 ## What NOT to Build
 
@@ -225,7 +267,7 @@ sequenceDiagram
     W->>DB: advanceMessage() → msgIndex=1
     W->>S: WhatsApp message
 
-    Note over S,DB: ...messages 2-4 of lesson 1...
+    Note over S,DB: ...remaining messages of lesson 1...
 
     S->>W: "8" (understanding score)
     AI-->>W: "¡Excelente! [LESSON_COMPLETE:1]"
