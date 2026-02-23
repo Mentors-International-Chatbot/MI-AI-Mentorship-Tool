@@ -39,6 +39,7 @@ model Socio {
 
   messages  Message[]
   summaries Summary[]
+  progress  SocioProgress?
 
   @@map("socios")
 }
@@ -63,6 +64,23 @@ model Message {
   socio Socio @relation(fields: [socioId], references: [id])
 
   @@map("messages")
+}
+
+model SocioProgress {
+  id                    String    @id @default(uuid())
+  socioId               String    @unique @map("socio_id")
+  currentLessonNumber   Int       @default(1) @map("current_lesson_number")
+  currentMessageIndex   Int       @default(0) @map("current_message_index")
+  completedLessons      Int[]     @default([]) @map("completed_lessons")
+  weeklyUnderstanding   Int?      @map("weekly_understanding")
+  weeklyImplementation  Int?      @map("weekly_implementation")
+  lastLessonCompletedAt DateTime? @map("last_lesson_completed_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  socio Socio @relation(fields: [socioId], references: [id])
+
+  @@map("socio_progress")
 }
 
 model Summary {

@@ -4,13 +4,13 @@ overview: Wire the existing 4-layer prompt system to actually teach lessons by c
 todos:
   - id: lessons-json
     content: Create src/lib/lessons/data.ts with LessonData type and structured JSON for lessons 1-5 (variable message count per lesson, not fixed at 4)
-    status: in_progress
+    status: completed
   - id: constants
     content: Create src/lib/ai/prompts/constants.ts with RETEACH_THRESHOLD, MAX_LESSON_NUMBER, and other tunable values; update router and task prompts to reference it
-    status: pending
+    status: completed
   - id: prisma-progress
     content: Add SocioProgress model to Prisma schema, run migration, update Socio relation
-    status: pending
+    status: in_progress
   - id: repo-progress
     content: Add SocioProgress type and 4 repo methods (getSocioProgress, advanceMessage, completeLesson, initProgress) to types.ts and prismaRepo.ts
     status: pending
