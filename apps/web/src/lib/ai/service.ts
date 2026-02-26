@@ -2,11 +2,20 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
 import { repo } from '@/lib/repo';
 import { Socio, Message } from '@/lib/repo/types';
-import { buildSystemPrompt, determineMode, parseMarkers, type ParsedMarkers } from './prompts';
+import {
+    buildSystemPrompt,
+    determineMode,
+    parseMarkers,
+    InteractionMode,
+    type ParsedMarkers,
+    type DetermineModeResult,
+} from './prompts';
 
 export interface AIResponse {
     text: string;
     markers: ParsedMarkers;
+    mode: InteractionMode;
+    determineModeResult: DetermineModeResult;
 }
 
 export async function generateAIResponse(socio: Socio, incomingText: string): Promise<AIResponse> {
@@ -16,11 +25,15 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
         anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
-    // 1. Determine interaction mode (future: pass progress, checkin, etc.)
-    const routerResult = await determineMode(socio);
+    // 1. Determine interaction mode from real progress data
+    const modeResult = await determineMode(socio, incomingText);
 
-    // 2. Assemble 4-layer system prompt
-    const systemPrompt = buildSystemPrompt(socio, routerResult);
+    // 2. Assemble 4-layer system prompt with real progress
+    const systemPrompt = buildSystemPrompt(
+        socio,
+        modeResult.routerResult,
+        modeResult.progress,
+    );
 
     // 3. Fetch conversation history (last 10 messages for context)
     const recentHistory = await repo.getMessages(socio.id, 10);
@@ -45,15 +58,22 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
             ? response.content
             : JSON.stringify(response.content);
 
-        // 5. Parse markers from the response (flags, lesson completions, escalations)
+        // 5. Parse markers from the response
         const markers = parseMarkers(rawContent);
 
-        return { text: markers.cleanText, markers };
+        return {
+            text: markers.cleanText,
+            markers,
+            mode: modeResult.routerResult.mode,
+            determineModeResult: modeResult,
+        };
     } catch (error) {
         console.error("AI Generation Error:", error);
         return {
             text: "Lo siento, tuve un problema pensando mi respuesta. ¿Me puedes repetir eso? 🤖",
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [] },
+            mode: modeResult.routerResult.mode,
+            determineModeResult: modeResult,
         };
     }
 }

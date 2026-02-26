@@ -75,6 +75,8 @@ model SocioProgress {
   weeklyUnderstanding   Int?      @map("weekly_understanding")
   weeklyImplementation  Int?      @map("weekly_implementation")
   lastLessonCompletedAt DateTime? @map("last_lesson_completed_at")
+  remindersSent         Int       @default(0) @map("reminders_sent")
+  lastInteractionAt     DateTime? @map("last_interaction_at")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 

@@ -42,11 +42,11 @@ export async function handleOnboarding(socio: Socio, incomingMessage: string) {
             break;
 
         case 'AWAITING_NAME':
-            // MVP: Accept whatever they type as the name
             await repo.updateSocio(socio.id, {
                 name: message,
                 status: 'ACTIVE'
             });
+            await repo.initProgress(socio.id);
             await sendWhatsAppMessage(
                 socio.whatsappPhoneNumber,
                 `¡Mucho gusto, ${message}! 👋\n\nPara darte los mejores consejos, cuéntame: ¿Qué tipo de negocio tienes? (Ej: Panadería, Tienda de ropa, Servicios...)`

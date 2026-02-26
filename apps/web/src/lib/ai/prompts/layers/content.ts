@@ -1,5 +1,5 @@
 import { InteractionMode, LessonDeliveryState, ReteachState, RouterResult, SocioProgress } from '../types';
-import { getLessonTitle } from './context';
+import { getLessonData, hasLessonData } from '@/lib/lessons/data';
 
 // ─── Layer 4: Lesson Content — Only During Teaching Modes ───────────
 // Provides the actual curriculum material the AI needs to teach from.
@@ -98,6 +98,28 @@ Si la pregunta del socio no se puede responder con esta referencia, di honestame
 // Future: pull full lesson detail from a lessons DB table.
 
 function buildReteachContentBlock(reteach: ReteachState): string {
+  if (hasLessonData(reteach.lessonNumber)) {
+    const lesson = getLessonData(reteach.lessonNumber);
+    const keyConcepts = lesson.keyConcepts.map(c => `- ${c}`).join('\n');
+    const selfCheck = lesson.selfCheckQuestions.map(q => `- ${q}`).join('\n');
+
+    return `MATERIAL COMPLETO DE LA LECCIÓN ${reteach.lessonNumber}: "${reteach.lessonTitleEs}"
+
+AUTODIAGNÓSTICO:
+${selfCheck}
+
+CONCEPTOS CLAVE:
+${keyConcepts}
+
+EJERCICIO:
+${lesson.exercise}
+
+COMPROMISO:
+${lesson.commitment}
+
+Usa este material para explicar de una forma diferente a como se presentó la primera vez. Busca analogías nuevas y ejemplos del negocio del socio.`;
+  }
+
   return `MATERIAL DE REFERENCIA PARA RE-ENSEÑANZA — Lección ${reteach.lessonNumber}: "${reteach.lessonTitleEs}"
 
 Usa este material para explicar de una forma diferente a como se presentó la primera vez. Busca analogías nuevas y ejemplos del negocio del socio.

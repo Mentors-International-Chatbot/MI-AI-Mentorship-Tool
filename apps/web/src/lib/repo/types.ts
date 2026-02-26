@@ -8,6 +8,7 @@ export type Socio = {
     businessName?: string | null;
     businessDescription?: string | null;
     status: SocioStatus;
+    promptOverrides?: Record<string, unknown> | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -20,6 +21,29 @@ export type Message = {
     createdAt: Date;
 };
 
+export type SocioProgress = {
+    id: string;
+    socioId: string;
+    currentLessonNumber: number;
+    currentMessageIndex: number;
+    completedLessons: number[];
+    weeklyUnderstanding: number | null;
+    weeklyImplementation: number | null;
+    lastLessonCompletedAt: Date | null;
+    remindersSent: number;
+    lastInteractionAt: Date | null;
+};
+
+export interface LessonScores {
+    understanding?: number;
+    implementation?: number;
+}
+
+export type StaleSocio = {
+    socio: Socio;
+    progress: SocioProgress;
+};
+
 export interface Repo {
     // Socio methods
     getSocio(phone: string): Promise<Socio | null>;
@@ -29,4 +53,16 @@ export interface Repo {
     // Message methods
     addMessage(data: Omit<Message, "id" | "createdAt">): Promise<Message>;
     getMessages(socioId: string, limit?: number): Promise<Message[]>;
+
+    // Progress methods
+    initProgress(socioId: string): Promise<SocioProgress>;
+    getSocioProgress(socioId: string): Promise<SocioProgress>;
+    advanceMessage(socioId: string): Promise<SocioProgress>;
+    completeLesson(socioId: string, lessonNumber: number, scores: LessonScores): Promise<SocioProgress>;
+
+    // Reminder methods
+    getStaleLessonSocios(hoursThreshold: number, maxReminders: number): Promise<StaleSocio[]>;
+    recordReminder(socioId: string): Promise<SocioProgress>;
+    resetReminders(socioId: string): Promise<SocioProgress>;
+    touchInteraction(socioId: string): Promise<SocioProgress>;
 }

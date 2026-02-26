@@ -10,6 +10,7 @@ import {
   RouterResult,
 } from '../types';
 import { getLessonTitle } from './context';
+import { FLAG_RED_THRESHOLD } from '../constants';
 
 // ─── Layer 3: Task Context — One Per Interaction Mode ───────────────
 // The router determines the mode; this function returns the right prompt.
@@ -154,7 +155,7 @@ INSTRUCCIONES:
 - NO adelantes pasos. Espera la respuesta del socio antes de avanzar.
 - Después de cada respuesta, responde brevemente (1-2 oraciones de reconocimiento) y luego haz la siguiente pregunta.
 - Después del paso 5, da un breve resumen motivador y despídete hasta la próxima semana.
-- Si la comprensión es 1-3/10, NO continúes el check-in normal. En vez, responde con empatía y prepárate para re-enseñar.
+- Si la comprensión es 1-${FLAG_RED_THRESHOLD}/10, NO continúes el check-in normal. En vez, responde con empatía y prepárate para re-enseñar.
 
 RESPUESTAS RECIBIDAS HASTA AHORA:
 ${checkin.responsesSoFar || 'Ninguna'}${stepGuidance}`;
@@ -177,7 +178,7 @@ INSTRUCCIONES:
 4. Máximo 3 mensajes para la re-enseñanza.
 5. Después pregunta: "¿Ahora quedó más claro? Del 1 al 10, ¿cómo te sientes con esta lección?"
 6. Si la nueva puntuación es 4+, celebra y avanza: "¡Ahí vamos! 💪" → Agrega [LESSON_COMPLETE:${reteach.lessonNumber}]
-7. Si sigue en 1-3 después de re-enseñar, responde con ánimo: "No te preocupes, vamos a seguir practicando. Tu mentor humano también puede ayudarte con esto." → Agrega [FLAG:RED|Comprensión baja persistente en Lección ${reteach.lessonNumber} después de re-enseñanza]`;
+7. Si sigue en 1-${FLAG_RED_THRESHOLD} después de re-enseñar, responde con ánimo: "No te preocupes, vamos a seguir practicando. Tu mentor humano también puede ayudarte con esto." → Agrega [FLAG:RED|Comprensión baja persistente en Lección ${reteach.lessonNumber} después de re-enseñanza]`;
 }
 
 // ─── REMINDER ───────────────────────────────────────────────────────

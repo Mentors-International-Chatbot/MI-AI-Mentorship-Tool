@@ -3,6 +3,7 @@ import { repo } from '@/lib/repo';
 import { handleOnboarding } from '@/lib/onboarding/service';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
 import { generateAIResponse } from '@/lib/ai/service';
+import { InteractionMode, parseScore } from '@/lib/ai/prompts';
 
 // Verify Webhook (GET)
 export async function GET(req: NextRequest) {
@@ -21,29 +22,24 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
 
-        // Check if it's a WhatsApp message event
         if (body.object === 'whatsapp_business_account') {
             for (const entry of body.entry) {
                 for (const change of entry.changes) {
                     if (change.value.messages) {
                         const message = change.value.messages[0];
-                        const senderPhone = message.from; // e.g. "15550001234"
+                        const senderPhone = message.from;
                         const textBody = message.text?.body;
 
-                        if (!textBody) continue; // Skip non-text messages for MVP
+                        if (!textBody) continue;
 
-                        // 1. Lookup Socio
                         let socio = await repo.getSocio(senderPhone);
 
-                        // 2. New Socio? Create them.
                         if (!socio) {
                             socio = await repo.createSocio(senderPhone);
-                            // Immediate onboarding trigger
                             await handleOnboarding(socio, textBody);
                             continue;
                         }
 
-                        // 3. Existing Socio: Route based on status
                         if (socio.status !== 'ACTIVE') {
                             await handleOnboarding(socio, textBody);
                         } else {
@@ -53,27 +49,46 @@ export async function POST(req: NextRequest) {
                                 content: textBody,
                             });
 
+                            // Track that the socio is active
+                            await repo.touchInteraction(socio.id);
+
                             const aiResponse = await generateAIResponse(socio, textBody);
 
-                            // Save the clean text (markers stripped) to DB
                             await repo.addMessage({
                                 socioId: socio.id,
                                 role: 'assistant',
                                 content: aiResponse.text,
                             });
 
-                            // Process markers (flags, escalations, lesson completions)
+                            // ── Process markers ──
                             if (aiResponse.markers.flags.length > 0) {
                                 console.log(`[Flags] socio=${socio.id}`, aiResponse.markers.flags);
-                                // Future: save flags to a Flag table
                             }
                             if (aiResponse.markers.escalations.length > 0) {
                                 console.log(`[Escalation] socio=${socio.id}`, aiResponse.markers.escalations);
-                                // Future: create escalation records, notify mentor
                             }
-                            if (aiResponse.markers.lessonsCompleted.length > 0) {
-                                console.log(`[LessonComplete] socio=${socio.id}`, aiResponse.markers.lessonsCompleted);
-                                // Future: advance socio progress
+
+                            // ── Handle lesson completion ──
+                            for (const lessonNum of aiResponse.markers.lessonsCompleted) {
+                                const score = parseScore(textBody);
+                                await repo.completeLesson(socio.id, lessonNum, {
+                                    understanding: score ?? undefined,
+                                });
+                                console.log(`[LessonComplete] socio=${socio.id} lesson=${lessonNum} score=${score}`);
+                            }
+
+                            // ── Advance message index for lesson modes ──
+                            const isLessonMode =
+                                aiResponse.mode === InteractionMode.LESSON_DELIVERY ||
+                                aiResponse.mode === InteractionMode.LESSON_START;
+
+                            if (aiResponse.markers.lessonsCompleted.length === 0 && isLessonMode) {
+                                await repo.advanceMessage(socio.id);
+                            }
+
+                            // Reset reminder counter when socio re-engages in a lesson
+                            if (isLessonMode || aiResponse.mode === InteractionMode.REMINDER) {
+                                await repo.resetReminders(socio.id);
                             }
 
                             await sendWhatsAppMessage(senderPhone, aiResponse.text);
