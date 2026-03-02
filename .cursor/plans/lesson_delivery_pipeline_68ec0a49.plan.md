@@ -10,28 +10,28 @@ todos:
     status: completed
   - id: prisma-progress
     content: Add SocioProgress model to Prisma schema, run migration, update Socio relation
-    status: in_progress
+    status: completed
   - id: repo-progress
     content: Add SocioProgress type and 4 repo methods (getSocioProgress, advanceMessage, completeLesson, initProgress) to types.ts and prismaRepo.ts
-    status: pending
+    status: completed
   - id: onboarding-init
     content: Call repo.initProgress(socio.id) in onboarding service when socio becomes ACTIVE
-    status: pending
+    status: completed
   - id: router-update
     content: Update router to read real progress, load lesson data, and return LESSON_START/LESSON_DELIVERY/FREEFORM with populated LessonDeliveryState
-    status: pending
+    status: completed
   - id: service-update
     content: Update AI service to pass incomingText to router and progress to builder
-    status: pending
+    status: completed
   - id: webhook-markers
     content: Update webhook to parse scores from user message and call completeLesson with real scores on [LESSON_COMPLETE] markers; call advanceMessage after lesson delivery responses
-    status: pending
+    status: completed
   - id: seed-script
     content: Create prisma/seed.ts that inserts the core system prompt (Layer 1) into the SystemPrompt table
-    status: pending
+    status: completed
   - id: test-endpoint
     content: Update test-ai endpoint to accept optional mode and fake progress so LESSON_DELIVERY prompts can be tested without a real socio
-    status: pending
+    status: completed
 isProject: false
 ---
 
