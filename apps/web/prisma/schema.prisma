@@ -27,7 +27,9 @@ enum OnboardingStatus {
 
 model Socio {
   id                  String           @id @default(uuid())
-  whatsappPhoneNumber String           @unique @map("whatsapp_phone_number")
+  whatsappPhoneNumber String?          @unique @map("whatsapp_phone_number")
+  channelType         String           @default("whatsapp") @map("channel_type")
+  externalId          String           @default("") @map("external_id")
   name                String?
   businessName        String?          @map("business_name")
   businessDescription String?          @map("business_description")
@@ -41,6 +43,7 @@ model Socio {
   summaries Summary[]
   progress  SocioProgress?
 
+  @@unique([channelType, externalId], map: "socios_channel_external_id_key")
   @@map("socios")
 }
 

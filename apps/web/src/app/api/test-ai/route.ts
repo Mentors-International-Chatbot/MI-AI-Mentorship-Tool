@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
         const fakeSocio: Socio = {
             id: 'test-user',
             whatsappPhoneNumber: '0000000000',
+            channelType: 'whatsapp',
+            externalId: '0000000000',
             name: socioName || 'Test User',
             businessDescription: businessDescription || null,
             status: 'ACTIVE' as const,
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
                 daysSinceLastInteraction: 0,
             };
 
-            let routerResult: RouterResult = { mode: interactionMode };
+            const routerResult: RouterResult = { mode: interactionMode };
 
             // Build LessonDeliveryState for lesson modes
             if (

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores } from "./types";
+import type { ChannelType } from "@/lib/delivery/types";
 import {
     Socio as PrismaSocio,
     Message as PrismaMessage,
@@ -10,6 +11,8 @@ function toSocio(p: PrismaSocio): Socio {
     return {
         id: p.id,
         whatsappPhoneNumber: p.whatsappPhoneNumber,
+        channelType: p.channelType,
+        externalId: p.externalId,
         name: p.name,
         businessName: p.businessName,
         businessDescription: p.businessDescription,
@@ -46,17 +49,23 @@ function toSocioProgress(p: PrismaSocioProgress): SocioProgress {
 }
 
 export const prismaRepo: Repo = {
-    async getSocio(phone) {
+    async getSocio(channelType: ChannelType, externalId: string) {
         const socio = await prisma.socio.findUnique({
-            where: { whatsappPhoneNumber: phone },
+            where: {
+                channelType_externalId: { channelType, externalId },
+            },
         });
         if (!socio) return null;
         return toSocio(socio);
     },
 
-    async createSocio(phone) {
+    async createSocio(channelType: ChannelType, externalId: string) {
         const socio = await prisma.socio.create({
-            data: { whatsappPhoneNumber: phone },
+            data: {
+                channelType,
+                externalId,
+                whatsappPhoneNumber: channelType === 'whatsapp' ? externalId : null,
+            },
         });
         return toSocio(socio);
     },

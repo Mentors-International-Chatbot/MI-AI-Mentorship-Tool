@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { repo } from '@/lib/repo';
-import { handleOnboarding } from '@/lib/onboarding/service';
-import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
-import { generateAIResponse } from '@/lib/ai/service';
-import { InteractionMode, parseScore } from '@/lib/ai/prompts';
+import { handleIncomingMessage } from '@/lib/messaging/handler';
+import { WhatsAppChannel } from '@/lib/delivery';
 
 // Verify Webhook (GET)
 export async function GET(req: NextRequest) {
@@ -32,67 +29,12 @@ export async function POST(req: NextRequest) {
 
                         if (!textBody) continue;
 
-                        let socio = await repo.getSocio(senderPhone);
-
-                        if (!socio) {
-                            socio = await repo.createSocio(senderPhone);
-                            await handleOnboarding(socio, textBody);
-                            continue;
-                        }
-
-                        if (socio.status !== 'ACTIVE') {
-                            await handleOnboarding(socio, textBody);
-                        } else {
-                            await repo.addMessage({
-                                socioId: socio.id,
-                                role: 'user',
-                                content: textBody,
-                            });
-
-                            // Track that the socio is active
-                            await repo.touchInteraction(socio.id);
-
-                            const aiResponse = await generateAIResponse(socio, textBody);
-
-                            await repo.addMessage({
-                                socioId: socio.id,
-                                role: 'assistant',
-                                content: aiResponse.text,
-                            });
-
-                            // ── Process markers ──
-                            if (aiResponse.markers.flags.length > 0) {
-                                console.log(`[Flags] socio=${socio.id}`, aiResponse.markers.flags);
-                            }
-                            if (aiResponse.markers.escalations.length > 0) {
-                                console.log(`[Escalation] socio=${socio.id}`, aiResponse.markers.escalations);
-                            }
-
-                            // ── Handle lesson completion ──
-                            for (const lessonNum of aiResponse.markers.lessonsCompleted) {
-                                const score = parseScore(textBody);
-                                await repo.completeLesson(socio.id, lessonNum, {
-                                    understanding: score ?? undefined,
-                                });
-                                console.log(`[LessonComplete] socio=${socio.id} lesson=${lessonNum} score=${score}`);
-                            }
-
-                            // ── Advance message index for lesson modes ──
-                            const isLessonMode =
-                                aiResponse.mode === InteractionMode.LESSON_DELIVERY ||
-                                aiResponse.mode === InteractionMode.LESSON_START;
-
-                            if (aiResponse.markers.lessonsCompleted.length === 0 && isLessonMode) {
-                                await repo.advanceMessage(socio.id);
-                            }
-
-                            // Reset reminder counter when socio re-engages in a lesson
-                            if (isLessonMode || aiResponse.mode === InteractionMode.REMINDER) {
-                                await repo.resetReminders(socio.id);
-                            }
-
-                            await sendWhatsAppMessage(senderPhone, aiResponse.text);
-                        }
+                        await handleIncomingMessage({
+                            externalId: senderPhone,
+                            channelType: 'whatsapp',
+                            message: textBody,
+                            channel: new WhatsAppChannel(),
+                        });
                     }
                 }
             }

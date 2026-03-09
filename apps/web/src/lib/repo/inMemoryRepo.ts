@@ -1,9 +1,14 @@
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores } from "./types";
+import type { ChannelType } from "@/lib/delivery/types";
 
-const sociosByPhone = new Map<string, Socio>();
+const sociosByKey = new Map<string, Socio>();
 const sociosById = new Map<string, Socio>();
 const messagesBySocio = new Map<string, Message[]>();
 const progressBySocio = new Map<string, SocioProgress>();
+
+function channelKey(channelType: string, externalId: string): string {
+    return `${channelType}:${externalId}`;
+}
 
 function makeDefaultProgress(socioId: string): SocioProgress {
     return {
@@ -21,25 +26,28 @@ function makeDefaultProgress(socioId: string): SocioProgress {
 }
 
 export const inMemoryRepo: Repo = {
-    async getSocio(phone) {
-        return sociosByPhone.get(phone) || null;
+    async getSocio(channelType: ChannelType, externalId: string) {
+        return sociosByKey.get(channelKey(channelType, externalId)) || null;
     },
 
-    async createSocio(phone) {
-        const existing = sociosByPhone.get(phone);
+    async createSocio(channelType: ChannelType, externalId: string) {
+        const key = channelKey(channelType, externalId);
+        const existing = sociosByKey.get(key);
         if (existing) return existing;
 
         const id = Math.random().toString(36).substring(7);
         const socio: Socio = {
             id,
-            whatsappPhoneNumber: phone,
+            whatsappPhoneNumber: channelType === 'whatsapp' ? externalId : null,
+            channelType,
+            externalId,
             name: null,
             status: "NEW",
             createdAt: new Date(),
             updatedAt: new Date(),
         };
 
-        sociosByPhone.set(phone, socio);
+        sociosByKey.set(key, socio);
         sociosById.set(id, socio);
         messagesBySocio.set(id, []);
 
@@ -53,7 +61,7 @@ export const inMemoryRepo: Repo = {
         const updatedSocio = { ...socio, ...data, updatedAt: new Date() };
 
         sociosById.set(socioId, updatedSocio);
-        sociosByPhone.set(updatedSocio.whatsappPhoneNumber, updatedSocio);
+        sociosByKey.set(channelKey(updatedSocio.channelType, updatedSocio.externalId), updatedSocio);
 
         return updatedSocio;
     },

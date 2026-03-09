@@ -1,9 +1,13 @@
+import type { ChannelType } from '@/lib/delivery/types';
+
 export type Role = "user" | "assistant" | "system";
 export type SocioStatus = 'NEW' | 'AWAITING_CONSENT' | 'AWAITING_NAME' | 'ACTIVE';
 
 export type Socio = {
     id: string;
-    whatsappPhoneNumber: string;
+    whatsappPhoneNumber?: string | null;
+    channelType: string;
+    externalId: string;
     name?: string | null;
     businessName?: string | null;
     businessDescription?: string | null;
@@ -45,22 +49,18 @@ export type StaleSocio = {
 };
 
 export interface Repo {
-    // Socio methods
-    getSocio(phone: string): Promise<Socio | null>;
-    createSocio(phone: string): Promise<Socio>;
+    getSocio(channelType: ChannelType, externalId: string): Promise<Socio | null>;
+    createSocio(channelType: ChannelType, externalId: string): Promise<Socio>;
     updateSocio(socioId: string, data: Partial<Socio>): Promise<Socio>;
 
-    // Message methods
     addMessage(data: Omit<Message, "id" | "createdAt">): Promise<Message>;
     getMessages(socioId: string, limit?: number): Promise<Message[]>;
 
-    // Progress methods
     initProgress(socioId: string): Promise<SocioProgress>;
     getSocioProgress(socioId: string): Promise<SocioProgress>;
     advanceMessage(socioId: string): Promise<SocioProgress>;
     completeLesson(socioId: string, lessonNumber: number, scores: LessonScores): Promise<SocioProgress>;
 
-    // Reminder methods
     getStaleLessonSocios(hoursThreshold: number, maxReminders: number): Promise<StaleSocio[]>;
     recordReminder(socioId: string): Promise<SocioProgress>;
     resetReminders(socioId: string): Promise<SocioProgress>;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { repo } from '@/lib/repo';
-import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
+import { WhatsAppChannel } from '@/lib/delivery';
 import {
     buildSystemPrompt,
     parseMarkers,
@@ -28,11 +28,15 @@ export async function GET(req: NextRequest) {
 
     const staleSocios = await repo.getStaleLessonSocios(FOLLOWUP_DELAY_HOURS, MAX_REMINDERS);
 
+    const whatsappChannel = new WhatsAppChannel();
     let sent = 0;
     const errors: string[] = [];
 
     for (const { socio, progress } of staleSocios) {
         try {
+            // Only send reminders to WhatsApp socios (web socios have no push channel)
+            if (socio.channelType !== 'whatsapp') continue;
+
             if (!hasLessonData(progress.currentLessonNumber)) continue;
 
             const lesson = getLessonData(progress.currentLessonNumber);
@@ -80,7 +84,7 @@ export async function GET(req: NextRequest) {
 
             const markers = parseMarkers(rawContent);
 
-            await sendWhatsAppMessage(socio.whatsappPhoneNumber, markers.cleanText);
+            await whatsappChannel.sendMessage(socio.externalId, markers.cleanText);
 
             await repo.addMessage({
                 socioId: socio.id,
