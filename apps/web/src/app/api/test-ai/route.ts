@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
             whatsappPhoneNumber: '0000000000',
             channelType: 'whatsapp',
             externalId: '0000000000',
+            language: 'es',
             name: socioName || 'Test User',
             businessDescription: businessDescription || null,
             status: 'ACTIVE' as const,

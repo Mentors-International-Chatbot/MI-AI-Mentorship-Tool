@@ -20,6 +20,7 @@ model SystemPrompt {
 
 enum OnboardingStatus {
   NEW
+  AWAITING_LANGUAGE
   AWAITING_CONSENT
   AWAITING_NAME
   ACTIVE
@@ -30,6 +31,7 @@ model Socio {
   whatsappPhoneNumber String?          @unique @map("whatsapp_phone_number")
   channelType         String           @default("whatsapp") @map("channel_type")
   externalId          String           @default("") @map("external_id")
+  language            String           @default("es") @map("language")
   name                String?
   businessName        String?          @map("business_name")
   businessDescription String?          @map("business_description")
@@ -42,6 +44,8 @@ model Socio {
   messages  Message[]
   summaries Summary[]
   progress  SocioProgress?
+  flags     SocioFlag[]
+  lessonProgress LessonProgress[]
 
   @@unique([channelType, externalId], map: "socios_channel_external_id_key")
   @@map("socios")
@@ -100,4 +104,33 @@ model Summary {
   socio Socio @relation(fields: [socioId], references: [id])
 
   @@map("summaries")
+}
+
+model SocioFlag {
+  id         String    @id @default(uuid())
+  socioId    String    @map("socio_id")
+  level      String    // "RED" | "YELLOW"
+  reason     String
+  resolved   Boolean   @default(false)
+  resolvedAt DateTime? @map("resolved_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  socio Socio @relation(fields: [socioId], references: [id])
+
+  @@map("socio_flags")
+}
+
+model LessonProgress {
+  id                  String    @id @default(uuid())
+  socioId             String    @map("socio_id")
+  lessonNumber        Int       @map("lesson_number")
+  understanding       Int?
+  completedAt         DateTime? @map("completed_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  socio Socio @relation(fields: [socioId], references: [id])
+
+  @@unique([socioId, lessonNumber], map: "lesson_progress_socio_lesson_key")
+  @@map("lesson_progress")
 }

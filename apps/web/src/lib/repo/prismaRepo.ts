@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/db";
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 import {
     Socio as PrismaSocio,
     Message as PrismaMessage,
     SocioProgress as PrismaSocioProgress,
+    SocioFlag as PrismaSocioFlag,
+    LessonProgress as PrismaLessonProgress,
 } from "@prisma/client";
 
 function toSocio(p: PrismaSocio): Socio {
@@ -13,6 +15,7 @@ function toSocio(p: PrismaSocio): Socio {
         whatsappPhoneNumber: p.whatsappPhoneNumber,
         channelType: p.channelType,
         externalId: p.externalId,
+        language: p.language,
         name: p.name,
         businessName: p.businessName,
         businessDescription: p.businessDescription,
@@ -48,6 +51,30 @@ function toSocioProgress(p: PrismaSocioProgress): SocioProgress {
     };
 }
 
+function toSocioFlag(p: PrismaSocioFlag): SocioFlag {
+    return {
+        id: p.id,
+        socioId: p.socioId,
+        level: p.level as 'RED' | 'YELLOW',
+        reason: p.reason,
+        resolved: p.resolved,
+        resolvedAt: p.resolvedAt,
+        createdAt: p.createdAt,
+    };
+}
+
+function toLessonProgress(p: PrismaLessonProgress): LessonProgressRecord {
+    return {
+        id: p.id,
+        socioId: p.socioId,
+        lessonNumber: p.lessonNumber,
+        understanding: p.understanding,
+        completedAt: p.completedAt,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+    };
+}
+
 export const prismaRepo: Repo = {
     async getSocio(channelType: ChannelType, externalId: string) {
         const socio = await prisma.socio.findUnique({
@@ -75,9 +102,11 @@ export const prismaRepo: Repo = {
             where: { id: socioId },
             data: {
                 name: data.name,
+                language: data.language,
                 businessName: data.businessName,
                 businessDescription: data.businessDescription,
                 status: data.status,
+                promptOverrides: data.promptOverrides !== undefined ? (data.promptOverrides as object ?? undefined) : undefined,
             },
         });
         return toSocio(socio);
@@ -111,14 +140,11 @@ export const prismaRepo: Repo = {
     },
 
     async getSocioProgress(socioId) {
-        let progress = await prisma.socioProgress.findUnique({
+        const progress = await prisma.socioProgress.upsert({
             where: { socioId },
+            create: { socioId },
+            update: {},
         });
-        if (!progress) {
-            progress = await prisma.socioProgress.create({
-                data: { socioId },
-            });
-        }
         return toSocioProgress(progress);
     },
 
@@ -197,5 +223,60 @@ export const prismaRepo: Repo = {
             data: { lastInteractionAt: new Date() },
         });
         return toSocioProgress(progress);
+    },
+
+    async getAllSocios() {
+        const socios = await prisma.socio.findMany({
+            where: { status: 'ACTIVE' },
+            orderBy: { updatedAt: 'desc' },
+        });
+        return socios.map(toSocio);
+    },
+
+    async getSocioById(socioId) {
+        const socio = await prisma.socio.findUnique({
+            where: { id: socioId },
+        });
+        return socio ? toSocio(socio) : null;
+    },
+
+    async createFlag(socioId, level, reason) {
+        const flag = await prisma.socioFlag.create({
+            data: { socioId, level, reason },
+        });
+        return toSocioFlag(flag);
+    },
+
+    async getFlags(socioId) {
+        const flags = await prisma.socioFlag.findMany({
+            where: { socioId },
+            orderBy: { createdAt: 'desc' },
+        });
+        return flags.map(toSocioFlag);
+    },
+
+    async upsertLessonProgress(socioId, lessonNumber, understanding, completed) {
+        const row = await prisma.lessonProgress.upsert({
+            where: { socioId_lessonNumber: { socioId, lessonNumber } },
+            create: {
+                socioId,
+                lessonNumber,
+                understanding,
+                completedAt: completed ? new Date() : null,
+            },
+            update: {
+                understanding,
+                ...(completed ? { completedAt: new Date() } : {}),
+            },
+        });
+        return toLessonProgress(row);
+    },
+
+    async getLessonProgressAll(socioId) {
+        const rows = await prisma.lessonProgress.findMany({
+            where: { socioId },
+            orderBy: { lessonNumber: 'asc' },
+        });
+        return rows.map(toLessonProgress);
     },
 };

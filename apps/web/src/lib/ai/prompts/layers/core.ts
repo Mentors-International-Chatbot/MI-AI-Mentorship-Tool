@@ -1,5 +1,6 @@
-import { ToneOverride } from '../types';
+import { ToneOverride, PromptOverrides } from '../types';
 import { MAX_SENTENCES_PER_MESSAGE, MAX_EMOJIS_PER_MESSAGE } from '../constants';
+import { getLanguageDirective, type SupportedLanguage } from '@/lib/i18n/languages';
 
 // ─── Layer 1: Core Identity (~350 tokens) — Always Sent ────────────
 // This is the foundational prompt. It never changes per-request.
@@ -69,10 +70,51 @@ AJUSTE DE TONO: Este socio valora mucho a su familia. Conecta los conceptos de n
 AJUSTE DE TONO: Este socio está pasando por un momento difícil con su negocio. Sé especialmente empático. No presiones para avanzar rápido. Valida que los momentos difíciles son normales. Enfócate en pasos pequeños y alcanzables. Si reporta pérdidas, NO intentes arreglarlo todo de una vez.`,
 };
 
-export function buildCorePrompt(toneOverride?: ToneOverride): string {
+function buildSliderSnippet(overrides?: PromptOverrides): string {
+  if (!overrides) return '';
+  const parts: string[] = [];
+
+  if (overrides.complexity !== undefined) {
+    if (overrides.complexity < 0.33) {
+      parts.push('Usa lenguaje muy sencillo. Evita cualquier término técnico. Explica todo con comparaciones de la vida cotidiana.');
+    } else if (overrides.complexity > 0.66) {
+      parts.push('Puedes usar un lenguaje más detallado y técnico cuando sea relevante. El socio está listo para conceptos más avanzados.');
+    }
+  }
+
+  if (overrides.warmth !== undefined) {
+    if (overrides.warmth < 0.33) {
+      parts.push('Sé más directo y conciso. Menos rodeos y menos expresiones de ánimo. Ve al punto rápido.');
+    } else if (overrides.warmth > 0.66) {
+      parts.push('Sé extra cálido y cercano. Usa más palabras de ánimo, celebra cada paso, y muestra empatía adicional.');
+    }
+  }
+
+  if (overrides.positivity !== undefined) {
+    if (overrides.positivity < 0.33) {
+      parts.push('Sé más realista y directo sobre los retos. No minimices los problemas — ayuda al socio a enfrentarlos de frente.');
+    } else if (overrides.positivity > 0.66) {
+      parts.push('Enfócate en lo positivo. Resalta oportunidades, celebra logros, y enmarca los retos como oportunidades de crecimiento.');
+    }
+  }
+
+  if (parts.length === 0) return '';
+  return '\n\nAJUSTES DEL MENTOR:\n- ' + parts.join('\n- ');
+}
+
+export function buildCorePrompt(overrides?: PromptOverrides, language?: SupportedLanguage): string {
   let prompt = buildCoreSystemPrompt();
+  const toneOverride = overrides?.toneOverride;
   if (toneOverride && TONE_SNIPPETS[toneOverride]) {
     prompt += TONE_SNIPPETS[toneOverride];
+  }
+  const sliderSnippet = buildSliderSnippet(overrides);
+  if (sliderSnippet) {
+    prompt += sliderSnippet;
+  }
+  const directive = getLanguageDirective(language ?? 'es');
+  if (directive) {
+    prompt += '\n\n' + directive;
   }
   return prompt;
 }

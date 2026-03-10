@@ -1,10 +1,12 @@
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 
 const sociosByKey = new Map<string, Socio>();
 const sociosById = new Map<string, Socio>();
 const messagesBySocio = new Map<string, Message[]>();
 const progressBySocio = new Map<string, SocioProgress>();
+const flagsBySocio = new Map<string, SocioFlag[]>();
+const lessonProgressBySocio = new Map<string, Map<number, LessonProgressRecord>>();
 
 function channelKey(channelType: string, externalId: string): string {
     return `${channelType}:${externalId}`;
@@ -41,6 +43,7 @@ export const inMemoryRepo: Repo = {
             whatsappPhoneNumber: channelType === 'whatsapp' ? externalId : null,
             channelType,
             externalId,
+            language: 'es',
             name: null,
             status: "NEW",
             createdAt: new Date(),
@@ -160,5 +163,56 @@ export const inMemoryRepo: Repo = {
         progress.lastInteractionAt = new Date();
         progressBySocio.set(socioId, progress);
         return progress;
+    },
+
+    async getAllSocios() {
+        return Array.from(sociosById.values()).filter(s => s.status === 'ACTIVE');
+    },
+
+    async getSocioById(socioId) {
+        return sociosById.get(socioId) ?? null;
+    },
+
+    async createFlag(socioId, level, reason) {
+        const flag: SocioFlag = {
+            id: Math.random().toString(36).substring(7),
+            socioId,
+            level,
+            reason,
+            resolved: false,
+            resolvedAt: null,
+            createdAt: new Date(),
+        };
+        const arr = flagsBySocio.get(socioId) ?? [];
+        arr.push(flag);
+        flagsBySocio.set(socioId, arr);
+        return flag;
+    },
+
+    async getFlags(socioId) {
+        return flagsBySocio.get(socioId) ?? [];
+    },
+
+    async upsertLessonProgress(socioId, lessonNumber, understanding, completed) {
+        const map = lessonProgressBySocio.get(socioId) ?? new Map();
+        const existing = map.get(lessonNumber);
+        const now = new Date();
+        const record: LessonProgressRecord = {
+            id: existing?.id ?? Math.random().toString(36).substring(7),
+            socioId,
+            lessonNumber,
+            understanding,
+            completedAt: completed ? now : (existing?.completedAt ?? null),
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        map.set(lessonNumber, record);
+        lessonProgressBySocio.set(socioId, map);
+        return record;
+    },
+
+    async getLessonProgressAll(socioId) {
+        const map = lessonProgressBySocio.get(socioId) ?? new Map();
+        return Array.from(map.values()).sort((a, b) => a.lessonNumber - b.lessonNumber);
     },
 };

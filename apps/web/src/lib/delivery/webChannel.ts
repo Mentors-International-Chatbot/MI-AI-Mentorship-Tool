@@ -1,12 +1,17 @@
 import { DeliveryChannel, ChannelType } from './types';
 
 export class WebChannel implements DeliveryChannel {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    async sendMessage(recipientId: string, text: string): Promise<void> {
-        // No-op: web chat returns the response directly via the API endpoint
+    private collectedMessages: string[] = [];
+
+    async sendMessage(_recipientId: string, text: string): Promise<void> {
+        this.collectedMessages.push(text);
     }
 
     getChannelType(): ChannelType {
         return 'web';
+    }
+
+    getMessages(): string[] {
+        return this.collectedMessages;
     }
 }

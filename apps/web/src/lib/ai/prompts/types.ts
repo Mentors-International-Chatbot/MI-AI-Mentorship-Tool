@@ -109,4 +109,7 @@ export interface ParsedMarkers {
 
 export interface PromptOverrides {
   toneOverride?: ToneOverride;
+  complexity?: number;  // 0-1
+  warmth?: number;      // 0-1
+  positivity?: number;  // 0-1
 }

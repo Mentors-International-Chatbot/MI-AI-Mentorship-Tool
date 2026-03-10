@@ -4,7 +4,7 @@ import { WebChannel } from '@/lib/delivery';
 
 export async function POST(req: NextRequest) {
     try {
-        const { message, sessionId } = await req.json();
+        const { message, sessionId, language } = await req.json();
 
         if (!message || !sessionId) {
             return NextResponse.json(
@@ -13,15 +13,21 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        const webChannel = new WebChannel();
+
         const result = await handleIncomingMessage({
             externalId: sessionId,
             channelType: 'web',
             message,
-            channel: new WebChannel(),
+            channel: webChannel,
+            language,
         });
 
+        const response = result.responseText
+            || webChannel.getMessages().join('\n');
+
         return NextResponse.json({
-            response: result.responseText,
+            response,
             mode: result.mode,
             markers: result.markers,
             socioId: result.socioId,
