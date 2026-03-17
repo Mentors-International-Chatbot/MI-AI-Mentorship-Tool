@@ -45,27 +45,64 @@ Si el socio pregunta algo que no tiene que ver con negocios ni con el currículo
 "Estoy aquí para ayudarte con tu negocio. ¿Hay algo de tu emprendimiento en lo que pueda apoyarte?"
 No escales — simplemente redirige.`;
 
+const CONFIG_SEEDS = [
+  // ── Lesson pacing ──
+  { key: 'RETEACH_THRESHOLD',       value: '3',     type: 'number',  label: 'Reteach Threshold',           description: 'Understanding score at or below this triggers RETEACH mode',         category: 'lesson_pacing' },
+  { key: 'MAX_LESSON_NUMBER',       value: '5',     type: 'number',  label: 'Max Lesson Number',           description: 'Highest lesson number with structured data',                         category: 'lesson_pacing' },
+  { key: 'MAX_LESSONS_PER_DAY',     value: '1',     type: 'number',  label: 'Max Lessons Per Day',         description: 'Maximum lessons a socio can complete in a single day',                category: 'lesson_pacing' },
+  { key: 'LESSONS_PER_WEEK',        value: '2',     type: 'number',  label: 'Lessons Per Week',            description: 'Target lessons per week',                                            category: 'lesson_pacing' },
+  // ── AI behavior ──
+  { key: 'MAX_SENTENCES_PER_MESSAGE', value: '4',   type: 'number',  label: 'Max Sentences Per Message',   description: 'Max sentences the AI should use per WhatsApp message',               category: 'ai_behavior' },
+  { key: 'MAX_EMOJIS_PER_MESSAGE',   value: '2',    type: 'number',  label: 'Max Emojis Per Message',      description: 'Max emojis the AI should use per message',                           category: 'ai_behavior' },
+  // ── Flagging ──
+  { key: 'FLAG_YELLOW_THRESHOLD',   value: '5',     type: 'number',  label: 'Yellow Flag Threshold',       description: 'Score at or below this triggers a YELLOW flag',                      category: 'flagging' },
+  { key: 'FLAG_RED_THRESHOLD',      value: '2',     type: 'number',  label: 'Red Flag Threshold',          description: 'Score at or below this triggers a RED flag',                         category: 'flagging' },
+  // ── Reminders ──
+  { key: 'FOLLOWUP_ENABLED',        value: 'true',  type: 'boolean', label: 'Follow-up Enabled',           description: 'Master toggle for follow-up reminder messages',                      category: 'reminders' },
+  { key: 'FOLLOWUP_DELAY_HOURS',    value: '24',    type: 'number',  label: 'Follow-up Delay (hours)',     description: 'Hours of inactivity before a proactive reminder is sent',             category: 'reminders' },
+  { key: 'MAX_REMINDERS',           value: '2',     type: 'number',  label: 'Max Reminders',               description: 'Max reminder messages per lesson before stopping',                   category: 'reminders' },
+  // ── Onboarding ──
+  { key: 'REQUIRE_LEGAL_CONSENT',   value: 'false', type: 'boolean', label: 'Require Legal Consent',       description: 'Whether to require legal consent step during onboarding',            category: 'onboarding' },
+  // ── Sentiment thresholds ──
+  { key: 'SENTIMENT_URGENCY_RED',       value: '8', type: 'number', label: 'Urgency → Red Flag',           description: 'Urgency score at or above this triggers a RED flag',                 category: 'sentiment' },
+  { key: 'SENTIMENT_CONFUSION_YELLOW',  value: '7', type: 'number', label: 'Confusion → Yellow Flag',      description: 'Confusion score at or above this triggers a YELLOW flag',             category: 'sentiment' },
+  { key: 'SENTIMENT_FRUSTRATION_YELLOW', value: '7', type: 'number', label: 'Frustration → Yellow Flag',   description: 'Frustration score at or above this triggers a YELLOW flag',           category: 'sentiment' },
+];
+
 async function main() {
+  // ── Seed core system prompt ──
   const existing = await prisma.systemPrompt.findFirst({
     where: { version: '1.0', category: 'core', active: true },
   });
 
   if (existing) {
     console.log(`Core system prompt v1.0 already exists (id: ${existing.id}). Skipping.`);
-    return;
+  } else {
+    const prompt = await prisma.systemPrompt.create({
+      data: {
+        version: '1.0',
+        category: 'core',
+        content: CORE_SYSTEM_PROMPT,
+        active: true,
+        authorId: 'seed',
+      },
+    });
+    console.log(`Created core system prompt v1.0 (id: ${prompt.id})`);
   }
 
-  const prompt = await prisma.systemPrompt.create({
-    data: {
-      version: '1.0',
-      category: 'core',
-      content: CORE_SYSTEM_PROMPT,
-      active: true,
-      authorId: 'seed',
-    },
-  });
-
-  console.log(`Created core system prompt v1.0 (id: ${prompt.id})`);
+  // ── Seed program config ──
+  let created = 0;
+  let skipped = 0;
+  for (const cfg of CONFIG_SEEDS) {
+    const exists = await prisma.programConfig.findUnique({ where: { key: cfg.key } });
+    if (exists) {
+      skipped++;
+      continue;
+    }
+    await prisma.programConfig.create({ data: cfg });
+    created++;
+  }
+  console.log(`ProgramConfig: ${created} created, ${skipped} already existed.`);
 }
 
 main()

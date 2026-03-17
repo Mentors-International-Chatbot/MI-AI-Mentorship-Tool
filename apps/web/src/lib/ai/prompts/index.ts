@@ -19,6 +19,7 @@ export {
   type ParsedMarkers,
   type PromptOverrides,
   type ToneOverride,
+  type ConcisivenessLevel,
   type CheckinState,
   type ReteachState,
   type LessonDeliveryState,

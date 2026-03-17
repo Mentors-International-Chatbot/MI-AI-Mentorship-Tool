@@ -28,8 +28,8 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
     // 1. Determine interaction mode from real progress data
     const modeResult = await determineMode(socio, incomingText);
 
-    // 2. Assemble 4-layer system prompt with real progress
-    const systemPrompt = buildSystemPrompt(
+    // 2. Assemble 4-layer system prompt with real progress (DB-backed)
+    const systemPrompt = await buildSystemPrompt(
         socio,
         modeResult.routerResult,
         modeResult.progress,

@@ -1,12 +1,41 @@
-import { ToneOverride, PromptOverrides } from '../types';
+import { ToneOverride, PromptOverrides, ConcisivenessLevel } from '../types';
 import { MAX_SENTENCES_PER_MESSAGE, MAX_EMOJIS_PER_MESSAGE } from '../constants';
 import { getLanguageDirective, type SupportedLanguage } from '@/lib/i18n/languages';
+import { prisma } from '@/lib/db';
+
+// ─── Conciseness Mapping ────────────────────────────────────────────
+
+function getConcisivenessInstruction(level?: ConcisivenessLevel): string {
+  switch (level) {
+    case 'very_brief':
+      return 'Máximo 2 oraciones por mensaje. Directo al punto, sin rodeos.';
+    case 'brief':
+      return 'Máximo 3 oraciones por mensaje. Sé conciso pero claro.';
+    case 'detailed':
+      return 'Puedes usar hasta 6 oraciones por mensaje. Explica con más detalle cuando sea útil.';
+    case 'very_detailed':
+      return 'Puedes usar hasta 8 oraciones por mensaje. Da explicaciones completas con ejemplos adicionales.';
+    case 'standard':
+    default:
+      return `Máximo ${MAX_SENTENCES_PER_MESSAGE} oraciones por mensaje. WhatsApp es un medio rápido.`;
+  }
+}
 
 // ─── Layer 1: Core Identity (~350 tokens) — Always Sent ────────────
-// This is the foundational prompt. It never changes per-request.
-// Future: load from SystemPrompt DB table instead of this constant.
+// Checks DB for an active "core" SystemPrompt. Falls back to hardcoded.
 
-function buildCoreSystemPrompt(): string {
+async function loadActivePrompt(category: string): Promise<string | null> {
+  try {
+    const row = await prisma.systemPrompt.findFirst({
+      where: { category, active: true },
+    });
+    return row?.content ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function buildCoreSystemPromptDefault(): string {
   return `Eres el mentor virtual de Mentors International. Guías a micro-emprendedores en Colombia a crecer sus negocios a través de WhatsApp.
 
 REGLAS ABSOLUTAS:
@@ -102,8 +131,16 @@ function buildSliderSnippet(overrides?: PromptOverrides): string {
   return '\n\nAJUSTES DEL MENTOR:\n- ' + parts.join('\n- ');
 }
 
-export function buildCorePrompt(overrides?: PromptOverrides, language?: SupportedLanguage): string {
-  let prompt = buildCoreSystemPrompt();
+export async function buildCorePrompt(overrides?: PromptOverrides, language?: SupportedLanguage): Promise<string> {
+  const dbPrompt = await loadActivePrompt('core');
+  let prompt = dbPrompt ?? buildCoreSystemPromptDefault();
+
+  // Apply conciseness override — replace the default sentence limit line
+  if (overrides?.conciseness && overrides.conciseness !== 'standard') {
+    const defaultLine = `Máximo ${MAX_SENTENCES_PER_MESSAGE} oraciones por mensaje. WhatsApp es un medio rápido.`;
+    prompt = prompt.replace(defaultLine, getConcisivenessInstruction(overrides.conciseness));
+  }
+
   const toneOverride = overrides?.toneOverride;
   if (toneOverride && TONE_SNIPPETS[toneOverride]) {
     prompt += TONE_SNIPPETS[toneOverride];

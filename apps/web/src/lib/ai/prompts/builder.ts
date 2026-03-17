@@ -16,16 +16,16 @@ import type { SupportedLanguage } from '@/lib/i18n/languages';
 //
 // Total: ~950 tokens (vs ~3,000+ for a monolithic prompt)
 
-export function buildSystemPrompt(
+export async function buildSystemPrompt(
   socio: Socio,
   routerResult: RouterResult,
   progress?: SocioProgress,
-): string {
+): Promise<string> {
   const overrides = (socio as Record<string, unknown>).promptOverrides as PromptOverrides | null;
   const language = (socio.language || 'es') as SupportedLanguage;
 
-  // Layer 1: Core identity + tone override + sliders + language directive
-  const layer1 = buildCorePrompt(overrides ?? undefined, language);
+  // Layer 1: Core identity + tone override + sliders + language directive (DB-backed)
+  const layer1 = await buildCorePrompt(overrides ?? undefined, language);
 
   // Layer 2: Socio context
   const layer2 = buildContextPrompt(socio, progress);

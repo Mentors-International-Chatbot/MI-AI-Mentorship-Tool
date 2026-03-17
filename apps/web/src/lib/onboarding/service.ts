@@ -7,6 +7,7 @@ import {
     DEFAULT_LANGUAGE,
     type SupportedLanguage,
 } from '@/lib/i18n/languages';
+import { extractName } from './extractName';
 
 const REQUIRE_LEGAL_CONSENT = false;
 
@@ -63,12 +64,19 @@ export async function handleOnboarding(socio: Socio, incomingMessage: string, ch
 
         case 'AWAITING_NAME': {
             const strings = ONBOARDING[lang(socio)];
+            const name = await extractName(message, lang(socio));
+
+            if (!name) {
+                await channel.sendMessage(socio.externalId, strings.nameRetry);
+                break;
+            }
+
             await repo.updateSocio(socio.id, {
-                name: message,
+                name,
                 status: 'ACTIVE',
             });
             await repo.initProgress(socio.id);
-            await channel.sendMessage(socio.externalId, strings.welcome(message));
+            await channel.sendMessage(socio.externalId, strings.welcome(name));
             break;
         }
 

@@ -105,10 +105,15 @@ export interface ParsedMarkers {
   escalations: string[];
 }
 
+// ─── Conciseness Levels ─────────────────────────────────────────────
+
+export type ConcisivenessLevel = 'very_brief' | 'brief' | 'standard' | 'detailed' | 'very_detailed';
+
 // ─── Prompt Overrides (shape of socio.promptOverrides JSON) ─────────
 
 export interface PromptOverrides {
   toneOverride?: ToneOverride;
+  conciseness?: ConcisivenessLevel;
   complexity?: number;  // 0-1
   warmth?: number;      // 0-1
   positivity?: number;  // 0-1

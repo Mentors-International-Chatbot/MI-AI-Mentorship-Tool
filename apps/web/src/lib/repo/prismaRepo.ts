@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 import {
     Socio as PrismaSocio,
@@ -7,6 +7,7 @@ import {
     SocioProgress as PrismaSocioProgress,
     SocioFlag as PrismaSocioFlag,
     LessonProgress as PrismaLessonProgress,
+    MessageSentiment as PrismaMessageSentiment,
 } from "@prisma/client";
 
 function toSocio(p: PrismaSocio): Socio {
@@ -32,6 +33,7 @@ function toMessage(p: PrismaMessage): Message {
         socioId: p.socioId,
         role: p.role as Message["role"],
         content: p.content,
+        senderType: p.senderType,
         createdAt: p.createdAt,
     };
 }
@@ -57,8 +59,25 @@ function toSocioFlag(p: PrismaSocioFlag): SocioFlag {
         socioId: p.socioId,
         level: p.level as 'RED' | 'YELLOW',
         reason: p.reason,
+        source: p.source as FlagSource,
         resolved: p.resolved,
+        resolvedBy: p.resolvedBy,
         resolvedAt: p.resolvedAt,
+        messageId: p.messageId,
+        createdAt: p.createdAt,
+    };
+}
+
+function toSentiment(p: PrismaMessageSentiment): MessageSentimentRecord {
+    return {
+        id: p.id,
+        messageId: p.messageId,
+        socioId: p.socioId,
+        confusion: p.confusion,
+        frustration: p.frustration,
+        urgency: p.urgency,
+        sentiment: p.sentiment,
+        topics: p.topics,
         createdAt: p.createdAt,
     };
 }
@@ -118,6 +137,7 @@ export const prismaRepo: Repo = {
                 socioId: data.socioId,
                 role: data.role,
                 content: data.content,
+                senderType: (data as { senderType?: string }).senderType ?? null,
             },
         });
         return toMessage(msg);
@@ -240,9 +260,15 @@ export const prismaRepo: Repo = {
         return socio ? toSocio(socio) : null;
     },
 
-    async createFlag(socioId, level, reason) {
+    async createFlag(data) {
         const flag = await prisma.socioFlag.create({
-            data: { socioId, level, reason },
+            data: {
+                socioId: data.socioId,
+                level: data.level,
+                reason: data.reason,
+                source: data.source ?? 'ai_marker',
+                messageId: data.messageId ?? null,
+            },
         });
         return toSocioFlag(flag);
     },
@@ -253,6 +279,34 @@ export const prismaRepo: Repo = {
             orderBy: { createdAt: 'desc' },
         });
         return flags.map(toSocioFlag);
+    },
+
+    async getActiveFlags(socioId) {
+        const flags = await prisma.socioFlag.findMany({
+            where: { socioId, resolved: false },
+            orderBy: { createdAt: 'desc' },
+        });
+        return flags.map(toSocioFlag);
+    },
+
+    async getAllUnresolvedFlags() {
+        const flags = await prisma.socioFlag.findMany({
+            where: { resolved: false },
+            include: { socio: true },
+            orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
+        });
+        return flags.map((f) => ({
+            ...toSocioFlag(f),
+            socio: toSocio(f.socio),
+        }));
+    },
+
+    async resolveFlag(flagId, mentorId) {
+        const flag = await prisma.socioFlag.update({
+            where: { id: flagId },
+            data: { resolved: true, resolvedBy: mentorId, resolvedAt: new Date() },
+        });
+        return toSocioFlag(flag);
     },
 
     async upsertLessonProgress(socioId, lessonNumber, understanding, completed) {
@@ -278,5 +332,31 @@ export const prismaRepo: Repo = {
             orderBy: { lessonNumber: 'asc' },
         });
         return rows.map(toLessonProgress);
+    },
+
+    async saveSentiment(data) {
+        const row = await prisma.messageSentiment.create({
+            data: {
+                messageId: data.messageId,
+                socioId: data.socioId,
+                confusion: data.confusion,
+                frustration: data.frustration,
+                urgency: data.urgency,
+                sentiment: data.sentiment,
+                topics: data.topics,
+            },
+        });
+        return toSentiment(row);
+    },
+
+    async getSentimentsBySocio(socioId, since?) {
+        const rows = await prisma.messageSentiment.findMany({
+            where: {
+                socioId,
+                ...(since ? { createdAt: { gte: since } } : {}),
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        return rows.map(toSentiment);
     },
 };

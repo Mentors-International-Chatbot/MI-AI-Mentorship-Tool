@@ -6,6 +6,7 @@ import { computeSocioHealth, type SocioHealth } from '@/lib/health';
 import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
 import { SocioListTable } from './SocioListTable';
+import { Prisma } from '@prisma/client';
 
 type SocioRow = {
   id: string;
@@ -18,13 +19,44 @@ type SocioRow = {
 
 const HEALTH_ORDER: Record<string, number> = { RED: 0, YELLOW: 1, GREEN: 2 };
 
+function SchemaError({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900">
+      <h3 className="font-semibold mb-2">Database schema out of date</h3>
+      <p className="text-sm mb-3">{message}</p>
+      <p className="text-sm font-mono bg-amber-100 p-2 rounded">
+        npx prisma migrate deploy
+      </p>
+      <p className="text-xs mt-2 text-amber-700">
+        Run this in <code>apps/web</code> with a working DATABASE_URL (e.g. from your terminal).
+      </p>
+    </div>
+  );
+}
+
 export default async function SociosPage() {
   const cookieStore = await cookies();
   const rawLang = cookieStore.get('dashboard_lang')?.value ?? 'en';
   const lang: SupportedLanguage = isSupportedLanguage(rawLang) ? rawLang : 'en';
   const t = getDashboardStrings(lang);
 
-  const socios = await repo.getAllSocios();
+  let socios;
+  try {
+    socios = await repo.getAllSocios();
+  } catch (err) {
+    const isSchemaError =
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      (err.code === 'P2021' || err.code === 'P2010' || err.message?.includes('does not exist'));
+    if (isSchemaError) {
+      return (
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">{t.sociosTitle}</h2>
+          <SchemaError message="A table or column used by the dashboard is missing. Apply migrations to sync the database with the schema." />
+        </div>
+      );
+    }
+    throw err;
+  }
 
   const rows: SocioRow[] = await Promise.all(
     socios.map(async (socio) => {

@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
                 };
             }
 
-            const systemPrompt = buildSystemPrompt(fakeSocio, routerResult, progress);
+            const systemPrompt = await buildSystemPrompt(fakeSocio, routerResult, progress);
 
             const chat = new ChatAnthropic({
                 model: "claude-haiku-4-5-20251001",
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
         };
 
         const defaultRouter: RouterResult = { mode: InteractionMode.FREEFORM_QUESTION };
-        const systemPrompt = buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress);
+        const systemPrompt = await buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress);
 
         const chat = new ChatAnthropic({
             model: "claude-haiku-4-5-20251001",

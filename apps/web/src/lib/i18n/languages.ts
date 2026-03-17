@@ -27,6 +27,7 @@ interface OnboardingStrings {
     consentAcceptKeyword: string;
     consentRetry: string;
     namePrompt: string;
+    nameRetry: string;
     welcome: (name: string) => string;
 }
 
@@ -42,6 +43,8 @@ export const ONBOARDING: Record<SupportedLanguage, OnboardingStrings> = {
             "Por favor responde 'ACEPTO' para confirmar que estás de acuerdo con los términos.",
         namePrompt:
             '¡Hola! Soy tu mentor virtual de Mentors International 🤖. Estoy aquí para ayudarte a crecer tu negocio. Para empezar, ¿cómo te llamas?',
+        nameRetry:
+            'No pude entender tu nombre. ¿Podrías escribir solo tu nombre, por favor?',
         welcome: (name: string) =>
             `¡Mucho gusto, ${name}! 👋\n\nPara darte los mejores consejos, cuéntame: ¿Qué tipo de negocio tienes? (Ej: Panadería, Tienda de ropa, Servicios...)`,
     },
@@ -56,6 +59,8 @@ export const ONBOARDING: Record<SupportedLanguage, OnboardingStrings> = {
             "Please reply 'ACCEPT' to confirm that you agree with the terms.",
         namePrompt:
             "Hi! I'm your virtual mentor from Mentors International 🤖. I'm here to help you grow your business. To get started, what's your name?",
+        nameRetry:
+            "I couldn't catch your name. Could you please type just your name?",
         welcome: (name: string) =>
             `Nice to meet you, ${name}! 👋\n\nTo give you the best advice, tell me: what kind of business do you have? (e.g. Bakery, Clothing store, Services...)`,
     },
@@ -70,6 +75,8 @@ export const ONBOARDING: Record<SupportedLanguage, OnboardingStrings> = {
             "Por favor responda 'ACEITO' para confirmar que você concorda com os termos.",
         namePrompt:
             'Olá! Sou seu mentor virtual da Mentors International 🤖. Estou aqui para ajudar você a crescer seu negócio. Para começar, qual é o seu nome?',
+        nameRetry:
+            'Não consegui entender seu nome. Poderia digitar apenas o seu nome, por favor?',
         welcome: (name: string) =>
             `Muito prazer, ${name}! 👋\n\nPara te dar os melhores conselhos, me conte: que tipo de negócio você tem? (Ex: Padaria, Loja de roupas, Serviços...)`,
     },

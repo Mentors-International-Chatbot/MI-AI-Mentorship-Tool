@@ -23,6 +23,7 @@ export type Message = {
     socioId: string;
     role: Role;
     content: string;
+    senderType?: string | null;
     createdAt: Date;
 };
 
@@ -44,13 +45,30 @@ export interface LessonScores {
     implementation?: number;
 }
 
+export type FlagSource = 'ai_marker' | 'sentiment_auto' | 'mentor_manual';
+
 export type SocioFlag = {
     id: string;
     socioId: string;
     level: 'RED' | 'YELLOW';
     reason: string;
+    source: FlagSource;
     resolved: boolean;
+    resolvedBy: string | null;
     resolvedAt: Date | null;
+    messageId: string | null;
+    createdAt: Date;
+};
+
+export type MessageSentimentRecord = {
+    id: string;
+    messageId: string;
+    socioId: string;
+    confusion: number;
+    frustration: number;
+    urgency: number;
+    sentiment: string;
+    topics: string[];
     createdAt: Date;
 };
 
@@ -90,8 +108,15 @@ export interface Repo {
     // Dashboard methods
     getAllSocios(): Promise<Socio[]>;
     getSocioById(socioId: string): Promise<Socio | null>;
-    createFlag(socioId: string, level: 'RED' | 'YELLOW', reason: string): Promise<SocioFlag>;
+    createFlag(data: { socioId: string; level: string; reason: string; source?: string; messageId?: string }): Promise<SocioFlag>;
     getFlags(socioId: string): Promise<SocioFlag[]>;
+    getActiveFlags(socioId: string): Promise<SocioFlag[]>;
+    getAllUnresolvedFlags(): Promise<(SocioFlag & { socio: Socio })[]>;
+    resolveFlag(flagId: string, mentorId: string): Promise<SocioFlag>;
     upsertLessonProgress(socioId: string, lessonNumber: number, understanding: number | null, completed: boolean): Promise<LessonProgressRecord>;
     getLessonProgressAll(socioId: string): Promise<LessonProgressRecord[]>;
+
+    // Sentiment methods
+    saveSentiment(data: Omit<MessageSentimentRecord, 'id' | 'createdAt'>): Promise<MessageSentimentRecord>;
+    getSentimentsBySocio(socioId: string, since?: Date): Promise<MessageSentimentRecord[]>;
 }

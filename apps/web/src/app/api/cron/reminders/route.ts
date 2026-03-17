@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
                 ),
             };
 
-            const systemPrompt = buildSystemPrompt(socio, routerResult, promptProgress);
+            const systemPrompt = await buildSystemPrompt(socio, routerResult, promptProgress);
 
             const chat = new ChatAnthropic({
                 model: 'claude-haiku-4-5-20251001',

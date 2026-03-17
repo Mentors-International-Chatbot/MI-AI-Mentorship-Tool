@@ -2,6 +2,7 @@ import { repo } from '@/lib/repo';
 import { handleOnboarding } from '@/lib/onboarding/service';
 import { generateAIResponse } from '@/lib/ai/service';
 import { InteractionMode, parseScore, type ParsedMarkers } from '@/lib/ai/prompts';
+import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 
@@ -57,11 +58,16 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         };
     }
 
-    await repo.addMessage({
+    const userMsg = await repo.addMessage({
         socioId: socio.id,
         role: 'user',
         content: message,
     });
+
+    // Sentiment analysis — fire-and-forget, don't block the AI response
+    analyzeSentimentAndFlag(userMsg.id, socio.id, message).catch(err =>
+        console.error('[Sentiment] Background analysis failed:', err)
+    );
 
     await repo.touchInteraction(socio.id);
 
@@ -71,14 +77,26 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         socioId: socio.id,
         role: 'assistant',
         content: aiResponse.text,
-    });
+        senderType: 'ai',
+    } as Parameters<typeof repo.addMessage>[0]);
 
     for (const flag of aiResponse.markers.flags) {
-        await repo.createFlag(socio.id, flag.level, flag.reason);
+        await repo.createFlag({
+            socioId: socio.id,
+            level: flag.level,
+            reason: flag.reason,
+            source: 'ai_marker',
+        });
         console.log(`[Flag:${flag.level}] socio=${socio.id} reason=${flag.reason}`);
     }
-    if (aiResponse.markers.escalations.length > 0) {
-        console.log(`[Escalation] socio=${socio.id}`, aiResponse.markers.escalations);
+    for (const escalation of aiResponse.markers.escalations) {
+        await repo.createFlag({
+            socioId: socio.id,
+            level: 'RED',
+            reason: `Escalación: ${escalation}`,
+            source: 'ai_marker',
+        });
+        console.log(`[Escalation Persisted] socio=${socio.id} reason=${escalation}`);
     }
 
     for (const lessonNum of aiResponse.markers.lessonsCompleted) {

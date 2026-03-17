@@ -1,4 +1,4 @@
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 
 const sociosByKey = new Map<string, Socio>();
@@ -7,6 +7,7 @@ const messagesBySocio = new Map<string, Message[]>();
 const progressBySocio = new Map<string, SocioProgress>();
 const flagsBySocio = new Map<string, SocioFlag[]>();
 const lessonProgressBySocio = new Map<string, Map<number, LessonProgressRecord>>();
+const sentimentsByMessage = new Map<string, MessageSentimentRecord>();
 
 function channelKey(channelType: string, externalId: string): string {
     return `${channelType}:${externalId}`;
@@ -173,24 +174,56 @@ export const inMemoryRepo: Repo = {
         return sociosById.get(socioId) ?? null;
     },
 
-    async createFlag(socioId, level, reason) {
+    async createFlag(data) {
         const flag: SocioFlag = {
             id: Math.random().toString(36).substring(7),
-            socioId,
-            level,
-            reason,
+            socioId: data.socioId,
+            level: data.level as 'RED' | 'YELLOW',
+            reason: data.reason,
+            source: (data.source ?? 'ai_marker') as FlagSource,
             resolved: false,
+            resolvedBy: null,
             resolvedAt: null,
+            messageId: data.messageId ?? null,
             createdAt: new Date(),
         };
-        const arr = flagsBySocio.get(socioId) ?? [];
+        const arr = flagsBySocio.get(data.socioId) ?? [];
         arr.push(flag);
-        flagsBySocio.set(socioId, arr);
+        flagsBySocio.set(data.socioId, arr);
         return flag;
     },
 
     async getFlags(socioId) {
         return flagsBySocio.get(socioId) ?? [];
+    },
+
+    async getActiveFlags(socioId) {
+        return (flagsBySocio.get(socioId) ?? []).filter(f => !f.resolved);
+    },
+
+    async getAllUnresolvedFlags() {
+        const result: (SocioFlag & { socio: Socio })[] = [];
+        for (const [socioId, flags] of flagsBySocio) {
+            const socio = sociosById.get(socioId);
+            if (!socio) continue;
+            for (const f of flags) {
+                if (!f.resolved) result.push({ ...f, socio });
+            }
+        }
+        return result;
+    },
+
+    async resolveFlag(flagId, mentorId) {
+        for (const flags of flagsBySocio.values()) {
+            const flag = flags.find(f => f.id === flagId);
+            if (flag) {
+                flag.resolved = true;
+                flag.resolvedBy = mentorId;
+                flag.resolvedAt = new Date();
+                return flag;
+            }
+        }
+        throw new Error(`Flag ${flagId} not found`);
     },
 
     async upsertLessonProgress(socioId, lessonNumber, understanding, completed) {
@@ -214,5 +247,25 @@ export const inMemoryRepo: Repo = {
     async getLessonProgressAll(socioId) {
         const map = lessonProgressBySocio.get(socioId) ?? new Map();
         return Array.from(map.values()).sort((a, b) => a.lessonNumber - b.lessonNumber);
+    },
+
+    async saveSentiment(data) {
+        const record: MessageSentimentRecord = {
+            id: Math.random().toString(36).substring(7),
+            ...data,
+            createdAt: new Date(),
+        };
+        sentimentsByMessage.set(data.messageId, record);
+        return record;
+    },
+
+    async getSentimentsBySocio(socioId, since?) {
+        const results: MessageSentimentRecord[] = [];
+        for (const r of sentimentsByMessage.values()) {
+            if (r.socioId === socioId && (!since || r.createdAt >= since)) {
+                results.push(r);
+            }
+        }
+        return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     },
 };

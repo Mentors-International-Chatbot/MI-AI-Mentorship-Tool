@@ -38,14 +38,17 @@ model Socio {
   status              OnboardingStatus @default(NEW)
   promptOverrides     Json?            @map("prompt_overrides")
   metadata            Json?
+  mentorId            String?          @map("mentor_id")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
-  messages  Message[]
-  summaries Summary[]
-  progress  SocioProgress?
-  flags     SocioFlag[]
+  mentor     Mentor?   @relation(fields: [mentorId], references: [id])
+  messages   Message[]
+  summaries  Summary[]
+  progress   SocioProgress?
+  flags      SocioFlag[]
   lessonProgress LessonProgress[]
+  sentiments MessageSentiment[]
 
   @@unique([channelType, externalId], map: "socios_channel_external_id_key")
   @@map("socios")
@@ -58,17 +61,47 @@ model Mentor {
   role      String   // "mentor", "admin"
   createdAt DateTime @default(now()) @map("created_at")
 
+  socios Socio[]
+
   @@map("mentors")
 }
 
-model Message {
-  id        String   @id @default(uuid())
-  socioId   String   @map("socio_id")
-  role      String   // "user", "assistant", "system"
-  content   String
-  createdAt DateTime @default(now()) @map("created_at")
+model ProgramConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   // JSON-encoded
+  type        String   // "number", "boolean", "string", "json"
+  label       String   // Human-readable label for the UI
+  description String?
+  category    String   // "lesson_pacing", "ai_behavior", "flagging", "reminders", "onboarding"
+  updatedBy   String?  @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  socio Socio @relation(fields: [socioId], references: [id])
+  @@map("program_config")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String   @map("actor_id")
+  action     String   // "changed_config", "updated_prompt", "activated_prompt", "resolved_flag", "assigned_mentor"
+  targetType String   @map("target_type") // "program_config", "system_prompt", "socio", "mentor"
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("audit_log")
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  socioId    String   @map("socio_id")
+  role       String   // "user", "assistant", "system"
+  content    String
+  senderType String?  @map("sender_type") // "ai", "mentor", null (legacy)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  socio     Socio              @relation(fields: [socioId], references: [id])
+  sentiment MessageSentiment?
 
   @@map("messages")
 }
@@ -111,8 +144,11 @@ model SocioFlag {
   socioId    String    @map("socio_id")
   level      String    // "RED" | "YELLOW"
   reason     String
+  source     String    @default("ai_marker") // "ai_marker", "sentiment_auto", "mentor_manual"
   resolved   Boolean   @default(false)
+  resolvedBy String?   @map("resolved_by")
   resolvedAt DateTime? @map("resolved_at")
+  messageId  String?   @map("message_id")
   createdAt  DateTime  @default(now()) @map("created_at")
 
   socio Socio @relation(fields: [socioId], references: [id])
@@ -133,4 +169,21 @@ model LessonProgress {
 
   @@unique([socioId, lessonNumber], map: "lesson_progress_socio_lesson_key")
   @@map("lesson_progress")
+}
+
+model MessageSentiment {
+  id          String   @id @default(uuid())
+  messageId   String   @unique @map("message_id")
+  socioId     String   @map("socio_id")
+  confusion   Int      // 0-10
+  frustration Int      // 0-10
+  urgency     Int      // 0-10
+  sentiment   String   // "positive", "neutral", "negative", "distressed"
+  topics      String[] // e.g. ["finances", "business", "personal"]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id])
+  socio   Socio   @relation(fields: [socioId], references: [id])
+
+  @@map("message_sentiments")
 }
