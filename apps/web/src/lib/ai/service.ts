@@ -10,6 +10,7 @@ import {
     type ParsedMarkers,
     type DetermineModeResult,
 } from './prompts';
+import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
 
 export interface AIResponse {
     text: string;
@@ -60,9 +61,10 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
 
         // 5. Parse markers from the response
         const markers = parseMarkers(rawContent);
+        const sanitized = sanitizeForDelivery(markers.cleanText);
 
         return {
-            text: markers.cleanText,
+            text: sanitized,
             markers,
             mode: modeResult.routerResult.mode,
             determineModeResult: modeResult,
