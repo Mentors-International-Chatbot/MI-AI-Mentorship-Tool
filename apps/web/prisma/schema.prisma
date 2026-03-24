@@ -32,6 +32,7 @@ model Socio {
   channelType         String           @default("whatsapp") @map("channel_type")
   externalId          String           @default("") @map("external_id")
   language            String           @default("es") @map("language")
+  passwordHash        String?          @map("password_hash")
   name                String?
   businessName        String?          @map("business_name")
   businessDescription String?          @map("business_description")
@@ -49,6 +50,7 @@ model Socio {
   flags      SocioFlag[]
   lessonProgress LessonProgress[]
   sentiments MessageSentiment[]
+  financialSnapshots FinancialSnapshot[]
 
   @@unique([channelType, externalId], map: "socios_channel_external_id_key")
   @@map("socios")
@@ -57,8 +59,9 @@ model Socio {
 model Mentor {
   id        String   @id @default(uuid())
   name      String
-  email     String   @unique
-  role      String   // "mentor", "admin"
+  email        String   @unique
+  passwordHash String?  @map("password_hash")
+  role         String   // "mentor", "admin"
   createdAt DateTime @default(now()) @map("created_at")
 
   socios Socio[]
@@ -90,6 +93,16 @@ model AuditLog {
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@map("audit_log")
+}
+
+model Feedback {
+  id        String   @id @default(uuid())
+  page      String   // which page the feedback is about
+  subject   String   // short subject line
+  body      String   // full feedback text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("feedback")
 }
 
 model Message {
@@ -186,4 +199,19 @@ model MessageSentiment {
   socio   Socio   @relation(fields: [socioId], references: [id])
 
   @@map("message_sentiments")
+}
+
+model FinancialSnapshot {
+  id            String   @id @default(uuid())
+  socioId       String   @map("socio_id")
+  weekStartDate DateTime @map("week_start_date")
+  revenue       Float
+  netProfit     Float    @map("net_profit")
+  source        String   @default("ai_marker") // "ai_marker", "manual", "cron"
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  socio Socio @relation(fields: [socioId], references: [id])
+
+  @@unique([socioId, weekStartDate], map: "financial_snapshot_socio_week_key")
+  @@map("financial_snapshots")
 }

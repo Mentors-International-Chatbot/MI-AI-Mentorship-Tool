@@ -3,6 +3,7 @@ import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/language
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
 import { DashboardLangProvider } from './DashboardLangContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { LogoutButton } from './LogoutButton';
 
 export default async function DashboardLayout({
   children,
@@ -23,6 +24,7 @@ export default async function DashboardLayout({
             <div className="flex items-center gap-4">
               <LanguageSwitcher />
               <span className="text-sm text-gray-300">Mentors International</span>
+              <LogoutButton />
             </div>
           </div>
         </nav>

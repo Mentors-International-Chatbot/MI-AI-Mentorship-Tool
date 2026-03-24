@@ -7,6 +7,11 @@ export async function GET(request: NextRequest) {
   const status = params.get('status');
   const search = params.get('search');
   const mentorId = params.get('mentorId');
+  const activeWithin = params.get('activeWithin'); // e.g. "7d"
+  const flagLevel = params.get('flagLevel'); // "RED" or "YELLOW"
+  const completedLesson = params.get('completedLesson'); // lesson number
+  const lessonNumber = params.get('lessonNumber'); // lesson number
+  const sortBy = params.get('sortBy'); // "messagesThisWeek"
   const page = Math.max(1, Number(params.get('page') ?? 1));
   const pageSize = Math.min(100, Math.max(1, Number(params.get('pageSize') ?? 50)));
 
@@ -24,6 +29,63 @@ export async function GET(request: NextRequest) {
       { businessName: { contains: search, mode: 'insensitive' } },
       { externalId: { contains: search, mode: 'insensitive' } },
     ];
+  }
+  if (activeWithin) {
+    const days = parseInt(activeWithin.replace('d', ''), 10);
+    if (!isNaN(days)) {
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      where.progress = { lastInteractionAt: { gte: since } };
+    }
+  }
+  if (flagLevel) {
+    where.flags = { some: { level: flagLevel, resolved: false } };
+  }
+  if (completedLesson) {
+    const num = parseInt(completedLesson, 10);
+    if (!isNaN(num)) {
+      where.lessonProgress = {
+        some: { lessonNumber: num, completedAt: { not: null } },
+      };
+    }
+  }
+  if (lessonNumber) {
+    const num = parseInt(lessonNumber, 10);
+    if (!isNaN(num)) {
+      where.lessonProgress = {
+        some: { lessonNumber: num },
+      };
+    }
+  }
+
+  // For messagesThisWeek sort, we need a raw approach
+  if (sortBy === 'messagesThisWeek') {
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const socios = await prisma.socio.findMany({
+      where,
+      include: {
+        progress: true,
+        flags: { where: { resolved: false } },
+        mentor: { select: { id: true, name: true } },
+        _count: {
+          select: {
+            messages: { where: { createdAt: { gte: weekAgo }, role: 'user' } },
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    // Sort by message count descending
+    socios.sort((a, b) => (b._count?.messages ?? 0) - (a._count?.messages ?? 0));
+
+    const paginated = socios.slice((page - 1) * pageSize, page * pageSize);
+    return NextResponse.json({
+      socios: paginated,
+      total: socios.length,
+      page,
+      pageSize,
+      totalPages: Math.ceil(socios.length / pageSize),
+    });
   }
 
   const [socios, total] = await Promise.all([

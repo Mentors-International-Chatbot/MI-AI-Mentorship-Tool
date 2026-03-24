@@ -18,12 +18,13 @@ export default async function AdminSocioDetailPage({
   });
   if (!socio) return notFound();
 
-  const [health, progress, flags, lessonProgress, messages] = await Promise.all([
+  const [health, progress, flags, lessonProgress, messages, financialSnapshots] = await Promise.all([
     computeSocioHealth(id),
     prisma.socioProgress.findUnique({ where: { socioId: id } }),
     prisma.socioFlag.findMany({ where: { socioId: id }, orderBy: { createdAt: 'desc' } }),
     prisma.lessonProgress.findMany({ where: { socioId: id }, orderBy: { lessonNumber: 'asc' } }),
     prisma.message.findMany({ where: { socioId: id }, orderBy: { createdAt: 'desc' }, take: 50 }),
+    prisma.financialSnapshot.findMany({ where: { socioId: id }, orderBy: { weekStartDate: 'asc' }, take: 52 }),
   ]);
 
   const healthColor =
@@ -158,6 +159,56 @@ export default async function AdminSocioDetailPage({
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Financial History */}
+        <div className="bg-white rounded-lg border p-4 lg:col-span-2">
+          <h3 className="font-semibold text-gray-900 mb-3">Financial History</h3>
+          {financialSnapshots.length === 0 ? (
+            <p className="text-sm text-gray-500">No financial data reported yet.</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-4 mb-3 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500 inline-block" /> Revenue</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-500 inline-block" /> Net Profit</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400 inline-block" /> Costs</span>
+              </div>
+              <div className="space-y-3">
+                {(() => {
+                  const maxVal = Math.max(...financialSnapshots.map((s) => Math.max(s.revenue, s.netProfit, s.revenue - s.netProfit)), 1);
+                  return financialSnapshots.map((s) => {
+                    const costs = s.revenue - s.netProfit;
+                    const weekLabel = new Date(s.weekStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    return (
+                      <div key={s.id} className="text-sm">
+                        <div className="text-gray-600 font-medium mb-1">{weekLabel}</div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-gray-100 rounded-full h-3">
+                              <div className="bg-blue-500 h-3 rounded-full" style={{ width: `${(s.revenue / maxVal) * 100}%` }} />
+                            </div>
+                            <span className="text-xs text-gray-500 w-20 text-right">${s.revenue.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-gray-100 rounded-full h-3">
+                              <div className="bg-green-500 h-3 rounded-full" style={{ width: `${(s.netProfit / maxVal) * 100}%` }} />
+                            </div>
+                            <span className="text-xs text-gray-500 w-20 text-right">${s.netProfit.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-gray-100 rounded-full h-3">
+                              <div className="bg-orange-400 h-3 rounded-full" style={{ width: `${(costs / maxVal) * 100}%` }} />
+                            </div>
+                            <span className="text-xs text-gray-500 w-20 text-right">${costs.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

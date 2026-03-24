@@ -73,7 +73,7 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
         console.error("AI Generation Error:", error);
         return {
             text: "Lo siento, tuve un problema pensando mi respuesta. ¿Me puedes repetir eso? 🤖",
-            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [] },
+            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },
             mode: modeResult.routerResult.mode,
             determineModeResult: modeResult,
         };

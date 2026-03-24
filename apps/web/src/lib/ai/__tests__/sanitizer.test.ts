@@ -1,51 +1,50 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { sanitizeForDelivery } from '../sanitizer';
+import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
 
-test('strips strong/italic markers', () => {
-  assert.equal(sanitizeForDelivery('**hola**'), 'hola');
-  assert.equal(sanitizeForDelivery('*hola*'), 'hola');
-  assert.equal(sanitizeForDelivery('__hola__'), 'hola');
-  assert.equal(sanitizeForDelivery('_hola_'), 'hola');
-});
+describe('sanitizeForDelivery', () => {
+  it('strips strong/italic markers', () => {
+    expect(sanitizeForDelivery('**hola**')).toBe('hola');
+    expect(sanitizeForDelivery('*hola*')).toBe('hola');
+    expect(sanitizeForDelivery('__hola__')).toBe('hola');
+    expect(sanitizeForDelivery('_hola_')).toBe('hola');
+  });
 
-test('replaces em dash', () => {
-  assert.equal(sanitizeForDelivery('A — B'), 'A - B');
-});
+  it('replaces em dash', () => {
+    expect(sanitizeForDelivery('A — B')).toBe('A - B');
+  });
 
-test('strips headers', () => {
-  assert.equal(sanitizeForDelivery('# Titulo'), 'Titulo');
-});
+  it('strips headers', () => {
+    expect(sanitizeForDelivery('# Titulo')).toBe('Titulo');
+  });
 
-test('converts bullet lists to flowing text', () => {
-  const input = '- uno\n- dos';
-  assert.equal(sanitizeForDelivery(input), 'uno, dos.');
-});
+  it('converts bullet lists to flowing text', () => {
+    const input = '- uno\n- dos';
+    expect(sanitizeForDelivery(input)).toBe('uno, dos.');
+  });
 
-test('converts numbered lists to flowing text', () => {
-  const input = '1. primero\n2. segundo';
-  assert.equal(sanitizeForDelivery(input), 'primero, segundo.');
-});
+  it('converts numbered lists to flowing text', () => {
+    const input = '1. primero\n2. segundo';
+    expect(sanitizeForDelivery(input)).toBe('primero, segundo.');
+  });
 
-test('strips inline backticks', () => {
-  assert.equal(sanitizeForDelivery('usa `code`'), 'usa code');
-});
+  it('strips inline backticks', () => {
+    expect(sanitizeForDelivery('usa `code`')).toBe('usa code');
+  });
 
-test('keeps inner code block text (without fences)', () => {
-  const input = '```js\nconst x = 1;\n```';
-  assert.equal(sanitizeForDelivery(input), 'const x = 1;');
-});
+  it('keeps inner code block text (without fences)', () => {
+    const input = '```js\nconst x = 1;\n```';
+    expect(sanitizeForDelivery(input)).toBe('const x = 1;');
+  });
 
-test('collapses extra newlines', () => {
-  const input = 'a\n\n\nb';
-  assert.equal(sanitizeForDelivery(input), 'a\n\nb');
-});
+  it('collapses extra newlines', () => {
+    const input = 'a\n\n\nb';
+    expect(sanitizeForDelivery(input)).toBe('a\n\nb');
+  });
 
-test('preserves system markers that look like brackets', () => {
-  const input = 'Texto [FLAG:RED|crisis financiera] fin';
-  assert.equal(
-    sanitizeForDelivery(input),
-    'Texto [FLAG:RED|crisis financiera] fin'
-  );
+  it('preserves system markers that look like brackets', () => {
+    const input = 'Texto [FLAG:RED|crisis financiera] fin';
+    expect(sanitizeForDelivery(input)).toBe(
+      'Texto [FLAG:RED|crisis financiera] fin'
+    );
+  });
 });
 

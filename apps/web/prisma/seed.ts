@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaNeon } from '@prisma/adapter-neon';
 import { neonConfig } from '@neondatabase/serverless';
 import ws from 'ws';
+import bcrypt from 'bcryptjs';
 
 neonConfig.webSocketConstructor = ws;
 
@@ -30,6 +31,9 @@ TONO:
 FORMATO:
 - Mensajes cortos y claros. Párrafos de 1-2 oraciones máximo.
 - Una idea por mensaje.
+- NO uses formato markdown: nada de **, ##, \`\`\` ni viñetas con *. WhatsApp no lo renderiza y se ve feo.
+- Usa guiones (-) para listas, no asteriscos ni bullets.
+- No uses rayas largas (—) como viñetas. Usa guiones normales (-).
 - Haz preguntas abiertas para que el socio reflexione y participe.
 - Cuando des un consejo, incluye un paso concreto que puedan hacer hoy.
 
@@ -72,11 +76,15 @@ const CONFIG_SEEDS = [
 async function main() {
   // ── Seed core system prompt ──
   const existing = await prisma.systemPrompt.findFirst({
-    where: { version: '1.0', category: 'core', active: true },
+    where: { version: '1.0', category: 'core' },
   });
 
   if (existing) {
-    console.log(`Core system prompt v1.0 already exists (id: ${existing.id}). Skipping.`);
+    await prisma.systemPrompt.update({
+      where: { id: existing.id },
+      data: { content: CORE_SYSTEM_PROMPT, active: true },
+    });
+    console.log(`Updated core system prompt v1.0 content (id: ${existing.id}).`);
   } else {
     const prompt = await prisma.systemPrompt.create({
       data: {
@@ -103,6 +111,80 @@ async function main() {
     created++;
   }
   console.log(`ProgramConfig: ${created} created, ${skipped} already existed.`);
+
+  // ── Seed test accounts ──
+  const DEFAULT_PASSWORD = await bcrypt.hash('pilot2026', 10);
+
+  // Test admin
+  const adminExists = await prisma.mentor.findUnique({ where: { email: 'admin@mi.org' } });
+  if (!adminExists) {
+    await prisma.mentor.create({
+      data: {
+        name: 'Admin User',
+        email: 'admin@mi.org',
+        role: 'admin',
+        passwordHash: DEFAULT_PASSWORD,
+      },
+    });
+    console.log('Created test admin: admin@mi.org / pilot2026');
+  } else if (!adminExists.passwordHash) {
+    await prisma.mentor.update({
+      where: { email: 'admin@mi.org' },
+      data: { passwordHash: DEFAULT_PASSWORD },
+    });
+    console.log('Updated admin@mi.org with password hash.');
+  } else {
+    console.log('Test admin already exists. Skipping.');
+  }
+
+  // Test mentor
+  const mentorExists = await prisma.mentor.findUnique({ where: { email: 'mentor@mi.org' } });
+  if (!mentorExists) {
+    await prisma.mentor.create({
+      data: {
+        name: 'Test Mentor',
+        email: 'mentor@mi.org',
+        role: 'mentor',
+        passwordHash: DEFAULT_PASSWORD,
+      },
+    });
+    console.log('Created test mentor: mentor@mi.org / pilot2026');
+  } else if (!mentorExists.passwordHash) {
+    await prisma.mentor.update({
+      where: { email: 'mentor@mi.org' },
+      data: { passwordHash: DEFAULT_PASSWORD },
+    });
+    console.log('Updated mentor@mi.org with password hash.');
+  } else {
+    console.log('Test mentor already exists. Skipping.');
+  }
+
+  // Test socio (web chat)
+  const socioExists = await prisma.socio.findFirst({
+    where: { whatsappPhoneNumber: '573001234567' },
+  });
+  if (!socioExists) {
+    await prisma.socio.create({
+      data: {
+        whatsappPhoneNumber: '573001234567',
+        channelType: 'whatsapp',
+        externalId: '573001234567',
+        language: 'es',
+        name: 'María Test',
+        status: 'ACTIVE',
+        passwordHash: DEFAULT_PASSWORD,
+      },
+    });
+    console.log('Created test socio: 573001234567 / pilot2026');
+  } else if (!socioExists.passwordHash) {
+    await prisma.socio.update({
+      where: { id: socioExists.id },
+      data: { passwordHash: DEFAULT_PASSWORD },
+    });
+    console.log('Updated test socio with password hash.');
+  } else {
+    console.log('Test socio already exists. Skipping.');
+  }
 }
 
 main()

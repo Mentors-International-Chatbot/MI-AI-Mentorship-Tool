@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/admin/prompts', label: 'Prompts' },
   { href: '/admin/socios',  label: 'Socios' },
   { href: '/admin/mentors', label: 'Mentors' },
+  { href: '/admin/feedback', label: 'Feedback' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -41,7 +42,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ))}
             </div>
           </div>
-          <span className="text-sm text-gray-300">Mentors International</span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-300">Mentors International</span>
+            <button
+              onClick={async () => {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+              }}
+              className="text-xs text-gray-400 hover:text-white transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </nav>
       <main className="max-w-7xl mx-auto px-6 py-8">

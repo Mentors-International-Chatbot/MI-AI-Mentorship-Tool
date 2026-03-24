@@ -7,6 +7,7 @@ export async function GET() {
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const twelveWeeksAgo = new Date(now.getTime() - 12 * 7 * 24 * 60 * 60 * 1000);
 
   const [
     sociosByStatus,
@@ -18,6 +19,7 @@ export async function GET() {
     flagCounts,
     messagesThisWeek,
     totalMessages,
+    financialWeeks,
   ] = await Promise.all([
     // Socios by onboarding status
     prisma.socio.groupBy({
@@ -69,6 +71,15 @@ export async function GET() {
 
     // Total messages
     prisma.message.count(),
+
+    // Financial snapshots — last 12 weeks, grouped by week
+    prisma.financialSnapshot.groupBy({
+      by: ['weekStartDate'],
+      where: { weekStartDate: { gte: twelveWeeksAgo } },
+      _sum: { revenue: true, netProfit: true },
+      _count: { id: true },
+      orderBy: { weekStartDate: 'asc' },
+    }),
   ]);
 
   // Compute avg messages per socio per week
@@ -101,5 +112,11 @@ export async function GET() {
     totalMessages,
     avgMessagesPerSocio,
     activeSocioCount,
+    financialSummary: financialWeeks.map((w) => ({
+      weekStartDate: w.weekStartDate,
+      totalRevenue: w._sum.revenue ?? 0,
+      totalNetProfit: w._sum.netProfit ?? 0,
+      socioCount: w._count.id,
+    })),
   });
 }

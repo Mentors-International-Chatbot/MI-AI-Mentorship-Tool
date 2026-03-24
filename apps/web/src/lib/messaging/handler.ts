@@ -3,6 +3,7 @@ import { handleOnboarding } from '@/lib/onboarding/service';
 import { generateAIResponse } from '@/lib/ai/service';
 import { InteractionMode, parseScore, type ParsedMarkers } from '@/lib/ai/prompts';
 import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
+import { prisma } from '@/lib/db';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 
@@ -41,7 +42,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         return {
             responseText: '',
             mode: InteractionMode.LESSON_START,
-            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [] },
+            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },
             socioId: socio.id,
             isNewSocio: true,
         };
@@ -52,7 +53,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         return {
             responseText: '',
             mode: InteractionMode.LESSON_START,
-            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [] },
+            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },
             socioId: socio.id,
             isNewSocio,
         };
@@ -106,6 +107,27 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         });
         await repo.upsertLessonProgress(socio.id, lessonNum, score, true);
         console.log(`[LessonComplete] socio=${socio.id} lesson=${lessonNum} score=${score}`);
+    }
+
+    for (const fin of aiResponse.markers.financials) {
+        const now = new Date();
+        const day = now.getUTCDay();
+        const mondayOffset = day === 0 ? 6 : day - 1;
+        const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - mondayOffset));
+        await prisma.financialSnapshot.upsert({
+            where: {
+                socioId_weekStartDate: { socioId: socio.id, weekStartDate: weekStart },
+            },
+            update: { revenue: fin.revenue, netProfit: fin.netProfit },
+            create: {
+                socioId: socio.id,
+                weekStartDate: weekStart,
+                revenue: fin.revenue,
+                netProfit: fin.netProfit,
+                source: 'ai_marker',
+            },
+        });
+        console.log(`[Financial] socio=${socio.id} revenue=${fin.revenue} netProfit=${fin.netProfit}`);
     }
 
     const isLessonMode =

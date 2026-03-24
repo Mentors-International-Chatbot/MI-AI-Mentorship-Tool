@@ -103,6 +103,7 @@ export interface ParsedMarkers {
   flags: Array<{ level: 'RED' | 'YELLOW'; reason: string }>;
   lessonsCompleted: number[];
   escalations: string[];
+  financials: Array<{ revenue: number; netProfit: number }>;
 }
 
 // ─── Conciseness Levels ─────────────────────────────────────────────

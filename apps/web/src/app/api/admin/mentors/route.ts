@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { hashPassword } from '@/lib/auth/password';
 
 export async function GET() {
   const mentors = await prisma.mentor.findMany({
@@ -49,15 +50,28 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { name, email, role } = body as { name: string; email: string; role?: string };
+  const { name, email, role, password } = body as {
+    name: string;
+    email: string;
+    role?: string;
+    password?: string;
+  };
 
   if (!name || !email) {
     return NextResponse.json({ error: 'name and email required' }, { status: 400 });
   }
 
-  const mentor = await prisma.mentor.create({
-    data: { name, email, role: role ?? 'mentor' },
-  });
+  const data: { name: string; email: string; role: string; passwordHash?: string } = {
+    name,
+    email,
+    role: role ?? 'mentor',
+  };
+
+  if (password) {
+    data.passwordHash = await hashPassword(password);
+  }
+
+  const mentor = await prisma.mentor.create({ data });
 
   return NextResponse.json(mentor, { status: 201 });
 }

@@ -9,11 +9,13 @@ import { ParsedMarkers } from './types';
 const FLAG_PATTERN = /\[FLAG:(RED|YELLOW)\|([^\]]+)\]/g;
 const LESSON_COMPLETE_PATTERN = /\[LESSON_COMPLETE:(\d+)\]/g;
 const ESCALATE_PATTERN = /\[ESCALATE\|([^\]]+)\]/g;
+const FINANCIAL_PATTERN = /\[FINANCIAL:revenue=(-?\d+(?:\.\d+)?),netProfit=(-?\d+(?:\.\d+)?)\]/g;
 
 export function parseMarkers(aiResponse: string): ParsedMarkers {
   const flags: ParsedMarkers['flags'] = [];
   const lessonsCompleted: number[] = [];
   const escalations: string[] = [];
+  const financials: ParsedMarkers['financials'] = [];
 
   let match: RegExpExecArray | null;
 
@@ -38,12 +40,22 @@ export function parseMarkers(aiResponse: string): ParsedMarkers {
     escalations.push(match[1].trim());
   }
 
+  // Extract financials
+  const financialRegex = new RegExp(FINANCIAL_PATTERN.source, 'g');
+  while ((match = financialRegex.exec(aiResponse)) !== null) {
+    financials.push({
+      revenue: parseFloat(match[1]),
+      netProfit: parseFloat(match[2]),
+    });
+  }
+
   // Strip all markers from the text sent to the socio
   const cleanText = aiResponse
     .replace(FLAG_PATTERN, '')
     .replace(LESSON_COMPLETE_PATTERN, '')
     .replace(ESCALATE_PATTERN, '')
+    .replace(FINANCIAL_PATTERN, '')
     .trim();
 
-  return { cleanText, flags, lessonsCompleted, escalations };
+  return { cleanText, flags, lessonsCompleted, escalations, financials };
 }
