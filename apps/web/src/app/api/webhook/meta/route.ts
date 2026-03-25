@@ -9,9 +9,18 @@ export async function GET(req: NextRequest) {
     const challenge = req.nextUrl.searchParams.get('hub.challenge');
 
     if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
-        return new NextResponse(challenge, { status: 200 });
+        // return new NextResponse(challenge, { status: 200 });
+        return new Response(challenge, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/plain',
+            },
+        });
+
     }
-    return new NextResponse('Forbidden', { status: 403 });
+    // return new NextResponse('Forbidden', { status: 403 });
+    return new Response('Forbidden', { status: 403 });
+
 }
 
 // Handle Events (POST)
