@@ -69,12 +69,7 @@ export async function proxy(req: NextRequest) {
   }
 
   // Route-level role checks
-  if (pathname.startsWith('/chat')) {
-    if (session.role !== 'socio') {
-      const home = session.role === 'admin' ? '/admin' : '/dashboard/socios';
-      return NextResponse.redirect(new URL(home, req.url));
-    }
-  }
+  // /chat: allowed for all authenticated roles (socio app + mentor/admin can try web AI)
 
   if (pathname.startsWith('/dashboard')) {
     if (session.role === 'socio') {
@@ -82,11 +77,12 @@ export async function proxy(req: NextRequest) {
     }
   }
 
+  // /admin: admins plus mentors (MVP: mentor signups are staff; tighten with DB role if needed)
   if (pathname.startsWith('/admin')) {
-    if (session.role !== 'admin') {
-      if (session.role === 'socio') {
-        return NextResponse.redirect(new URL('/chat', req.url));
-      }
+    if (session.role === 'socio') {
+      return NextResponse.redirect(new URL('/chat', req.url));
+    }
+    if (session.role !== 'admin' && session.role !== 'mentor') {
       return NextResponse.redirect(new URL('/dashboard/socios', req.url));
     }
   }

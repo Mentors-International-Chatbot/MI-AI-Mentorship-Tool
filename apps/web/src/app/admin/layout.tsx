@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
-  { href: '/admin',         label: 'Overview' },
-  { href: '/admin/config',  label: 'Config' },
+  { href: '/dashboard/socios', label: 'Mentor dashboard' },
+  { href: '/chat', label: 'Web chat' },
+  { href: '/admin', label: 'Overview' },
+  { href: '/admin/config', label: 'Config' },
   { href: '/admin/prompts', label: 'Prompts' },
-  { href: '/admin/socios',  label: 'Socios' },
+  { href: '/admin/socios', label: 'Socios' },
   { href: '/admin/mentors', label: 'Mentors' },
   { href: '/admin/feedback', label: 'Feedback' },
 ];
