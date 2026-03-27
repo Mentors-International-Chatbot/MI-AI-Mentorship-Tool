@@ -13,7 +13,15 @@ type Prompt = {
   createdAt: string;
 };
 
-const CATEGORIES = ['core', 'onboarding', 'lesson_delivery', 'freeform', 'reteach'];
+const CATEGORIES = [
+  'core',
+  'onboarding',
+  'lesson_delivery',
+  'freeform',
+  'reteach',
+  'sentiment',
+  'name_extraction',
+];
 
 export default function AdminPromptsPage() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);

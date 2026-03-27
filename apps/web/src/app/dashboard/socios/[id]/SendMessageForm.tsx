@@ -1,14 +1,37 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDashboardLang } from '../../DashboardLangContext';
 
 export function SendMessageForm({ socioId }: { socioId: string }) {
   const { t } = useDashboardLang();
   const [text, setText] = useState('');
+  const [mentorId, setMentorId] = useState('dashboard-mentor');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/auth/me')
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return res.json() as Promise<{ userId?: string }>;
+      })
+      .then((data) => {
+        if (!mounted) return;
+        if (data?.userId) {
+          setMentorId(data.userId);
+        }
+      })
+      .catch(() => {
+        // Keep fallback mentor ID for local/test sessions.
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,10 +42,10 @@ export function SendMessageForm({ socioId }: { socioId: string }) {
     setSent(false);
 
     try {
-      const res = await fetch(`/api/mentor/socios/${socioId}/send-message`, {
+      const res = await fetch(`/api/dashboard/socios/${socioId}/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim() }),
+        body: JSON.stringify({ content: text.trim(), mentorId }),
       });
 
       if (!res.ok) {

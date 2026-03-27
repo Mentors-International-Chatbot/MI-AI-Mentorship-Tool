@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 type SocioRow = {
@@ -30,32 +30,27 @@ export default function AdminSociosPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // Filters
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [mentorFilter, setMentorFilter] = useState('');
 
-  const loadSocios = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    params.set('page', String(page));
-    params.set('pageSize', '50');
-    if (search) params.set('search', search);
-    if (statusFilter) params.set('status', statusFilter);
-    if (mentorFilter) params.set('mentorId', mentorFilter);
-
-    const res = await fetch(`/api/admin/socios?${params}`);
-    const data = await res.json();
-    setSocios(data.socios);
-    setTotal(data.total);
-    setTotalPages(data.totalPages);
-    setLoading(false);
-  }, [page, search, statusFilter, mentorFilter]);
-
   useEffect(() => {
-    loadSocios();
-  }, [loadSocios]);
+    fetch(`/api/admin/socios?page=${page}&pageSize=50${
+      search ? `&search=${encodeURIComponent(search)}` : ''
+    }${statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : ''}${
+      mentorFilter ? `&mentorId=${encodeURIComponent(mentorFilter)}` : ''
+    }`)
+      .then((r) => r.json())
+      .then((data) => {
+        setSocios(data.socios);
+        setTotal(data.total);
+        setTotalPages(data.totalPages);
+      })
+      .finally(() => setLoading(false));
+  }, [page, search, statusFilter, mentorFilter, refreshTick]);
 
   useEffect(() => {
     fetch('/api/admin/mentors')
@@ -69,7 +64,8 @@ export default function AdminSociosPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ socioId, mentorId: mentorId || null }),
     });
-    loadSocios();
+    setLoading(true);
+    setRefreshTick((v) => v + 1);
   }
 
   function flagBadge(flags: { level: string }[]) {
@@ -92,13 +88,13 @@ export default function AdminSociosPage() {
       <div className="flex gap-3 mb-4">
         <input
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          onChange={(e) => { setLoading(true); setSearch(e.target.value); setPage(1); }}
           placeholder="Search by name, business, or phone..."
           className="flex-1 border rounded px-3 py-2 text-sm text-gray-900"
         />
         <select
           value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          onChange={(e) => { setLoading(true); setStatusFilter(e.target.value); setPage(1); }}
           className="border rounded px-3 py-2 text-sm text-gray-900"
         >
           <option value="">All statuses</option>
@@ -108,7 +104,7 @@ export default function AdminSociosPage() {
         </select>
         <select
           value={mentorFilter}
-          onChange={(e) => { setMentorFilter(e.target.value); setPage(1); }}
+          onChange={(e) => { setLoading(true); setMentorFilter(e.target.value); setPage(1); }}
           className="border rounded px-3 py-2 text-sm text-gray-900"
         >
           <option value="">All mentors</option>
@@ -193,7 +189,7 @@ export default function AdminSociosPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-4">
               <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => { setLoading(true); setPage((p) => Math.max(1, p - 1)); }}
                 disabled={page === 1}
                 className="px-3 py-1 border rounded text-sm disabled:opacity-30"
               >
@@ -203,7 +199,7 @@ export default function AdminSociosPage() {
                 Page {page} of {totalPages}
               </span>
               <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => { setLoading(true); setPage((p) => Math.min(totalPages, p + 1)); }}
                 disabled={page === totalPages}
                 className="px-3 py-1 border rounded text-sm disabled:opacity-30"
               >

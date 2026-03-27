@@ -1,8 +1,9 @@
 import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { SupportedLanguage } from "@/lib/i18n/languages";
+import { loadActivePrompt } from "@/lib/ai/prompts/loadPrompt";
 
-const SYSTEM_PROMPT =
+const NAME_EXTRACTION_PROMPT_DEFAULT =
     "Extract only the person's name from this message. Return just the name, nothing else. If no name is found, return exactly NONE.";
 
 const URL_RE = /https?:\/\/|www\./i;
@@ -58,6 +59,10 @@ export async function extractName(
 ): Promise<string | null> {
     const message = rawMessage.trim();
     if (!message) return null;
+    const systemPromptText = await loadActivePrompt(
+        "name_extraction",
+        NAME_EXTRACTION_PROMPT_DEFAULT,
+    );
 
     try {
         const chat = new ChatAnthropic({
@@ -68,7 +73,7 @@ export async function extractName(
         });
 
         const response = await chat.invoke([
-            new SystemMessage(SYSTEM_PROMPT),
+            new SystemMessage(systemPromptText),
             new HumanMessage(message),
         ]);
 

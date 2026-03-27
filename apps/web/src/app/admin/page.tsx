@@ -169,7 +169,7 @@ export default function AdminOverviewPage() {
 
       {/* Drill-down for row 1 */}
       {expanded && ['totalSocios', 'activeSocios', 'activeThisWeek', 'messagesThisWeek'].includes(expanded) && (
-        <DrillDownPanel drillKey={expanded} showMessages={expanded === 'messagesThisWeek'} />
+        <DrillDownPanel key={expanded} drillKey={expanded} showMessages={expanded === 'messagesThisWeek'} />
       )}
 
       {/* Top-level metrics row 2 */}
@@ -196,7 +196,7 @@ export default function AdminOverviewPage() {
 
       {/* Drill-down for row 2 */}
       {expanded && ['redFlags', 'yellowFlags'].includes(expanded) && (
-        <DrillDownPanel drillKey={expanded} />
+        <DrillDownPanel key={expanded} drillKey={expanded} />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
@@ -225,7 +225,7 @@ export default function AdminOverviewPage() {
                     </div>
                     <span className="text-sm font-bold text-gray-900 w-8 text-right">{s.count}</span>
                   </button>
-                  {expanded === barKey && <DrillDownPanel drillKey={barKey} />}
+                  {expanded === barKey && <DrillDownPanel key={barKey} drillKey={barKey} />}
                 </div>
               );
             })}
@@ -263,7 +263,7 @@ export default function AdminOverviewPage() {
                         {l.completedCount}
                       </span>
                     </button>
-                    {expanded === barKey && <DrillDownPanel drillKey={barKey} />}
+                    {expanded === barKey && <DrillDownPanel key={barKey} drillKey={barKey} />}
                   </div>
                 );
               })}
@@ -307,7 +307,7 @@ export default function AdminOverviewPage() {
                         {l.avgUnderstanding}
                       </span>
                     </button>
-                    {expanded === barKey && <DrillDownPanel drillKey={barKey} />}
+                    {expanded === barKey && <DrillDownPanel key={barKey} drillKey={barKey} />}
                   </div>
                 );
               })}
@@ -447,7 +447,6 @@ function DrillDownPanel({ drillKey, showMessages }: { drillKey: string; showMess
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
     fetch(buildQuery(drillKey))
       .then((r) => r.json())
       .then((d) => {

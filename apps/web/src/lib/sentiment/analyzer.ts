@@ -1,5 +1,6 @@
 import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { loadActivePrompt } from '@/lib/ai/prompts/loadPrompt';
 
 export interface SentimentResult {
   confusion: number;    // 0-10
@@ -9,7 +10,7 @@ export interface SentimentResult {
   topics: string[];
 }
 
-const SENTIMENT_SYSTEM_PROMPT = `Eres un analizador de sentimiento para mensajes de micro-emprendedores colombianos que participan en un programa de mentoría por WhatsApp.
+const SENTIMENT_SYSTEM_PROMPT_DEFAULT = `Eres un analizador de sentimiento para mensajes de micro-emprendedores colombianos que participan en un programa de mentoría por WhatsApp.
 
 Analiza el mensaje y responde ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin explicación:
 
@@ -36,6 +37,11 @@ const DEFAULT_RESULT: SentimentResult = {
 
 export async function analyzeSentiment(message: string): Promise<SentimentResult> {
   try {
+    const systemPromptText = await loadActivePrompt(
+      'sentiment',
+      SENTIMENT_SYSTEM_PROMPT_DEFAULT,
+    );
+
     const chat = new ChatAnthropic({
       model: 'claude-haiku-4-5-20251001',
       temperature: 0,
@@ -44,7 +50,7 @@ export async function analyzeSentiment(message: string): Promise<SentimentResult
     });
 
     const response = await chat.invoke([
-      new SystemMessage(SENTIMENT_SYSTEM_PROMPT),
+      new SystemMessage(systemPromptText),
       new HumanMessage(message),
     ]);
 

@@ -34,7 +34,7 @@ export async function buildSystemPrompt(
   const layer3 = buildTaskPrompt(socio, routerResult, progress);
 
   // Layer 4: Lesson content (only for teaching modes)
-  const layer4 = buildContentPrompt(routerResult, progress);
+  const layer4 = buildContentPrompt(routerResult);
 
   const parts = [layer1, layer2, layer3];
   if (layer4) parts.push(layer4);

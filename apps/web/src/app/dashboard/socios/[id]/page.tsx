@@ -2,7 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { repo } from '@/lib/repo';
+import { prisma } from '@/lib/db';
 import { computeSocioHealth } from '@/lib/health';
 import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
@@ -11,6 +13,7 @@ import { SendMessageForm } from './SendMessageForm';
 import { SliderPanel } from './SliderPanel';
 import { FlagsPanel } from './FlagsPanel';
 import { LessonProgressPanel } from './LessonProgressPanel';
+import { SummaryPanel } from './SummaryPanel';
 
 const STATUS_COLORS: Record<string, string> = {
   RED: 'bg-red-500',
@@ -33,12 +36,17 @@ export default async function SocioDetailPage({
   const socio = await repo.getSocioById(id);
   if (!socio) notFound();
 
-  const [health, progress, flags, lessonProgress, messages] = await Promise.all([
+  const [health, progress, flags, lessonProgress, messages, summaries] = await Promise.all([
     computeSocioHealth(id),
     repo.getSocioProgress(id),
     repo.getFlags(id),
     repo.getLessonProgressAll(id),
     repo.getMessages(id, 50),
+    prisma.summary.findMany({
+      where: { socioId: id },
+      orderBy: { weekStartDate: 'desc' },
+      take: 8,
+    }),
   ]);
 
   const overrides = (socio.promptOverrides ?? {}) as Record<string, number | string | undefined>;
@@ -63,11 +71,34 @@ export default async function SocioDetailPage({
     updatedAt: lp.updatedAt.toISOString(),
   }));
 
+  const serializedSummaries = summaries.map((s) => ({
+    id: s.id,
+    weekStartDate: s.weekStartDate.toISOString(),
+    content: s.content,
+    flags: s.flags as {
+      risks: string[];
+      achievements: string[];
+      recommendedAction: string;
+      overallHealth: 'green' | 'yellow' | 'red';
+    } | null,
+    metrics: s.metrics as {
+      messageCount: number;
+      lessonsCompleted: number;
+      avgConfusion: number;
+      avgFrustration: number;
+      currentLesson: number;
+      activeFlagCount: number;
+    } | null,
+    createdAt: s.createdAt.toISOString(),
+  }));
+
   return (
     <div>
       {/* Header */}
       <div className="mb-6">
-        <a href="/dashboard/socios" className="text-sm text-[#1B2A4A] hover:underline">&larr; {t.backToSocios}</a>
+        <Link href="/dashboard/socios" className="text-sm text-[#1B2A4A] hover:underline">
+          &larr; {t.backToSocios}
+        </Link>
         <div className="flex items-center gap-3 mt-2">
           <span className={`inline-block w-4 h-4 rounded-full ${STATUS_COLORS[health.status]}`} />
           <h2 className="text-2xl font-bold text-gray-900">{socio.name || t.noName}</h2>
@@ -101,6 +132,7 @@ export default async function SocioDetailPage({
           />
           <FlagsPanel flags={serializedFlags} />
           <LessonProgressPanel lessonProgress={serializedLessonProgress} />
+          <SummaryPanel socioId={id} summaries={serializedSummaries} />
         </div>
       </div>
     </div>

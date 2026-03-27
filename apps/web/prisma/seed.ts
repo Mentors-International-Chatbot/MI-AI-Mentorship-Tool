@@ -49,6 +49,26 @@ Si el socio pregunta algo que no tiene que ver con negocios ni con el currículo
 "Estoy aquí para ayudarte con tu negocio. ¿Hay algo de tu emprendimiento en lo que pueda apoyarte?"
 No escales — simplemente redirige.`;
 
+const SENTIMENT_SYSTEM_PROMPT_DEFAULT = `Eres un analizador de sentimiento para mensajes de micro-emprendedores colombianos que participan en un programa de mentoría por WhatsApp.
+
+Analiza el mensaje y responde ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin explicación:
+
+{"confusion": 0, "frustration": 0, "urgency": 0, "sentiment": "neutral", "topics": ["business"]}
+
+Escalas (0-10):
+- confusion: 0 = entiende todo, 10 = completamente perdido
+- frustration: 0 = calmado, 10 = furioso/desesperado
+- urgency: 0 = sin prisa, 10 = emergencia inmediata
+
+sentiment: "positive" | "neutral" | "negative" | "distressed"
+
+topics: Array de 1-3 de: "finances", "business", "personal", "family", "loan", "sales", "inventory", "other"
+
+IMPORTANTE: Considera contexto cultural colombiano. "Ay no, pena" puede ser frustración leve. "Estoy desesperado" es urgencia alta. Lenguaje informal no implica frustración.`;
+
+const NAME_EXTRACTION_PROMPT_DEFAULT =
+  "Extract only the person's name from this message. Return just the name, nothing else. If no name is found, return exactly NONE.";
+
 const CONFIG_SEEDS = [
   // ── Lesson pacing ──
   { key: 'RETEACH_THRESHOLD',       value: '3',     type: 'number',  label: 'Reteach Threshold',           description: 'Understanding score at or below this triggers RETEACH mode',         category: 'lesson_pacing' },
@@ -96,6 +116,54 @@ async function main() {
       },
     });
     console.log(`Created core system prompt v1.0 (id: ${prompt.id})`);
+  }
+
+  // ── Seed sentiment prompt ──
+  const sentimentExisting = await prisma.systemPrompt.findFirst({
+    where: { version: '1.0', category: 'sentiment' },
+  });
+
+  if (sentimentExisting) {
+    await prisma.systemPrompt.update({
+      where: { id: sentimentExisting.id },
+      data: { content: SENTIMENT_SYSTEM_PROMPT_DEFAULT, active: true },
+    });
+    console.log(`Updated sentiment prompt v1.0 content (id: ${sentimentExisting.id}).`);
+  } else {
+    const prompt = await prisma.systemPrompt.create({
+      data: {
+        version: '1.0',
+        category: 'sentiment',
+        content: SENTIMENT_SYSTEM_PROMPT_DEFAULT,
+        active: true,
+        authorId: 'seed',
+      },
+    });
+    console.log(`Created sentiment prompt v1.0 (id: ${prompt.id})`);
+  }
+
+  // ── Seed name extraction prompt ──
+  const nameExtractionExisting = await prisma.systemPrompt.findFirst({
+    where: { version: '1.0', category: 'name_extraction' },
+  });
+
+  if (nameExtractionExisting) {
+    await prisma.systemPrompt.update({
+      where: { id: nameExtractionExisting.id },
+      data: { content: NAME_EXTRACTION_PROMPT_DEFAULT, active: true },
+    });
+    console.log(`Updated name_extraction prompt v1.0 content (id: ${nameExtractionExisting.id}).`);
+  } else {
+    const prompt = await prisma.systemPrompt.create({
+      data: {
+        version: '1.0',
+        category: 'name_extraction',
+        content: NAME_EXTRACTION_PROMPT_DEFAULT,
+        active: true,
+        authorId: 'seed',
+      },
+    });
+    console.log(`Created name_extraction prompt v1.0 (id: ${prompt.id})`);
   }
 
   // ── Seed program config ──

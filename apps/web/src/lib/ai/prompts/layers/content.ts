@@ -1,4 +1,4 @@
-import { InteractionMode, LessonDeliveryState, ReteachState, RouterResult, SocioProgress } from '../types';
+import { InteractionMode, LessonDeliveryState, ReteachState, RouterResult } from '../types';
 import { getLessonData, hasLessonData } from '@/lib/lessons/data';
 
 // ─── Layer 4: Lesson Content — Only During Teaching Modes ───────────
@@ -7,14 +7,13 @@ import { getLessonData, hasLessonData } from '@/lib/lessons/data';
 
 export function buildContentPrompt(
   result: RouterResult,
-  progress?: SocioProgress,
 ): string | null {
   switch (result.mode) {
     case InteractionMode.LESSON_START:
     case InteractionMode.LESSON_DELIVERY:
       return buildLessonContentBlock(result.lesson!);
     case InteractionMode.FREEFORM_QUESTION:
-      return buildFreeformReferenceBlock(progress);
+      return buildFreeformReferenceBlock();
     case InteractionMode.RETEACH:
       return buildReteachContentBlock(result.reteach!);
     default:
@@ -82,7 +81,7 @@ export const LESSON_SUMMARY_INDEX = `ÍNDICE DE LECCIONES:
 27. Ley de la Gratitud — Agradecer lo que tienes mientras trabajas por más.
 28. Mi Propósito — Conectar tu negocio con tu propósito de vida.`;
 
-function buildFreeformReferenceBlock(progress?: SocioProgress): string {
+function buildFreeformReferenceBlock(): string {
   // Future: use keyword search (findRelevantLessons) to return only
   // the 1-3 most relevant lessons instead of the full index.
   // For now, the full index is ~300 tokens — acceptable for the pilot.

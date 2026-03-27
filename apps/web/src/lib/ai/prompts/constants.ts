@@ -8,7 +8,7 @@ import { getConfigNumber, getConfigBool } from '@/lib/config/service';
 // ── Sync defaults (used as fallbacks) ──
 
 export const RETEACH_THRESHOLD = 3;
-export const MAX_LESSON_NUMBER = 5;
+export const MAX_LESSON_NUMBER = 28;
 export const MAX_LESSONS_PER_DAY = 1;
 export const LESSONS_PER_WEEK = 2;
 export const MAX_SENTENCES_PER_MESSAGE = 4;

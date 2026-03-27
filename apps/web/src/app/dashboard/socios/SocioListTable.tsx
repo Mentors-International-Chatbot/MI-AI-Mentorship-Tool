@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { SocioHealth } from '@/lib/health';
 import { useDashboardLang } from '../DashboardLangContext';
@@ -21,6 +22,12 @@ const STATUS_DOT: Record<string, string> = {
 
 export function SocioListTable({ rows }: { rows: SocioRow[] }) {
   const { lang, t } = useDashboardLang();
+  const [healthFilter, setHealthFilter] = useState<'ALL' | 'RED' | 'YELLOW' | 'GREEN'>('ALL');
+
+  const filteredRows = useMemo(
+    () => rows.filter((row) => healthFilter === 'ALL' || row.health.status === healthFilter),
+    [rows, healthFilter],
+  );
 
   function formatDate(iso: string | null): string {
     if (!iso) return t.never;
@@ -38,7 +45,31 @@ export function SocioListTable({ rows }: { rows: SocioRow[] }) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        {(['ALL', 'RED', 'YELLOW', 'GREEN'] as const).map((status) => (
+          <button
+            key={status}
+            type="button"
+            onClick={() => setHealthFilter(status)}
+            className={`px-3 py-1 rounded text-sm border ${
+              healthFilter === status
+                ? 'bg-[#1B2A4A] text-white border-[#1B2A4A]'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {status === 'ALL' ? 'Todos' : status}
+          </button>
+        ))}
+      </div>
+
+      {filteredRows.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+          No hay socios con estado {healthFilter}.
+        </div>
+      ) : null}
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -50,7 +81,7 @@ export function SocioListTable({ rows }: { rows: SocioRow[] }) {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {rows.map((row) => (
+          {filteredRows.map((row) => (
             <tr key={row.id} className="hover:bg-gray-50">
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center gap-2">
@@ -76,6 +107,7 @@ export function SocioListTable({ rows }: { rows: SocioRow[] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
