@@ -58,6 +58,17 @@ export default function AdminSociosPage() {
       .then((data) => setMentors(data.map((m: MentorOption) => ({ id: m.id, name: m.name }))));
   }, []);
 
+  async function deleteSocio(socioId: string, name: string | null) {
+    if (!confirm(`Delete socio "${name ?? 'unnamed'}"? This will remove all their messages, flags, progress, and summaries.`)) return;
+    await fetch('/api/admin/socios', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ socioId }),
+    });
+    setLoading(true);
+    setRefreshTick((v) => v + 1);
+  }
+
   async function assignMentor(socioId: string, mentorId: string | null) {
     await fetch('/api/admin/socios', {
       method: 'PATCH',
@@ -171,13 +182,19 @@ export default function AdminSociosPage() {
                         ))}
                       </select>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 flex gap-2">
                       <Link
                         href={`/admin/socios/${s.id}`}
                         className="text-blue-600 hover:underline text-xs"
                       >
                         Detail
                       </Link>
+                      <button
+                        onClick={() => deleteSocio(s.id, s.name)}
+                        className="px-2 py-1 text-xs text-red-600 bg-red-50 rounded hover:bg-red-600 hover:text-white transition-colors"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}

@@ -1,6 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+  BarChart, Bar,
+  LineChart, Line, ReferenceLine, Dot,
+} from 'recharts';
 
 type Analytics = {
   sociosByStatus: { status: string; count: number }[];
@@ -203,33 +209,57 @@ export default function AdminOverviewPage() {
         {/* Socios by Status */}
         <div className="bg-white rounded-lg border p-4">
           <h3 className="font-semibold text-gray-900 mb-4">Socios by Status</h3>
-          <div className="space-y-2">
-            {data.sociosByStatus.map((s) => {
-              const barKey = `status:${s.status}`;
-              return (
-                <div key={s.status}>
-                  <button
-                    onClick={() => toggle(barKey)}
-                    className={`w-full flex items-center gap-3 p-1 rounded cursor-pointer transition-colors hover:bg-gray-50 ${
-                      expanded === barKey ? 'bg-blue-50' : ''
-                    }`}
-                  >
-                    <span className="text-sm font-mono w-36 text-gray-600 text-left">{s.status}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-4">
-                      <div
-                        className="bg-blue-500 h-4 rounded-full"
-                        style={{
-                          width: `${data.totalSocios > 0 ? (s.count / data.totalSocios) * 100 : 0}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="text-sm font-bold text-gray-900 w-8 text-right">{s.count}</span>
-                  </button>
-                  {expanded === barKey && <DrillDownPanel key={barKey} drillKey={barKey} />}
+          {data.sociosByStatus.length === 0 ? (
+            <p className="text-sm text-gray-500">No socios yet.</p>
+          ) : (
+            <>
+              <div className="relative" style={{ height: 220 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data.sociosByStatus}
+                      dataKey="count"
+                      nameKey="status"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={85}
+                      paddingAngle={2}
+                      cursor="pointer"
+                      onClick={(_: unknown, idx: number) => {
+                        const s = data.sociosByStatus[idx];
+                        if (s) toggle(`status:${s.status}`);
+                      }}
+                    >
+                      {data.sociosByStatus.map((s, i) => (
+                        <Cell
+                          key={s.status}
+                          fill={STATUS_COLORS[i % STATUS_COLORS.length]}
+                          stroke={expanded === `status:${s.status}` ? '#3b82f6' : 'none'}
+                          strokeWidth={expanded === `status:${s.status}` ? 2 : 0}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [value, 'Socios']} />
+                    <Legend
+                      formatter={(value: string) => <span className="text-xs text-gray-600">{value}</span>}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center total */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ marginBottom: 28 }}>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-900">{data.totalSocios}</div>
+                    <div className="text-xs text-gray-500">Total</div>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+              {/* Drill-down for selected status */}
+              {expanded && expanded.startsWith('status:') && (
+                <DrillDownPanel key={expanded} drillKey={expanded} />
+              )}
+            </>
+          )}
         </div>
 
         {/* Lesson Completion Funnel */}
@@ -238,36 +268,46 @@ export default function AdminOverviewPage() {
           {data.lessonFunnel.length === 0 ? (
             <p className="text-sm text-gray-500">No lesson completions yet.</p>
           ) : (
-            <div className="space-y-2">
-              {data.lessonFunnel.map((l) => {
-                const maxCount = Math.max(...data.lessonFunnel.map((x) => x.completedCount), 1);
-                const barKey = `completedLesson:${l.lessonNumber}`;
-                return (
-                  <div key={l.lessonNumber}>
-                    <button
-                      onClick={() => toggle(barKey)}
-                      className={`w-full flex items-center gap-3 p-1 rounded cursor-pointer transition-colors hover:bg-gray-50 ${
-                        expanded === barKey ? 'bg-green-50' : ''
-                      }`}
-                    >
-                      <span className="text-sm font-medium text-gray-600 w-20 text-left">
-                        Lesson {l.lessonNumber}
-                      </span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-4">
-                        <div
-                          className="bg-green-500 h-4 rounded-full"
-                          style={{ width: `${(l.completedCount / maxCount) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-sm font-bold text-gray-900 w-8 text-right">
-                        {l.completedCount}
-                      </span>
-                    </button>
-                    {expanded === barKey && <DrillDownPanel key={barKey} drillKey={barKey} />}
-                  </div>
-                );
-              })}
-            </div>
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={data.lessonFunnel}
+                  margin={{ top: 5, right: 10, bottom: 5, left: -10 }}
+                >
+                  <XAxis
+                    dataKey="lessonNumber"
+                    tickFormatter={(v: number) => `L${v}`}
+                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    formatter={(value) => [value, 'Completed']}
+                    labelFormatter={(v) => `Lesson ${v}`}
+                  />
+                  <Bar
+                    dataKey="completedCount"
+                    fill="#22c55e"
+                    radius={[4, 4, 0, 0]}
+                    cursor="pointer"
+                    onClick={(entry) => {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      const ln = (entry as any)?.lessonNumber;
+                      if (ln != null) toggle(`completedLesson:${ln}`);
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+              {expanded && expanded.startsWith('completedLesson:') && (
+                <DrillDownPanel key={expanded} drillKey={expanded} />
+              )}
+            </>
           )}
         </div>
 
@@ -277,41 +317,61 @@ export default function AdminOverviewPage() {
           {data.avgUnderstandingByLesson.length === 0 ? (
             <p className="text-sm text-gray-500">No understanding scores yet.</p>
           ) : (
-            <div className="space-y-2">
-              {data.avgUnderstandingByLesson.map((l) => {
-                const barKey = `lessonNumber:${l.lessonNumber}`;
-                return (
-                  <div key={l.lessonNumber}>
-                    <button
-                      onClick={() => toggle(barKey)}
-                      className={`w-full flex items-center gap-3 p-1 rounded cursor-pointer transition-colors hover:bg-gray-50 ${
-                        expanded === barKey ? 'bg-yellow-50' : ''
-                      }`}
-                    >
-                      <span className="text-sm font-medium text-gray-600 w-20 text-left">
-                        Lesson {l.lessonNumber}
-                      </span>
-                      <div className="flex-1 bg-gray-100 rounded-full h-4">
-                        <div
-                          className={`h-4 rounded-full ${
-                            l.avgUnderstanding >= 7
-                              ? 'bg-green-500'
-                              : l.avgUnderstanding >= 4
-                              ? 'bg-yellow-400'
-                              : 'bg-red-500'
-                          }`}
-                          style={{ width: `${l.avgUnderstanding * 10}%` }}
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart
+                  data={data.avgUnderstandingByLesson}
+                  margin={{ top: 5, right: 10, bottom: 5, left: -10 }}
+                >
+                  <XAxis
+                    dataKey="lessonNumber"
+                    tickFormatter={(v: number) => `L${v}`}
+                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 10]}
+                    tick={{ fontSize: 11, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    formatter={(value) => [value, 'Avg Score']}
+                    labelFormatter={(v) => `Lesson ${v}`}
+                  />
+                  <ReferenceLine y={7} stroke="#d1d5db" strokeDasharray="4 4" label={{ value: '7', position: 'right', fontSize: 10, fill: '#9ca3af' }} />
+                  <Line
+                    type="monotone"
+                    dataKey="avgUnderstanding"
+                    stroke="#6366f1"
+                    strokeWidth={2}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    dot={(props: any) => {
+                      const { cx, cy, payload, index } = props as { cx: number; cy: number; payload: { avgUnderstanding: number; lessonNumber: number }; index: number };
+                      const color = payload.avgUnderstanding >= 7 ? '#22c55e' : payload.avgUnderstanding >= 4 ? '#eab308' : '#ef4444';
+                      return (
+                        <Dot
+                          key={index}
+                          cx={cx}
+                          cy={cy}
+                          r={5}
+                          fill={color}
+                          stroke="#fff"
+                          strokeWidth={2}
+                          cursor="pointer"
+                          onClick={() => toggle(`lessonNumber:${payload.lessonNumber}`)}
                         />
-                      </div>
-                      <span className="text-sm font-bold text-gray-900 w-8 text-right">
-                        {l.avgUnderstanding}
-                      </span>
-                    </button>
-                    {expanded === barKey && <DrillDownPanel key={barKey} drillKey={barKey} />}
-                  </div>
-                );
-              })}
-            </div>
+                      );
+                    }}
+                    activeDot={{ r: 7, cursor: 'pointer' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              {expanded && expanded.startsWith('lessonNumber:') && (
+                <DrillDownPanel key={expanded} drillKey={expanded} />
+              )}
+            </>
           )}
         </div>
 
@@ -321,6 +381,10 @@ export default function AdminOverviewPage() {
     </div>
   );
 }
+
+/* ─── Constants ────────────────────────────────────────────── */
+
+const STATUS_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280'];
 
 /* ─── Financial Chart (Aggregate) ──────────────────────────── */
 
@@ -344,50 +408,56 @@ function FinancialChart({
     );
   }
 
-  const maxVal = Math.max(...data.map((w) => Math.max(w.totalRevenue, w.totalNetProfit, w.totalRevenue - w.totalNetProfit)), 1);
+  const chartData = data.map((w) => ({
+    week: new Date(w.weekStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    Revenue: w.totalRevenue,
+    'Net Profit': w.totalNetProfit,
+    Costs: w.totalRevenue - w.totalNetProfit,
+    socioCount: w.socioCount,
+  }));
 
   return (
     <div className="bg-white rounded-lg border p-4 lg:col-span-2">
       <h3 className="font-semibold text-gray-900 mb-4">Weekly Financial Trend (All Socios)</h3>
-      <div className="flex items-center gap-4 mb-3 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500 inline-block" /> Revenue</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-500 inline-block" /> Net Profit</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-400 inline-block" /> Costs</span>
-      </div>
-      <div className="space-y-3">
-        {data.map((w) => {
-          const costs = w.totalRevenue - w.totalNetProfit;
-          const weekLabel = new Date(w.weekStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          return (
-            <div key={w.weekStartDate} className="text-sm">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-gray-600 font-medium w-20">{weekLabel}</span>
-                <span className="text-xs text-gray-400">{w.socioCount} socio{w.socioCount !== 1 ? 's' : ''}</span>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-gray-100 rounded-full h-3">
-                    <div className="bg-blue-500 h-3 rounded-full" style={{ width: `${(w.totalRevenue / maxVal) * 100}%` }} />
-                  </div>
-                  <span className="text-xs text-gray-500 w-16 text-right">{formatPesos(w.totalRevenue)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-gray-100 rounded-full h-3">
-                    <div className="bg-green-500 h-3 rounded-full" style={{ width: `${(w.totalNetProfit / maxVal) * 100}%` }} />
-                  </div>
-                  <span className="text-xs text-gray-500 w-16 text-right">{formatPesos(w.totalNetProfit)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-gray-100 rounded-full h-3">
-                    <div className="bg-orange-400 h-3 rounded-full" style={{ width: `${(costs / maxVal) * 100}%` }} />
-                  </div>
-                  <span className="text-xs text-gray-500 w-16 text-right">{formatPesos(costs)}</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <ResponsiveContainer width="100%" height={260}>
+        <AreaChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
+          <defs>
+            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="colorCosts" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#f97316" stopOpacity={0.15} />
+              <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <XAxis
+            dataKey="week"
+            tick={{ fontSize: 12, fill: '#6b7280' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            tickFormatter={formatPesos}
+            tick={{ fontSize: 11, fill: '#9ca3af' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            formatter={(value, name) => [formatPesos(Number(value)), String(name)]}
+          />
+          <Legend
+            formatter={(value: string) => <span className="text-xs text-gray-600">{value}</span>}
+          />
+          <Area type="monotone" dataKey="Revenue" stroke="#3b82f6" strokeWidth={2} fill="url(#colorRevenue)" />
+          <Area type="monotone" dataKey="Net Profit" stroke="#22c55e" strokeWidth={2} fill="url(#colorProfit)" />
+          <Area type="monotone" dataKey="Costs" stroke="#f97316" strokeWidth={2} fill="url(#colorCosts)" />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -415,19 +485,32 @@ function MetricCard({
 }) {
   const clickable = drillKey && onClick;
   const isExpanded = drillKey && expanded === drillKey;
+  const cardClassName = `bg-white rounded-lg border p-4 transition-all ${
+    clickable
+      ? 'cursor-pointer hover:ring-2 hover:ring-blue-200 active:ring-blue-300'
+      : ''
+  } ${isExpanded ? 'ring-2 ring-blue-400' : ''}`;
+
+  if (clickable) {
+    return (
+      <button
+        type="button"
+        onClick={() => onClick(drillKey)}
+        className={cardClassName}
+      >
+        <div className="text-sm text-gray-500">{label}</div>
+        <div className="flex items-baseline gap-2 mt-1">
+          <span className={`text-2xl font-bold ${valueColor ?? 'text-gray-900'}`}>{value}</span>
+          {delta && (
+            <span className={`text-sm font-medium ${deltaColor ?? 'text-gray-500'}`}>{delta}</span>
+          )}
+        </div>
+      </button>
+    );
+  }
 
   return (
-    <div
-      role={clickable ? 'button' : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onClick={clickable ? () => onClick(drillKey) : undefined}
-      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(drillKey); } : undefined}
-      className={`bg-white rounded-lg border p-4 transition-all ${
-        clickable
-          ? 'cursor-pointer hover:ring-2 hover:ring-blue-200 active:ring-blue-300'
-          : ''
-      } ${isExpanded ? 'ring-2 ring-blue-400' : ''}`}
-    >
+    <div className={cardClassName}>
       <div className="text-sm text-gray-500">{label}</div>
       <div className="flex items-baseline gap-2 mt-1">
         <span className={`text-2xl font-bold ${valueColor ?? 'text-gray-900'}`}>{value}</span>

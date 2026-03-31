@@ -75,3 +75,30 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json(mentor, { status: 201 });
 }
+
+export async function DELETE(request: NextRequest) {
+  const { id } = (await request.json()) as { id?: string };
+
+  if (!id) {
+    return NextResponse.json({ error: 'id required' }, { status: 400 });
+  }
+
+  // Unassign any socios linked to this mentor first
+  await prisma.socio.updateMany({
+    where: { mentorId: id },
+    data: { mentorId: null },
+  });
+
+  await prisma.mentor.delete({ where: { id } });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: 'admin',
+      action: 'deleted_mentor',
+      targetType: 'mentor',
+      targetId: id,
+    },
+  });
+
+  return NextResponse.json({ success: true });
+}

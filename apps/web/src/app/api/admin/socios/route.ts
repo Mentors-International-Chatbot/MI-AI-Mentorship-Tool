@@ -137,3 +137,34 @@ export async function PATCH(request: NextRequest) {
 
   return NextResponse.json(updated);
 }
+
+export async function DELETE(request: NextRequest) {
+  const { socioId } = (await request.json()) as { socioId?: string };
+
+  if (!socioId) {
+    return NextResponse.json({ error: 'socioId required' }, { status: 400 });
+  }
+
+  // Delete all related records first (no cascade in schema)
+  await prisma.$transaction([
+    prisma.messageSentiment.deleteMany({ where: { socioId } }),
+    prisma.message.deleteMany({ where: { socioId } }),
+    prisma.socioFlag.deleteMany({ where: { socioId } }),
+    prisma.lessonProgress.deleteMany({ where: { socioId } }),
+    prisma.socioProgress.deleteMany({ where: { socioId } }),
+    prisma.summary.deleteMany({ where: { socioId } }),
+    prisma.financialSnapshot.deleteMany({ where: { socioId } }),
+    prisma.socio.delete({ where: { id: socioId } }),
+  ]);
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: 'admin',
+      action: 'deleted_socio',
+      targetType: 'socio',
+      targetId: socioId,
+    },
+  });
+
+  return NextResponse.json({ success: true });
+}

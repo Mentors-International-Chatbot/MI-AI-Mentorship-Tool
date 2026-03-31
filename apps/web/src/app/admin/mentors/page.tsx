@@ -25,6 +25,17 @@ export default function AdminMentorsPage() {
       .finally(() => setLoading(false));
   }
 
+  async function deleteMentor(id: string, name: string) {
+    if (!confirm(`Delete mentor "${name}"? Their socios will be unassigned.`)) return;
+    await fetch('/api/admin/mentors', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    setLoading(true);
+    loadMentors();
+  }
+
   useEffect(() => { loadMentors(); }, []);
 
   return (
@@ -80,6 +91,12 @@ export default function AdminMentorsPage() {
                   value={m.avgLessonNumber !== null ? m.avgLessonNumber.toFixed(1) : '-'}
                 />
               </div>
+              <button
+                onClick={() => deleteMentor(m.id, m.name)}
+                className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-600 hover:text-white transition-colors shrink-0"
+              >
+                Delete
+              </button>
             </div>
           ))}
         </div>
