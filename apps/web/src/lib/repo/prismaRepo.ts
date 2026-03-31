@@ -22,6 +22,7 @@ function toSocio(p: PrismaSocio): Socio {
         businessDescription: p.businessDescription,
         status: p.status,
         promptOverrides: p.promptOverrides as Record<string, unknown> | null,
+        mentorId: p.mentorId,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
     };
@@ -253,6 +254,14 @@ export const prismaRepo: Repo = {
         return socios.map(toSocio);
     },
 
+    async getSociosByMentor(mentorId: string) {
+        const socios = await prisma.socio.findMany({
+            where: { status: 'ACTIVE', mentorId },
+            orderBy: { updatedAt: 'desc' },
+        });
+        return socios.map(toSocio);
+    },
+
     async getSocioById(socioId) {
         const socio = await prisma.socio.findUnique({
             where: { id: socioId },
@@ -292,6 +301,21 @@ export const prismaRepo: Repo = {
     async getAllUnresolvedFlags() {
         const flags = await prisma.socioFlag.findMany({
             where: { resolved: false },
+            include: { socio: true },
+            orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
+        });
+        return flags.map((f) => ({
+            ...toSocioFlag(f),
+            socio: toSocio(f.socio),
+        }));
+    },
+
+    async getUnresolvedFlagsByMentor(mentorId: string) {
+        const flags = await prisma.socioFlag.findMany({
+            where: {
+                resolved: false,
+                socio: { mentorId },
+            },
             include: { socio: true },
             orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
         });

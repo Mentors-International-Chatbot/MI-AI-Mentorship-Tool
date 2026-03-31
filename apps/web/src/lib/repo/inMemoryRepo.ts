@@ -47,6 +47,7 @@ export const inMemoryRepo: Repo = {
             language: 'es',
             name: null,
             status: "NEW",
+            mentorId: null,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
@@ -170,6 +171,11 @@ export const inMemoryRepo: Repo = {
         return Array.from(sociosById.values()).filter(s => s.status === 'ACTIVE');
     },
 
+    async getSociosByMentor(mentorId: string) {
+        return Array.from(sociosById.values())
+            .filter(s => s.status === 'ACTIVE' && s.mentorId === mentorId);
+    },
+
     async getSocioById(socioId) {
         return sociosById.get(socioId) ?? null;
     },
@@ -206,6 +212,18 @@ export const inMemoryRepo: Repo = {
         for (const [socioId, flags] of flagsBySocio) {
             const socio = sociosById.get(socioId);
             if (!socio) continue;
+            for (const f of flags) {
+                if (!f.resolved) result.push({ ...f, socio });
+            }
+        }
+        return result;
+    },
+
+    async getUnresolvedFlagsByMentor(mentorId: string) {
+        const result: (SocioFlag & { socio: Socio })[] = [];
+        for (const [socioId, flags] of flagsBySocio) {
+            const socio = sociosById.get(socioId);
+            if (!socio || socio.mentorId !== mentorId) continue;
             for (const f of flags) {
                 if (!f.resolved) result.push({ ...f, socio });
             }

@@ -69,6 +69,17 @@ model Mentor {
   @@map("mentors")
 }
 
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  email     String
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("password_reset_tokens")
+}
+
 model ProgramConfig {
   id          String   @id @default(uuid())
   key         String   @unique

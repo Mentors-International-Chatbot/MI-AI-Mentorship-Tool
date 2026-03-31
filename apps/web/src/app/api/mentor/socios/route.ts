@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { repo } from '@/lib/repo';
 import { computeSocioHealth } from '@/lib/health';
-import { requireMentorAuth } from '@/lib/auth/mentorAuth';
+import { verifyMentorOrAdmin } from '@/lib/auth/ownership';
 
 const HEALTH_ORDER: Record<string, number> = { RED: 0, YELLOW: 1, GREEN: 2 };
 
 export async function GET(request: NextRequest) {
-    const authError = requireMentorAuth(request);
-    if (authError) return authError;
+    const auth = await verifyMentorOrAdmin();
+    if (!auth.authorized) return auth.response;
 
-    const socios = await repo.getAllSocios();
+    const socios = auth.session.role === 'admin'
+      ? await repo.getAllSocios()
+      : await repo.getSociosByMentor(auth.session.userId);
 
     const results = await Promise.all(
         socios.map(async (socio) => {

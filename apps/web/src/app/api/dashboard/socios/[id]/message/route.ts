@@ -1,35 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { repo } from '@/lib/repo';
 import { WhatsAppChannel } from '@/lib/delivery';
-import { prisma } from '@/lib/db';
+import { verifyMentorOwnership } from '@/lib/auth/ownership';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: socioId } = await params;
-  const { content, mentorId } = (await req.json()) as { content?: string; mentorId?: string };
+
+  const auth = await verifyMentorOwnership(socioId);
+  if (!auth.authorized) return auth.response;
+
+  const { content } = (await req.json()) as { content?: string };
 
   if (!content || !content.trim()) {
     return NextResponse.json({ error: 'content is required' }, { status: 400 });
   }
 
-  if (!mentorId || !mentorId.trim()) {
-    return NextResponse.json({ error: 'mentorId is required' }, { status: 400 });
-  }
-
   const socio = await repo.getSocioById(socioId);
   if (!socio) {
     return NextResponse.json({ error: 'Socio not found' }, { status: 404 });
-  }
-
-  // Best-effort lookup: keep delivery flow working even for test/demo mentor IDs.
-  const mentorRecord = await prisma.mentor.findUnique({
-    where: { id: mentorId },
-    select: { id: true },
-  }).catch(() => null);
-  if (!mentorRecord) {
-    console.warn(`[DashboardMessage] mentorId not found in DB: ${mentorId}`);
   }
 
   const savedMessage = await repo.addMessage({

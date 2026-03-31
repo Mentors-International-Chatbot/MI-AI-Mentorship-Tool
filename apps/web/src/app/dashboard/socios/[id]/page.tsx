@@ -1,9 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { cookies } from 'next/headers';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { repo } from '@/lib/repo';
+import { verifySession } from '@/lib/auth/session';
 import { prisma } from '@/lib/db';
 import { computeSocioHealth } from '@/lib/health';
 import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/languages';
@@ -28,6 +29,11 @@ export default async function SocioDetailPage({
 }) {
   const { id } = await params;
 
+  const session = await verifySession();
+  if (!session || session.role === 'socio') {
+    redirect('/login');
+  }
+
   const cookieStore = await cookies();
   const rawLang = cookieStore.get('dashboard_lang')?.value ?? 'en';
   const lang: SupportedLanguage = isSupportedLanguage(rawLang) ? rawLang : 'en';
@@ -35,6 +41,11 @@ export default async function SocioDetailPage({
 
   const socio = await repo.getSocioById(id);
   if (!socio) notFound();
+
+  // Mentors can only view their assigned socios
+  if (session.role === 'mentor' && socio.mentorId !== session.userId) {
+    notFound();
+  }
 
   const [health, progress, flags, lessonProgress, messages, summaries] = await Promise.all([
     computeSocioHealth(id),

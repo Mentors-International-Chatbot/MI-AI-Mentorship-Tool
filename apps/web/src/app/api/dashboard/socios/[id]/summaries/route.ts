@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifySession } from '@/lib/auth/session';
+import { verifyMentorOwnership } from '@/lib/auth/ownership';
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await verifySession();
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (session.role !== 'mentor' && session.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   const { id: socioId } = await params;
+
+  const auth = await verifyMentorOwnership(socioId);
+  if (!auth.authorized) return auth.response;
 
   const summaries = await prisma.summary.findMany({
     where: { socioId },

@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { repo } from '@/lib/repo';
 import { computeSocioHealth } from '@/lib/health';
-import { requireMentorAuth } from '@/lib/auth/mentorAuth';
+import { verifyMentorOwnership } from '@/lib/auth/ownership';
 
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const authError = requireMentorAuth(request);
-    if (authError) return authError;
-
     const { id } = await params;
+
+    const auth = await verifyMentorOwnership(id);
+    if (!auth.authorized) return auth.response;
+
     const socio = await repo.getSocioById(id);
     if (!socio) {
         return NextResponse.json({ error: 'Socio not found' }, { status: 404 });
@@ -38,10 +39,11 @@ export async function PATCH(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const authError = requireMentorAuth(request);
-    if (authError) return authError;
-
     const { id } = await params;
+
+    const auth = await verifyMentorOwnership(id);
+    if (!auth.authorized) return auth.response;
+
     const socio = await repo.getSocioById(id);
     if (!socio) {
         return NextResponse.json({ error: 'Socio not found' }, { status: 404 });

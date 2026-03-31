@@ -1,10 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { repo } from '@/lib/repo';
 import { computeSocioHealth, type SocioHealth } from '@/lib/health';
 import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
+import { verifySession } from '@/lib/auth/session';
 import { SocioListTable } from './SocioListTable';
 import { Prisma } from '@prisma/client';
 
@@ -35,6 +37,11 @@ function SchemaError({ message }: { message: string }) {
 }
 
 export default async function SociosPage() {
+  const session = await verifySession();
+  if (!session || session.role === 'socio') {
+    redirect('/login');
+  }
+
   const cookieStore = await cookies();
   const rawLang = cookieStore.get('dashboard_lang')?.value ?? 'en';
   const lang: SupportedLanguage = isSupportedLanguage(rawLang) ? rawLang : 'en';
@@ -42,7 +49,9 @@ export default async function SociosPage() {
 
   let socios;
   try {
-    socios = await repo.getAllSocios();
+    socios = session.role === 'admin'
+      ? await repo.getAllSocios()
+      : await repo.getSociosByMentor(session.userId);
   } catch (err) {
     const isSchemaError =
       err instanceof Prisma.PrismaClientKnownRequestError &&

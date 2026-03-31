@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/admin/prompts', label: 'Prompts' },
   { href: '/admin/socios', label: 'Socios' },
   { href: '/admin/mentors', label: 'Mentors' },
+  { href: '/admin/users', label: 'Users' },
   { href: '/admin/feedback', label: 'Feedback' },
 ];
 

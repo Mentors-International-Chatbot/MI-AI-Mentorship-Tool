@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { repo } from '@/lib/repo';
-import { requireMentorAuth } from '@/lib/auth/mentorAuth';
 import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
+import { verifyMentorOwnership } from '@/lib/auth/ownership';
 
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
 ) {
-    const authError = requireMentorAuth(request);
-    if (authError) return authError;
-
     const { id } = await params;
+
+    const auth = await verifyMentorOwnership(id);
+    if (!auth.authorized) return auth.response;
+
     const socio = await repo.getSocioById(id);
     if (!socio) {
         return NextResponse.json({ error: 'Socio not found' }, { status: 404 });

@@ -14,6 +14,7 @@ export type Socio = {
     businessDescription?: string | null;
     status: SocioStatus;
     promptOverrides?: Record<string, unknown> | null;
+    mentorId?: string | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -107,11 +108,13 @@ export interface Repo {
 
     // Dashboard methods
     getAllSocios(): Promise<Socio[]>;
+    getSociosByMentor(mentorId: string): Promise<Socio[]>;
     getSocioById(socioId: string): Promise<Socio | null>;
     createFlag(data: { socioId: string; level: string; reason: string; source?: string; messageId?: string }): Promise<SocioFlag>;
     getFlags(socioId: string): Promise<SocioFlag[]>;
     getActiveFlags(socioId: string): Promise<SocioFlag[]>;
     getAllUnresolvedFlags(): Promise<(SocioFlag & { socio: Socio })[]>;
+    getUnresolvedFlagsByMentor(mentorId: string): Promise<(SocioFlag & { socio: Socio })[]>;
     resolveFlag(flagId: string, mentorId: string): Promise<SocioFlag>;
     upsertLessonProgress(socioId: string, lessonNumber: number, understanding: number | null, completed: boolean): Promise<LessonProgressRecord>;
     getLessonProgressAll(socioId: string): Promise<LessonProgressRecord[]>;
