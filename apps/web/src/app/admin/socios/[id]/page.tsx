@@ -51,7 +51,7 @@ export default async function AdminSocioDetailPage({
 
       {/* Info grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <InfoCard label="Business" value={socio.businessName ?? '-'} />
+        <InfoCard label="Business" value={socio.businessName || socio.businessDescription || '—'} />
         <InfoCard label="Channel" value={`${socio.channelType} / ${socio.externalId}`} />
         <InfoCard label="Current Lesson" value={String(progress?.currentLessonNumber ?? 1)} />
         <InfoCard label="Mentor" value={socio.mentor?.name ?? 'Unassigned'} />
@@ -101,13 +101,22 @@ export default async function AdminSocioDetailPage({
               {lessonProgress.map((lp) => (
                 <div key={lp.id} className="flex items-center gap-3 text-sm">
                   <span className="font-medium text-gray-700 w-20">Lesson {lp.lessonNumber}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full ${
-                        lp.completedAt ? 'bg-green-500' : 'bg-blue-400'
-                      }`}
-                      style={{ width: `${Math.min(100, (lp.understanding ?? 0) * 10)}%` }}
-                    />
+                  <div className="flex-1 h-2 min-w-0">
+                    <svg
+                      viewBox="0 0 100 8"
+                      className="block h-2 w-full"
+                      preserveAspectRatio="none"
+                      role="img"
+                      aria-label={`Lesson ${lp.lessonNumber} score ${lp.understanding ?? 0} of 10`}
+                    >
+                      <rect width="100" height="8" fill="#f3f4f6" rx="4" />
+                      <rect
+                        width={Math.min(100, (lp.understanding ?? 0) * 10)}
+                        height="8"
+                        fill={lp.completedAt ? '#22c55e' : '#60a5fa'}
+                        rx="4"
+                      />
+                    </svg>
                   </div>
                   <span className="text-gray-500 w-8 text-right">
                     {lp.understanding ?? '-'}
@@ -184,20 +193,62 @@ export default async function AdminSocioDetailPage({
                         <div className="text-gray-600 font-medium mb-1">{weekLabel}</div>
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-100 rounded-full h-3">
-                              <div className="bg-blue-500 h-3 rounded-full" style={{ width: `${(s.revenue / maxVal) * 100}%` }} />
+                            <div className="flex-1 h-3 min-w-0">
+                              <svg
+                                viewBox="0 0 100 12"
+                                className="block h-3 w-full"
+                                preserveAspectRatio="none"
+                                role="img"
+                                aria-label={`Revenue ${s.revenue} for week of ${weekLabel}`}
+                              >
+                                <rect width="100" height="12" fill="#f3f4f6" rx="6" />
+                                <rect
+                                  width={(s.revenue / maxVal) * 100}
+                                  height="12"
+                                  fill="#3b82f6"
+                                  rx="6"
+                                />
+                              </svg>
                             </div>
                             <span className="text-xs text-gray-500 w-20 text-right">${s.revenue.toLocaleString()}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-100 rounded-full h-3">
-                              <div className="bg-green-500 h-3 rounded-full" style={{ width: `${(s.netProfit / maxVal) * 100}%` }} />
+                            <div className="flex-1 h-3 min-w-0">
+                              <svg
+                                viewBox="0 0 100 12"
+                                className="block h-3 w-full"
+                                preserveAspectRatio="none"
+                                role="img"
+                                aria-label={`Net profit ${s.netProfit} for week of ${weekLabel}`}
+                              >
+                                <rect width="100" height="12" fill="#f3f4f6" rx="6" />
+                                <rect
+                                  width={(s.netProfit / maxVal) * 100}
+                                  height="12"
+                                  fill="#22c55e"
+                                  rx="6"
+                                />
+                              </svg>
                             </div>
                             <span className="text-xs text-gray-500 w-20 text-right">${s.netProfit.toLocaleString()}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-100 rounded-full h-3">
-                              <div className="bg-orange-400 h-3 rounded-full" style={{ width: `${(costs / maxVal) * 100}%` }} />
+                            <div className="flex-1 h-3 min-w-0">
+                              <svg
+                                viewBox="0 0 100 12"
+                                className="block h-3 w-full"
+                                preserveAspectRatio="none"
+                                role="img"
+                                aria-label={`Costs ${costs} for week of ${weekLabel}`}
+                              >
+                                <rect width="100" height="12" fill="#f3f4f6" rx="6" />
+                                <rect
+                                  width={(costs / maxVal) * 100}
+                                  height="12"
+                                  fill="#fb923c"
+                                  rx="6"
+                                />
+                              </svg>
                             </div>
                             <span className="text-xs text-gray-500 w-20 text-right">${costs.toLocaleString()}</span>
                           </div>

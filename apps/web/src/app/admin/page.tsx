@@ -32,6 +32,7 @@ type DrillSocio = {
   id: string;
   name: string | null;
   businessName: string | null;
+  businessDescription: string | null;
   status: string;
   progress: { currentLessonNumber: number; lastInteractionAt: string | null } | null;
   flags: { level: string }[];
@@ -213,7 +214,7 @@ export default function AdminOverviewPage() {
             <p className="text-sm text-gray-500">No socios yet.</p>
           ) : (
             <>
-              <div className="relative" style={{ height: 220 }}>
+              <div className="relative h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -247,7 +248,7 @@ export default function AdminOverviewPage() {
                   </PieChart>
                 </ResponsiveContainer>
                 {/* Center total */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ marginBottom: 28 }}>
+                <div className="absolute inset-x-0 top-0 bottom-7 flex items-center justify-center pointer-events-none">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-gray-900">{data.totalSocios}</div>
                     <div className="text-xs text-gray-500">Total</div>
@@ -571,7 +572,7 @@ function DrillDownPanel({ drillKey, showMessages }: { drillKey: string; showMess
                 <tr key={s.id} className="border-b last:border-0 hover:bg-white">
                   <td className="py-2">{flagDot(s.flags ?? [])}</td>
                   <td className="py-2 font-medium text-gray-900">{s.name ?? '—'}</td>
-                  <td className="py-2 text-gray-600">{s.businessName ?? '—'}</td>
+                  <td className="py-2 text-gray-600">{s.businessName || s.businessDescription || '—'}</td>
                   <td className="py-2">
                     <span className="text-xs font-mono bg-gray-100 rounded px-1.5 py-0.5">{s.status}</span>
                   </td>

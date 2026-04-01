@@ -10,6 +10,69 @@ type FeedbackRow = {
   createdAt: string;
 };
 
+function fenceBody(body: string): string {
+  const fence = body.includes('```') ? '````' : '```';
+  return `${fence}text\n${body}\n${fence}`;
+}
+
+/** Markdown suitable for pasting into Claude to prioritize fixes by page/context. */
+function buildFeedbackMarkdown(rows: FeedbackRow[], scopeLabel: string): string {
+  const generated = new Date();
+  const iso = generated.toISOString();
+  const readable = generated.toLocaleString();
+
+  const lines: string[] = [
+    '# Beta feedback export',
+    '',
+    `- **Generated:** ${iso} (${readable})`,
+    `- **Scope:** ${scopeLabel}`,
+    `- **Count:** ${rows.length}`,
+    '',
+    '## How to use this file',
+    '',
+    'Each item is user-reported feedback. The **Page** field indicates where in the app the issue was observed—use it to locate relevant routes and components. Prioritize fixes that align with the described behavior and context.',
+    '',
+    '## Feedback items',
+    '',
+  ];
+
+  rows.forEach((f, i) => {
+    const d = new Date(f.createdAt);
+    lines.push(`### ${i + 1}. ${f.subject.replace(/\n/g, ' ')}`);
+    lines.push('');
+    lines.push(`- **Page:** ${f.page}`);
+    lines.push(`- **Date:** ${d.toISOString()} (${d.toLocaleString()})`);
+    lines.push(`- **ID:** \`${f.id}\``);
+    lines.push('');
+    lines.push(fenceBody(f.body));
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
+function downloadMarkdownFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportFilename(scope: 'all' | 'filtered'): string {
+  const day = new Date().toISOString().slice(0, 10);
+  return scope === 'all'
+    ? `feedback-export-${day}.md`
+    : `feedback-export-filtered-${day}.md`;
+}
+
 export default function AdminFeedbackPage() {
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,24 +92,53 @@ export default function AdminFeedbackPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Beta Feedback</h2>
           <p className="text-sm text-gray-500 mt-1">
             {feedback.length} submission{feedback.length !== 1 ? 's' : ''} total
           </p>
         </div>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm text-gray-900"
-        >
-          {uniquePages.map((p) => (
-            <option key={p} value={p}>
-              {p === 'all' ? 'All pages' : p}
-            </option>
-          ))}
-        </select>
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:max-w-none sm:justify-end">
+          <select
+            aria-label="Filter feedback by page"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="min-w-0 flex-1 border rounded-lg px-3 py-2 text-sm text-gray-900 sm:flex-initial sm:min-w-[10rem]"
+          >
+            {uniquePages.map((p) => (
+              <option key={p} value={p}>
+                {p === 'all' ? 'All pages' : p}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              const md = buildFeedbackMarkdown(feedback, 'All submissions');
+              downloadMarkdownFile(exportFilename('all'), md);
+            }}
+            className="shrink-0 rounded-lg border border-[#1B2A4A] bg-[#1B2A4A] px-3 py-2 text-sm font-medium text-white hover:bg-[#263a5e]"
+          >
+            Export all (Markdown)
+          </button>
+          {filter !== 'all' && (
+            <button
+              type="button"
+              disabled={filtered.length === 0}
+              onClick={() => {
+                const md = buildFeedbackMarkdown(
+                  filtered,
+                  `Filtered by page: ${filter}`,
+                );
+                downloadMarkdownFile(exportFilename('filtered'), md);
+              }}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Export filtered ({filtered.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {filtered.length === 0 ? (

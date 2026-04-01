@@ -2,6 +2,7 @@ import { repo } from '@/lib/repo';
 import { handleOnboarding } from '@/lib/onboarding/service';
 import { generateAIResponse } from '@/lib/ai/service';
 import { InteractionMode, parseScore, type ParsedMarkers } from '@/lib/ai/prompts';
+import { hasLessonData } from '@/lib/lessons/data';
 import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
 import { prisma } from '@/lib/db';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
@@ -13,6 +14,8 @@ export interface HandleMessageInput {
     message: string;
     channel: DeliveryChannel;
     language?: SupportedLanguage;
+    /** Web socios only: JWT display name so we can skip name onboarding */
+    userName?: string | null;
 }
 
 export interface HandleMessageResult {
@@ -21,10 +24,11 @@ export interface HandleMessageResult {
     markers: ParsedMarkers;
     socioId: string;
     isNewSocio: boolean;
+    isError?: boolean;
 }
 
 export async function handleIncomingMessage(input: HandleMessageInput): Promise<HandleMessageResult> {
-    const { externalId, channelType, message, channel, language } = input;
+    const { externalId, channelType, message, channel, language, userName } = input;
 
     let socio = await repo.getSocio(channelType, externalId);
     const isNewSocio = !socio;
@@ -32,8 +36,53 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     if (!socio) {
         socio = await repo.createSocio(channelType, externalId);
 
+        if (channelType === 'web' && userName !== undefined) {
+            const displayName = userName?.trim() ? userName.trim() : null;
+            const lang = language || 'es';
+
+            await repo.updateSocio(socio.id, {
+                language: lang,
+                name: displayName,
+                status: 'ACTIVE',
+            });
+            await repo.initProgress(socio.id);
+            socio = { ...socio, language: lang, name: displayName, status: 'ACTIVE' };
+
+            const welcomeMsg = displayName
+                ? `¡Hola ${displayName}! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`
+                : `¡Hola! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`;
+
+            await repo.addMessage({
+                socioId: socio.id,
+                role: 'user',
+                content: message,
+            });
+
+            await repo.addMessage({
+                socioId: socio.id,
+                role: 'assistant',
+                content: welcomeMsg,
+                senderType: 'ai',
+            } as Parameters<typeof repo.addMessage>[0]);
+
+            await channel.sendMessage(externalId, welcomeMsg);
+
+            return {
+                responseText: welcomeMsg,
+                mode: InteractionMode.LESSON_START,
+                markers: {
+                    cleanText: welcomeMsg,
+                    flags: [],
+                    lessonsCompleted: [],
+                    escalations: [],
+                    financials: [],
+                },
+                socioId: socio.id,
+                isNewSocio: true,
+            };
+        }
+
         if (language) {
-            // Web channel: language already chosen in the UI, skip AWAITING_LANGUAGE
             await repo.updateSocio(socio.id, { language, status: 'AWAITING_NAME' });
             socio = { ...socio, language, status: 'AWAITING_NAME' };
         }
@@ -73,13 +122,6 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     await repo.touchInteraction(socio.id);
 
     const aiResponse = await generateAIResponse(socio, message);
-
-    await repo.addMessage({
-        socioId: socio.id,
-        role: 'assistant',
-        content: aiResponse.text,
-        senderType: 'ai',
-    } as Parameters<typeof repo.addMessage>[0]);
 
     for (const flag of aiResponse.markers.flags) {
         await repo.createFlag({
@@ -130,6 +172,29 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         console.log(`[Financial] socio=${socio.id} revenue=${fin.revenue} netProfit=${fin.netProfit}`);
     }
 
+    let responseText = aiResponse.text;
+    if (aiResponse.markers.lessonsCompleted.length > 0) {
+        const completedNum =
+            aiResponse.markers.lessonsCompleted[aiResponse.markers.lessonsCompleted.length - 1];
+        const nextLessonNum = completedNum + 1;
+
+        let completionSuffix = `\n\n---\n✅ ¡Lección ${completedNum} completada!\n\n`;
+        if (hasLessonData(nextLessonNum)) {
+            completionSuffix += `Cuando estés listo(a), escribe "siguiente" para comenzar la Lección ${nextLessonNum}.`;
+        } else {
+            completionSuffix += '¡Felicitaciones por avanzar en tu curso!';
+        }
+
+        responseText = aiResponse.text + completionSuffix;
+    }
+
+    await repo.addMessage({
+        socioId: socio.id,
+        role: 'assistant',
+        content: responseText,
+        senderType: 'ai',
+    } as Parameters<typeof repo.addMessage>[0]);
+
     const isLessonMode =
         aiResponse.mode === InteractionMode.LESSON_DELIVERY ||
         aiResponse.mode === InteractionMode.LESSON_START;
@@ -144,13 +209,14 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         await repo.resetReminders(socio.id);
     }
 
-    await channel.sendMessage(externalId, aiResponse.text);
+    await channel.sendMessage(externalId, responseText);
 
     return {
-        responseText: aiResponse.text,
+        responseText,
         mode: aiResponse.mode,
         markers: aiResponse.markers,
         socioId: socio.id,
         isNewSocio,
+        isError: aiResponse.isError,
     };
 }

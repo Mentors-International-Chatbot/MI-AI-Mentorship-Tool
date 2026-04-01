@@ -1,7 +1,13 @@
 import type { ChannelType } from '@/lib/delivery/types';
 
 export type Role = "user" | "assistant" | "system" | "mentor";
-export type SocioStatus = 'NEW' | 'AWAITING_LANGUAGE' | 'AWAITING_CONSENT' | 'AWAITING_NAME' | 'ACTIVE';
+export type SocioStatus =
+    | 'NEW'
+    | 'AWAITING_LANGUAGE'
+    | 'AWAITING_CONSENT'
+    | 'AWAITING_NAME'
+    | 'AWAITING_BUSINESS'
+    | 'ACTIVE';
 
 export type Socio = {
     id: string;

@@ -7,6 +7,7 @@ type SocioRow = {
   id: string;
   name: string | null;
   businessName: string | null;
+  businessDescription: string | null;
   status: string;
   externalId: string;
   channelType: string;
@@ -21,7 +22,15 @@ type SocioRow = {
 
 type MentorOption = { id: string; name: string };
 
-const STATUSES = ['', 'NEW', 'AWAITING_LANGUAGE', 'AWAITING_CONSENT', 'AWAITING_NAME', 'ACTIVE'];
+const STATUSES = [
+  '',
+  'NEW',
+  'AWAITING_LANGUAGE',
+  'AWAITING_CONSENT',
+  'AWAITING_NAME',
+  'AWAITING_BUSINESS',
+  'ACTIVE',
+];
 
 export default function AdminSociosPage() {
   const [socios, setSocios] = useState<SocioRow[]>([]);
@@ -101,9 +110,11 @@ export default function AdminSociosPage() {
           value={search}
           onChange={(e) => { setLoading(true); setSearch(e.target.value); setPage(1); }}
           placeholder="Search by name, business, or phone..."
+          aria-label="Search socios by name, business, or phone"
           className="flex-1 border rounded px-3 py-2 text-sm text-gray-900"
         />
         <select
+          aria-label="Filter by onboarding status"
           value={statusFilter}
           onChange={(e) => { setLoading(true); setStatusFilter(e.target.value); setPage(1); }}
           className="border rounded px-3 py-2 text-sm text-gray-900"
@@ -114,6 +125,7 @@ export default function AdminSociosPage() {
           ))}
         </select>
         <select
+          aria-label="Filter by mentor"
           value={mentorFilter}
           onChange={(e) => { setLoading(true); setMentorFilter(e.target.value); setPage(1); }}
           className="border rounded px-3 py-2 text-sm text-gray-900"
@@ -152,7 +164,9 @@ export default function AdminSociosPage() {
                     <td className="px-4 py-3 font-medium text-gray-900">
                       {s.name ?? <span className="text-gray-400">No name</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{s.businessName ?? '-'}</td>
+                    <td className="px-4 py-3 text-gray-600 max-w-xs truncate" title={s.businessName || s.businessDescription || undefined}>
+                      {s.businessName || s.businessDescription || '—'}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                         s.status === 'ACTIVE'
@@ -172,6 +186,7 @@ export default function AdminSociosPage() {
                     </td>
                     <td className="px-4 py-3">
                       <select
+                        aria-label={`Assign mentor for ${s.name ?? s.id}`}
                         value={s.mentorId ?? ''}
                         onChange={(e) => assignMentor(s.id, e.target.value || null)}
                         className="border rounded px-2 py-1 text-xs text-gray-900"

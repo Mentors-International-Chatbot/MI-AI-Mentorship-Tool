@@ -47,6 +47,11 @@ function buildLessonStartPrompt(socio: Socio, lesson: LessonDeliveryState): stri
     ? `  - Lección anterior completada: "${lesson.previousLessonTitleEs}" (puntuación de comprensión: ${lesson.lastUnderstanding ?? 'N/A'}/10)`
     : '';
 
+  const businessNote =
+    socio.businessDescription?.trim()
+      ? ''
+      : '\n- Si no conoces aún el negocio del socio (o no está descrito en el contexto), pregúntale al inicio, de forma breve y amable, en qué consiste, antes de profundizar en el contenido de la lección.';
+
   return `TAREA ACTUAL: Iniciar lección nueva
 
 Estás comenzando la Lección ${lesson.lessonNumber}: "${lesson.lessonTitleEs}".
@@ -54,8 +59,9 @@ Categoría: ${lesson.lessonCategory}
 Este es el mensaje 1 de ${lesson.totalMessages}.
 
 INSTRUCCIONES:
+- IMPORTANTE: Comienza tu respuesta anunciando claramente el número y título de la lección. Ejemplo: "📚 Lección 3: Cómo manejar tus gastos". Luego da una breve introducción antes de entrar en el contenido.
 - Empieza con una transición natural desde la lección anterior si aplica.
-${prev}
+${prev}${businessNote}
 - Introduce el tema con un escenario cotidiano que el socio pueda reconocer.
 - Haz que suene como una conversación, no como una clase formal.
 - Termina con una pregunta abierta para que el socio se enganche.`;
@@ -66,7 +72,8 @@ ${prev}
 function buildLessonDeliveryPrompt(socio: Socio, lesson: LessonDeliveryState): string {
   const isLastMessage = lesson.messageIndex === lesson.totalMessages;
   const lastMessageNote = isLastMessage
-    ? `\n- Si es el ÚLTIMO mensaje de la lección (${lesson.messageIndex} == ${lesson.totalMessages}), después de que el socio responda, pregunta: "Del 1 al 10, ¿qué tan bien entendiste esta lección?"
+    ? `\n- Esta es la última parte de la lección. Al terminar, pide al socio que califique su comprensión del 1 al 10 y emite el marcador [LESSON_COMPLETE:${lesson.lessonNumber}].
+- Si es el ÚLTIMO mensaje de la lección (${lesson.messageIndex} == ${lesson.totalMessages}), después de que el socio responda, pregunta: "Del 1 al 10, ¿qué tan bien entendiste esta lección?"
 - Si la lección enseña algo práctico, también pregunta: "Del 1 al 10, ¿qué tanto pudiste poner en práctica lo que aprendimos?"
 - Cuando el socio dé sus puntuaciones y hayas respondido, agrega [LESSON_COMPLETE:${lesson.lessonNumber}] al final.`
     : '';

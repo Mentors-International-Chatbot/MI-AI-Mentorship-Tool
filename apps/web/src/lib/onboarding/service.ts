@@ -73,10 +73,30 @@ export async function handleOnboarding(socio: Socio, incomingMessage: string, ch
 
             await repo.updateSocio(socio.id, {
                 name,
+                status: 'AWAITING_BUSINESS',
+            });
+            await channel.sendMessage(socio.externalId, strings.businessPrompt);
+            break;
+        }
+
+        case 'AWAITING_BUSINESS': {
+            const strings = ONBOARDING[lang(socio)];
+            const businessDesc = message.trim();
+
+            if (businessDesc.length < 2) {
+                await channel.sendMessage(socio.externalId, strings.businessRetry);
+                break;
+            }
+
+            await repo.updateSocio(socio.id, {
+                businessDescription: businessDesc,
                 status: 'ACTIVE',
             });
             await repo.initProgress(socio.id);
-            await channel.sendMessage(socio.externalId, strings.welcome(name));
+            await channel.sendMessage(
+                socio.externalId,
+                strings.welcome(socio.name || businessDesc),
+            );
             break;
         }
 

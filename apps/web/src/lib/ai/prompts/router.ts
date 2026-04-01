@@ -79,6 +79,27 @@ export async function determineMode(
   // Can we load lesson data for the current lesson?
   const hasLesson = hasLessonData(repoProgress.currentLessonNumber);
 
+  const trimmed = incomingText.trim();
+  const startNextPatterns =
+    /^(siguiente|next|próxima|próximo|empezar|comenzar|start|lección\s*\d+)/i;
+  if (
+    startNextPatterns.test(trimmed) &&
+    repoProgress.currentMessageIndex === 0 &&
+    hasLesson
+  ) {
+    const lessonState = buildLessonDeliveryState(repoProgress);
+    if (lessonState) {
+      return {
+        routerResult: {
+          mode: InteractionMode.LESSON_START,
+          lesson: lessonState,
+        },
+        progress,
+        repoProgress,
+      };
+    }
+  }
+
   // ── Priority 0: Reminder nudge (silent socio returning mid-lesson) ──
   if (
     FOLLOWUP_ENABLED &&

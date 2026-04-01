@@ -28,6 +28,9 @@ interface OnboardingStrings {
     consentRetry: string;
     namePrompt: string;
     nameRetry: string;
+    businessPrompt: string;
+    businessRetry: string;
+    /** Sent after business description is saved (onboarding complete). */
     welcome: (name: string) => string;
 }
 
@@ -45,8 +48,12 @@ export const ONBOARDING: Record<SupportedLanguage, OnboardingStrings> = {
             '¡Hola! Soy tu mentor virtual de Mentors International 🤖. Estoy aquí para ayudarte a crecer tu negocio. Para empezar, ¿cómo te llamas?',
         nameRetry:
             'No pude entender tu nombre. ¿Podrías escribir solo tu nombre, por favor?',
+        businessPrompt:
+            '¡Gracias! Ahora cuéntame, ¿qué tipo de negocio tienes? Por ejemplo: tienda de ropa, venta de comida, servicios de limpieza, etc.',
+        businessRetry:
+            'No pude entender bien. ¿Podrías describir tu negocio en pocas palabras? Por ejemplo: "Vendo empanadas en el mercado" o "Tengo una peluquería".',
         welcome: (name: string) =>
-            `¡Mucho gusto, ${name}! 👋\n\nPara darte los mejores consejos, cuéntame: ¿Qué tipo de negocio tienes? (Ej: Panadería, Tienda de ropa, Servicios...)`,
+            `¡Perfecto, ${name}! 👋 Ya podemos empezar con tu mentoría. Cuando quieras, escribe "comenzar" para iniciar tu primera lección.`,
     },
     en: {
         languagePicker:
@@ -61,8 +68,12 @@ export const ONBOARDING: Record<SupportedLanguage, OnboardingStrings> = {
             "Hi! I'm your virtual mentor from Mentors International 🤖. I'm here to help you grow your business. To get started, what's your name?",
         nameRetry:
             "I couldn't catch your name. Could you please type just your name?",
+        businessPrompt:
+            'Thanks! Now tell me, what kind of business do you have? For example: clothing store, food sales, cleaning services, etc.',
+        businessRetry:
+            'I didn\'t quite understand. Could you describe your business in a few words? For example: "I sell empanadas at the market" or "I have a hair salon".',
         welcome: (name: string) =>
-            `Nice to meet you, ${name}! 👋\n\nTo give you the best advice, tell me: what kind of business do you have? (e.g. Bakery, Clothing store, Services...)`,
+            `Great, ${name}! 👋 We can start your mentorship now. When you\'re ready, type "comenzar" or "start" to begin your first lesson.`,
     },
     pt: {
         languagePicker:
@@ -77,8 +88,12 @@ export const ONBOARDING: Record<SupportedLanguage, OnboardingStrings> = {
             'Olá! Sou seu mentor virtual da Mentors International 🤖. Estou aqui para ajudar você a crescer seu negócio. Para começar, qual é o seu nome?',
         nameRetry:
             'Não consegui entender seu nome. Poderia digitar apenas o seu nome, por favor?',
+        businessPrompt:
+            'Obrigado! Agora me conte, que tipo de negócio você tem? Por exemplo: loja de roupas, venda de comida, serviços de limpeza, etc.',
+        businessRetry:
+            'Não entendi bem. Poderia descrever seu negócio em poucas palavras? Por exemplo: "Vendo empanadas no mercado" ou "Tenho um salão de beleza".',
         welcome: (name: string) =>
-            `Muito prazer, ${name}! 👋\n\nPara te dar os melhores conselhos, me conte: que tipo de negócio você tem? (Ex: Padaria, Loja de roupas, Serviços...)`,
+            `Perfeito, ${name}! 👋 Já podemos começar sua mentoria. Quando quiser, digite "comenzar" para iniciar sua primeira lição.`,
     },
 };
 

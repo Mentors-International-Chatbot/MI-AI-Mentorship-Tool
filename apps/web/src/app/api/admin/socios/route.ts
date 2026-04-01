@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     where.OR = [
       { name: { contains: search, mode: 'insensitive' } },
       { businessName: { contains: search, mode: 'insensitive' } },
+      { businessDescription: { contains: search, mode: 'insensitive' } },
       { externalId: { contains: search, mode: 'insensitive' } },
     ];
   }

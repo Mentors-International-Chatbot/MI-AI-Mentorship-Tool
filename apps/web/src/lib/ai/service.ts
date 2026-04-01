@@ -12,11 +12,39 @@ import {
 } from './prompts';
 import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
 
+async function invokeWithRetry(
+    chat: ChatAnthropic,
+    messages: (SystemMessage | HumanMessage | AIMessage)[],
+    maxRetries: number = 2,
+): Promise<string> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await chat.invoke(messages);
+            return typeof response.content === 'string'
+                ? response.content
+                : JSON.stringify(response.content);
+        } catch (error) {
+            lastError = error as Error;
+            console.error(`[AI] Attempt ${attempt + 1}/${maxRetries + 1} failed:`, error);
+
+            if (attempt < maxRetries) {
+                const delay = Math.pow(2, attempt) * 1000;
+                await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+        }
+    }
+
+    throw lastError ?? new Error('AI invoke failed');
+}
+
 export interface AIResponse {
     text: string;
     markers: ParsedMarkers;
     mode: InteractionMode;
     determineModeResult: DetermineModeResult;
+    isError?: boolean;
 }
 
 export async function generateAIResponse(socio: Socio, incomingText: string): Promise<AIResponse> {
@@ -51,13 +79,9 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
         new HumanMessage(incomingText),
     ];
 
-    // 4. Call LLM
+    // 4. Call LLM with retry
     try {
-        const response = await chat.invoke(messages);
-
-        const rawContent = typeof response.content === 'string'
-            ? response.content
-            : JSON.stringify(response.content);
+        const rawContent = await invokeWithRetry(chat, messages);
 
         // 5. Parse markers from the response
         const markers = parseMarkers(rawContent);
@@ -70,12 +94,14 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
             determineModeResult: modeResult,
         };
     } catch (error) {
-        console.error("AI Generation Error:", error);
+        console.error('[AI] All retry attempts failed:', error);
+
         return {
-            text: "Lo siento, tuve un problema pensando mi respuesta. ¿Me puedes repetir eso? 🤖",
+            text: 'Lo siento, tuve un problema pensando mi respuesta. ¿Me puedes repetir eso? 🤖',
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },
             mode: modeResult.routerResult.mode,
             determineModeResult: modeResult,
+            isError: true,
         };
     }
 }

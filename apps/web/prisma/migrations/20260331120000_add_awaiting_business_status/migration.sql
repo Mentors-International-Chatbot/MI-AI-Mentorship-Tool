@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "OnboardingStatus" ADD VALUE 'AWAITING_BUSINESS' BEFORE 'ACTIVE';

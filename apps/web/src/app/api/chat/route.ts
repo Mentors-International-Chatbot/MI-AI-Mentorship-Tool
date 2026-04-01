@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/messaging/handler';
 import { WebChannel } from '@/lib/delivery';
+import { verifySession } from '@/lib/auth/session';
 
 export async function POST(req: NextRequest) {
     try {
-        const { message, sessionId, language } = await req.json();
+        const session = await verifySession();
+        if (!session) {
+            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+        }
 
-        if (!message || !sessionId) {
+        const { message, language } = await req.json();
+
+        if (!message) {
             return NextResponse.json(
-                { error: 'Missing required fields: message, sessionId' },
+                { error: 'Missing required field: message' },
                 { status: 400 },
             );
         }
@@ -16,11 +22,12 @@ export async function POST(req: NextRequest) {
         const webChannel = new WebChannel();
 
         const result = await handleIncomingMessage({
-            externalId: sessionId,
+            externalId: session.userId,
             channelType: 'web',
             message,
             channel: webChannel,
-            language,
+            language: language || 'es',
+            userName: session.role === 'socio' ? session.name : undefined,
         });
 
         const response = result.responseText
@@ -32,6 +39,7 @@ export async function POST(req: NextRequest) {
             markers: result.markers,
             socioId: result.socioId,
             isNewSocio: result.isNewSocio,
+            isError: result.isError ?? false,
         });
     } catch (error) {
         console.error('Chat API Error:', error);

@@ -2,13 +2,35 @@
 
 import { useState, useRef, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-
-type SupportedLanguage = 'es' | 'en' | 'pt';
+import {
+    type SupportedLanguage,
+    isSupportedLanguage,
+    DEFAULT_LANGUAGE,
+} from '@/lib/i18n/languages';
 
 interface ChatMessage {
+    id?: string;
     role: 'user' | 'assistant';
     content: string;
+    createdAt?: string;
+    isError?: boolean;
+    senderType?: string | null;
 }
+
+type PollMessage = {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    senderType: string | null;
+    createdAt: string;
+};
+
+type ClientSession = {
+    userId: string;
+    name: string;
+    role: 'socio' | 'mentor' | 'admin';
+    language: string;
+};
 
 const LANGUAGES: { code: SupportedLanguage; flag: string; nativeName: string }[] = [
     { code: 'es', flag: '🇪🇸', nativeName: 'Español' },
@@ -17,32 +39,299 @@ const LANGUAGES: { code: SupportedLanguage; flag: string; nativeName: string }[]
 ];
 
 const UI: Record<SupportedLanguage, { placeholder: string; send: string; error: string }> = {
-    es: { placeholder: 'Escribe tu mensaje...', send: 'Enviar', error: 'Error al conectar con el servidor. Intenta de nuevo.' },
-    en: { placeholder: 'Type your message...', send: 'Send', error: 'Error connecting to the server. Please try again.' },
-    pt: { placeholder: 'Digite sua mensagem...', send: 'Enviar', error: 'Erro ao conectar com o servidor. Tente novamente.' },
+    es: {
+        placeholder: 'Escribe tu mensaje...',
+        send: 'Enviar',
+        error: 'Error al conectar con el servidor. Intenta de nuevo.',
+    },
+    en: {
+        placeholder: 'Type your message...',
+        send: 'Send',
+        error: 'Error connecting to the server. Please try again.',
+    },
+    pt: {
+        placeholder: 'Digite sua mensagem...',
+        send: 'Enviar',
+        error: 'Erro ao conectar com o servidor. Tente novamente.',
+    },
 };
 
-function generateSessionId() {
-    return crypto.randomUUID();
+function coerceUiLanguage(raw: string | undefined): SupportedLanguage {
+    if (raw && isSupportedLanguage(raw)) return raw;
+    return DEFAULT_LANGUAGE;
+}
+
+function renderMessageContent(content: string) {
+    const parts = content.split(/\n\n---\n/);
+
+    if (parts.length === 1) {
+        return <span className="whitespace-pre-wrap">{content}</span>;
+    }
+
+    return (
+        <>
+            <span className="whitespace-pre-wrap">{parts[0]}</span>
+            {parts.slice(1).map((part, i) => (
+                <div
+                    key={i}
+                    className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800"
+                >
+                    <span className="font-medium whitespace-pre-wrap">{part}</span>
+                </div>
+            ))}
+        </>
+    );
 }
 
 export default function ChatPage() {
     const router = useRouter();
-    const [sessionId] = useState(generateSessionId);
-    const [language, setLanguage] = useState<SupportedLanguage | null>(null);
+    const [session, setSession] = useState<ClientSession | null>(null);
+    const [language, setLanguage] = useState<SupportedLanguage>(DEFAULT_LANGUAGE);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [lastMessageTime, setLastMessageTime] = useState<string | null>(null);
+    const lastMessageTimeRef = useRef<string | null>(null);
+    const [currentLesson, setCurrentLesson] = useState<number | null>(null);
+    const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const formRef = useRef<HTMLFormElement>(null);
+    const [historyReady, setHistoryReady] = useState(false);
+
+    useEffect(() => {
+        async function init() {
+            try {
+                const sessionRes = await fetch('/api/auth/me');
+                if (!sessionRes.ok) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const sessionData = (await sessionRes.json()) as ClientSession;
+                setSession(sessionData);
+
+                const lang = coerceUiLanguage(sessionData.language);
+                setLanguage(lang);
+
+                const historyRes = await fetch('/api/chat/history');
+                if (historyRes.ok) {
+                    const payload = (await historyRes.json()) as {
+                        messages: {
+                            id?: string;
+                            role: 'user' | 'assistant';
+                            content: string;
+                            createdAt: string;
+                            senderType?: string | null;
+                        }[];
+                        currentLesson?: number;
+                        completedLessons?: number[];
+                    };
+                    const { messages: history } = payload;
+                    setMessages(
+                        history.map((m) => ({
+                            id: m.id,
+                            role: m.role,
+                            content: m.content,
+                            createdAt: m.createdAt,
+                            senderType: m.senderType ?? null,
+                        })),
+                    );
+                    if (typeof payload.currentLesson === 'number') {
+                        setCurrentLesson(payload.currentLesson);
+                    }
+                    if (history.length === 0) {
+                        setLastMessageTime(new Date().toISOString());
+                    }
+                } else {
+                    setLastMessageTime(new Date().toISOString());
+                }
+            } finally {
+                setHistoryReady(true);
+            }
+        }
+        void init();
+    }, []);
+
+    useEffect(() => {
+        if (!historyReady || !session || session.role !== 'socio' || messages.length > 0) {
+            return;
+        }
+
+        const storageKey = `mi_chat_welcome_${session.userId}`;
+        if (typeof window !== 'undefined') {
+            const st = sessionStorage.getItem(storageKey);
+            if (st === 'done' || st === 'pending') return;
+            sessionStorage.setItem(storageKey, 'pending');
+        }
+
+        async function triggerWelcome() {
+            setIsLoading(true);
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: 'hola', language }),
+                });
+                if (res.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = (await res.json()) as {
+                    response?: string;
+                    isNewSocio?: boolean;
+                    currentLesson?: number;
+                };
+
+                if (data.response && data.isNewSocio && typeof window !== 'undefined' && res.ok) {
+                    sessionStorage.setItem(storageKey, 'done');
+                }
+
+                if (data.response && data.isNewSocio) {
+                    const stamp = new Date().toISOString();
+                    setMessages([
+                        { role: 'user', content: 'hola', createdAt: stamp },
+                        {
+                            role: 'assistant',
+                            content: data.response,
+                            createdAt: stamp,
+                        },
+                    ]);
+                    setLastMessageTime(stamp);
+                    if (typeof data.currentLesson === 'number') {
+                        setCurrentLesson(data.currentLesson);
+                    }
+                } else if (data.isNewSocio === false) {
+                    if (typeof window !== 'undefined' && res.ok) {
+                        sessionStorage.setItem(storageKey, 'done');
+                    }
+                    const historyRes = await fetch('/api/chat/history');
+                    if (historyRes.ok) {
+                        const payload = (await historyRes.json()) as {
+                            messages: {
+                                id?: string;
+                                role: 'user' | 'assistant';
+                                content: string;
+                                createdAt: string;
+                                senderType?: string | null;
+                            }[];
+                            currentLesson?: number;
+                        };
+                        setMessages(
+                            payload.messages.map((m) => ({
+                                id: m.id,
+                                role: m.role,
+                                content: m.content,
+                                createdAt: m.createdAt,
+                                senderType: m.senderType ?? null,
+                            })),
+                        );
+                        if (typeof payload.currentLesson === 'number') {
+                            setCurrentLesson(payload.currentLesson);
+                        }
+                        const times = payload.messages
+                            .map((m) => m.createdAt)
+                            .filter(Boolean);
+                        if (times.length > 0) {
+                            setLastMessageTime(times.reduce((a, b) => (a > b ? a : b)));
+                        }
+                    }
+                }
+            } catch {
+                if (typeof window !== 'undefined') {
+                    sessionStorage.removeItem(storageKey);
+                }
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        void triggerWelcome();
+    }, [historyReady, session, messages.length, language]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
     useEffect(() => {
-        if (language) inputRef.current?.focus();
-    }, [language]);
+        inputRef.current?.focus();
+    }, [session]);
+
+    useEffect(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    }, [input]);
+
+    useEffect(() => {
+        lastMessageTimeRef.current = lastMessageTime;
+    }, [lastMessageTime]);
+
+    useEffect(() => {
+        if (messages.length === 0) return;
+        const times = messages
+            .map((m) => m.createdAt)
+            .filter((t): t is string => Boolean(t));
+        if (times.length === 0) return;
+        const max = times.reduce((a, b) => (a > b ? a : b));
+        setLastMessageTime(max);
+    }, [messages]);
+
+    useEffect(() => {
+        if (!session || !lastMessageTime) return;
+
+        const poll = async () => {
+            const since = lastMessageTimeRef.current;
+            if (!since) return;
+            try {
+                const res = await fetch(
+                    `/api/chat/poll?since=${encodeURIComponent(since)}`,
+                );
+                if (!res.ok) return;
+
+                const data = (await res.json()) as {
+                    messages: PollMessage[];
+                    currentLesson?: number;
+                };
+                const { messages: newMsgs } = data;
+                if (typeof data.currentLesson === 'number') {
+                    setCurrentLesson(data.currentLesson);
+                }
+                if (newMsgs.length === 0) return;
+
+                setMessages((prev) => {
+                    const existingIds = new Set(
+                        prev.map((m) => m.id).filter(Boolean) as string[],
+                    );
+                    const recentContents = new Set(prev.slice(-15).map((m) => m.content));
+
+                    const trulyNew = newMsgs.filter((m) => {
+                        if (m.id && existingIds.has(m.id)) return false;
+                        if (recentContents.has(m.content)) return false;
+                        return true;
+                    });
+
+                    if (trulyNew.length === 0) return prev;
+
+                    return [
+                        ...prev,
+                        ...trulyNew.map((m) => ({
+                            id: m.id,
+                            role: m.role,
+                            content: m.content,
+                            createdAt: m.createdAt,
+                            senderType: m.senderType,
+                        })),
+                    ];
+                });
+            } catch {
+                // ignore poll errors
+            }
+        };
+
+        const interval = setInterval(poll, 5000);
+        return () => clearInterval(interval);
+    }, [session, lastMessageTime]);
 
     async function handleLogout() {
         await fetch('/api/auth/logout', { method: 'POST' });
@@ -52,31 +341,61 @@ export default function ChatPage() {
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
         const text = input.trim();
-        if (!text || isLoading || !language) return;
+        if (!text || isLoading || !session) return;
 
+        setLastUserMessage(text);
         setInput('');
-        setMessages((prev) => [...prev, { role: 'user', content: text }]);
+        const stamp = new Date().toISOString();
+        setMessages((prev) => [...prev, { role: 'user', content: text, createdAt: stamp }]);
         setIsLoading(true);
 
         try {
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text, sessionId, language }),
+                body: JSON.stringify({ message: text, language }),
             });
 
+            if (res.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+
             const data = await res.json();
+
+            if (!res.ok) {
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        role: 'assistant',
+                        content: data.error ?? UI[language].error,
+                        createdAt: new Date().toISOString(),
+                        isError: true,
+                    },
+                ]);
+                return;
+            }
 
             if (data.response) {
                 setMessages((prev) => [
                     ...prev,
-                    { role: 'assistant', content: data.response },
+                    {
+                        role: 'assistant',
+                        content: data.response,
+                        createdAt: new Date().toISOString(),
+                        isError: Boolean(data.isError),
+                    },
                 ]);
             }
         } catch {
             setMessages((prev) => [
                 ...prev,
-                { role: 'assistant', content: UI[language].error },
+                {
+                    role: 'assistant',
+                    content: UI[language].error,
+                    createdAt: new Date().toISOString(),
+                    isError: true,
+                },
             ]);
         } finally {
             setIsLoading(false);
@@ -84,40 +403,36 @@ export default function ChatPage() {
         }
     }
 
-    if (!language) {
+    function handleRetry() {
+        if (!lastUserMessage) return;
+
+        setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role !== 'assistant' || !last.isError) return prev;
+            const withoutAssistant = prev.slice(0, -1);
+            const beforeLast = withoutAssistant[withoutAssistant.length - 1];
+            if (beforeLast?.role === 'user') {
+                return withoutAssistant.slice(0, -1);
+            }
+            return withoutAssistant;
+        });
+
+        setInput(lastUserMessage);
+        setTimeout(() => {
+            formRef.current?.requestSubmit();
+        }, 50);
+    }
+
+    if (!session) {
         return (
             <div className="flex flex-col items-center justify-center h-screen max-w-2xl mx-auto bg-white dark:bg-zinc-950 px-6">
-                <div className="w-16 h-16 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-2xl mb-6">
-                    MI
-                </div>
-                <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-1">
-                    Mentor Virtual
-                </h1>
-                <p className="text-sm text-zinc-500 mb-8">
-                    Mentors International
-                </p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6 text-center">
-                    Choose your language / Elige tu idioma / Escolha seu idioma
-                </p>
-                <div className="flex flex-col gap-3 w-full max-w-xs">
-                    {LANGUAGES.map((l) => (
-                        <button
-                            key={l.code}
-                            onClick={() => setLanguage(l.code)}
-                            className="flex items-center gap-3 w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-5 py-3.5 text-left hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        >
-                            <span className="text-2xl">{l.flag}</span>
-                            <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                {l.nativeName}
-                            </span>
-                        </button>
-                    ))}
-                </div>
+                <p className="text-sm text-zinc-500">Cargando chat…</p>
             </div>
         );
     }
 
     const ui = UI[language];
+    const isSocio = session.role === 'socio';
 
     return (
         <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white dark:bg-zinc-950">
@@ -125,18 +440,41 @@ export default function ChatPage() {
                 <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg">
                     MI
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                     <h1 className="font-semibold text-zinc-900 dark:text-zinc-100">
                         Mentor Virtual
                     </h1>
                     <p className="text-xs text-zinc-500">
-                        Mentors International
+                        {isSocio && currentLesson !== null
+                            ? `Lección ${currentLesson} • Mentors International`
+                            : 'Mentors International'}
                     </p>
                 </div>
-                <span className="text-lg" title={LANGUAGES.find(l => l.code === language)?.nativeName}>
-                    {LANGUAGES.find(l => l.code === language)?.flag}
-                </span>
+                {!isSocio && (
+                    <label className="flex items-center gap-1 text-xs text-zinc-500">
+                        <span className="sr-only">Language</span>
+                        <select
+                            value={language}
+                            onChange={(e) =>
+                                setLanguage(e.target.value as SupportedLanguage)
+                            }
+                            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-sm text-zinc-900 dark:text-zinc-100"
+                        >
+                            {LANGUAGES.map((l) => (
+                                <option key={l.code} value={l.code}>
+                                    {l.flag} {l.nativeName}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+                {isSocio && (
+                    <span className="text-lg" title={LANGUAGES.find((l) => l.code === language)?.nativeName}>
+                        {LANGUAGES.find((l) => l.code === language)?.flag}
+                    </span>
+                )}
                 <button
+                    type="button"
                     onClick={handleLogout}
                     className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
                 >
@@ -145,30 +483,71 @@ export default function ChatPage() {
             </header>
 
             <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-                {messages.length === 0 && (
+                {messages.length === 0 && !isLoading && (
                     <div className="flex items-center justify-center h-full text-zinc-400 text-sm text-center px-8">
-                        {ui.placeholder}
+                        {isSocio ? (
+                            <>
+                                ¡Hola{session.name ? `, ${session.name}` : ''}! Escribe un mensaje para comenzar.
+                            </>
+                        ) : (
+                            ui.placeholder
+                        )}
+                    </div>
+                )}
+
+                {messages.length === 0 && isLoading && (
+                    <div className="flex justify-start">
+                        <div className="bg-zinc-100 dark:bg-zinc-800 rounded-2xl rounded-bl-md px-4 py-3">
+                            <div className="flex gap-1.5">
+                                <span className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce [animation-delay:0ms]" />
+                                <span className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                                <span className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                            </div>
+                        </div>
                     </div>
                 )}
 
                 {messages.map((msg, i) => (
                     <div
-                        key={i}
+                        key={msg.id ?? `${msg.createdAt ?? 'm'}-${i}-${msg.role}`}
                         className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                         <div
-                            className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                                msg.role === 'user'
-                                    ? 'bg-emerald-600 text-white rounded-br-md'
-                                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-bl-md'
+                            className={`flex flex-col gap-1 max-w-[80%] ${
+                                msg.role === 'user' ? 'items-end' : 'items-start'
                             }`}
                         >
-                            {msg.content}
+                            <div
+                                className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                                    msg.role === 'user'
+                                        ? 'bg-emerald-600 text-white rounded-br-md'
+                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-bl-md'
+                                }`}
+                            >
+                                {renderMessageContent(msg.content)}
+                                {msg.role === 'assistant' && msg.senderType === 'mentor' && (
+                                    <span className="text-xs text-blue-500 dark:text-blue-400 block mt-2 font-medium">
+                                        — Tu mentor
+                                    </span>
+                                )}
+                            </div>
+                            {msg.role === 'assistant' &&
+                                msg.isError &&
+                                i === messages.length - 1 &&
+                                !isLoading && (
+                                    <button
+                                        type="button"
+                                        onClick={handleRetry}
+                                        className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-500 dark:hover:text-emerald-400 underline"
+                                    >
+                                        Reintentar / Retry
+                                    </button>
+                                )}
                         </div>
                     </div>
                 ))}
 
-                {isLoading && (
+                {isLoading && messages.length > 0 && (
                     <div className="flex justify-start">
                         <div className="bg-zinc-100 dark:bg-zinc-800 rounded-2xl rounded-bl-md px-4 py-3">
                             <div className="flex gap-1.5">
@@ -184,22 +563,29 @@ export default function ChatPage() {
             </div>
 
             <form
+                ref={formRef}
                 onSubmit={handleSubmit}
-                className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 px-4 py-3 flex gap-2"
+                className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 px-4 py-3 flex gap-2 items-end"
             >
-                <input
+                <textarea
                     ref={inputRef}
-                    type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            void handleSubmit(e as unknown as FormEvent);
+                        }
+                    }}
                     placeholder={ui.placeholder}
                     disabled={isLoading}
-                    className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                    rows={1}
+                    className="flex-1 min-h-[2.5rem] max-h-[120px] rounded-2xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 resize-none overflow-y-auto"
                 />
                 <button
                     type="submit"
                     disabled={isLoading || !input.trim()}
-                    className="rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 text-white px-5 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 text-white px-5 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 shrink-0"
                 >
                     {ui.send}
                 </button>
