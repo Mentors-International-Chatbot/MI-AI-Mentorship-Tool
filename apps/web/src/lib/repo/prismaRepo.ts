@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 import {
+    Prisma,
     Socio as PrismaSocio,
     Message as PrismaMessage,
     SocioProgress as PrismaSocioProgress,
@@ -9,6 +10,28 @@ import {
     LessonProgress as PrismaLessonProgress,
     MessageSentiment as PrismaMessageSentiment,
 } from "@prisma/client";
+
+/** Race-safe: concurrent create/upsert paths can hit P2002 on socio_id; retry read after conflict. */
+async function ensureSocioProgressRow(socioId: string): Promise<PrismaSocioProgress> {
+    const existing = await prisma.socioProgress.findUnique({
+        where: { socioId },
+    });
+    if (existing) return existing;
+
+    try {
+        return await prisma.socioProgress.create({
+            data: { socioId },
+        });
+    } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+            const row = await prisma.socioProgress.findUnique({
+                where: { socioId },
+            });
+            if (row) return row;
+        }
+        throw e;
+    }
+}
 
 function toSocio(p: PrismaSocio): Socio {
     return {
@@ -154,18 +177,12 @@ export const prismaRepo: Repo = {
     },
 
     async initProgress(socioId) {
-        const progress = await prisma.socioProgress.create({
-            data: { socioId },
-        });
+        const progress = await ensureSocioProgressRow(socioId);
         return toSocioProgress(progress);
     },
 
     async getSocioProgress(socioId) {
-        const progress = await prisma.socioProgress.upsert({
-            where: { socioId },
-            create: { socioId },
-            update: {},
-        });
+        const progress = await ensureSocioProgressRow(socioId);
         return toSocioProgress(progress);
     },
 
