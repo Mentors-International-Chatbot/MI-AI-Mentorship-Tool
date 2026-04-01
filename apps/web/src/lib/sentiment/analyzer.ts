@@ -74,11 +74,11 @@ export async function analyzeSentiment(message: string): Promise<SentimentResult
   }
 }
 
-function clamp(n: number, min: number, max: number): number {
+export function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
-function validateSentiment(s: unknown): SentimentResult['sentiment'] {
+export function validateSentiment(s: unknown): SentimentResult['sentiment'] {
   const valid = ['positive', 'neutral', 'negative', 'distressed'];
   return valid.includes(s as string) ? (s as SentimentResult['sentiment']) : 'neutral';
 }

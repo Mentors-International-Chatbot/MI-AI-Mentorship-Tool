@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db';
 
 // ─── Conciseness Mapping ────────────────────────────────────────────
 
-function getConcisivenessInstruction(level?: ConcisivenessLevel): string {
+export function getConcisivenessInstruction(level?: ConcisivenessLevel): string {
   switch (level) {
     case 'very_brief':
       return 'Máximo 2 oraciones por mensaje. Directo al punto, sin rodeos.';
@@ -103,7 +103,7 @@ AJUSTE DE TONO: Este socio valora mucho a su familia. Conecta los conceptos de n
 AJUSTE DE TONO: Este socio está pasando por un momento difícil con su negocio. Sé especialmente empático. No presiones para avanzar rápido. Valida que los momentos difíciles son normales. Enfócate en pasos pequeños y alcanzables. Si reporta pérdidas, NO intentes arreglarlo todo de una vez.`,
 };
 
-function buildSliderSnippet(overrides?: PromptOverrides): string {
+export function buildSliderSnippet(overrides?: PromptOverrides): string {
   if (!overrides) return '';
   const parts: string[] = [];
 

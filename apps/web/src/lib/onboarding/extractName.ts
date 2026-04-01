@@ -8,7 +8,7 @@ const NAME_EXTRACTION_PROMPT_DEFAULT =
 
 const URL_RE = /https?:\/\/|www\./i;
 
-function isValid(name: string): boolean {
+export function isValid(name: string): boolean {
     if (name.length < 2 || name.length > 60) return false;
     if (/^\d+$/.test(name)) return false;
     if (URL_RE.test(name)) return false;
@@ -35,7 +35,7 @@ const REGEX_PATTERNS: Record<SupportedLanguage, RegExp[]> = {
 
 const BARE_NAME_RE = /^([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+){0,2})$/;
 
-function regexFallback(message: string, language: SupportedLanguage): string | null {
+export function regexFallback(message: string, language: SupportedLanguage): string | null {
     for (const pattern of REGEX_PATTERNS[language]) {
         const match = message.match(pattern);
         if (match?.[1]) {
