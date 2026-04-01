@@ -1,18 +1,6 @@
 import { redirect } from 'next/navigation';
-import { verifySession } from '@/lib/auth/session';
 
-export default async function Home() {
-  const session = await verifySession();
-
-  if (!session) {
-    redirect('/login');
-  }
-
-  if (session.role === 'socio') {
-    redirect('/chat');
-  } else if (session.role === 'admin') {
-    redirect('/admin');
-  } else {
-    redirect('/dashboard/socios');
-  }
+/** Production root URL always opens sign-in; logged-in users are bounced from /login. */
+export default function Home() {
+  redirect('/login');
 }

@@ -13,6 +13,13 @@ export type SessionPayload = {
   name: string;
 };
 
+/** Post-login landing path for each role (dashboard, admin, or socio chat). */
+export function homePathForRole(role: SessionPayload['role']): string {
+  if (role === 'socio') return '/chat';
+  if (role === 'admin') return '/admin';
+  return '/dashboard/socios';
+}
+
 export async function createSession(
   payload: SessionPayload,
   rememberMe: boolean = false,
