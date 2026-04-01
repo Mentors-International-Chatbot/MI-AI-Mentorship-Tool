@@ -120,11 +120,27 @@ function toLessonProgress(p: PrismaLessonProgress): LessonProgressRecord {
 
 export const prismaRepo: Repo = {
     async getSocio(channelType: ChannelType, externalId: string) {
-        const socio = await prisma.socio.findUnique({
+        let socio = await prisma.socio.findUnique({
             where: {
                 channelType_externalId: { channelType, externalId },
             },
         });
+
+        // Fallback: if not found by externalId, try matching by whatsappPhoneNumber
+        // (happens when the socio signed up via web before messaging on WhatsApp)
+        if (!socio && channelType === 'whatsapp') {
+            socio = await prisma.socio.findUnique({
+                where: { whatsappPhoneNumber: externalId },
+            });
+            if (socio) {
+                // Sync the externalId so future lookups work
+                socio = await prisma.socio.update({
+                    where: { id: socio.id },
+                    data: { externalId },
+                });
+            }
+        }
+
         if (!socio) return null;
         return toSocio(socio);
     },
