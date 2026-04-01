@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 
 type SupportedLanguage = 'es' | 'en' | 'pt';
 
@@ -26,6 +27,7 @@ function generateSessionId() {
 }
 
 export default function ChatPage() {
+    const router = useRouter();
     const [sessionId] = useState(generateSessionId);
     const [language, setLanguage] = useState<SupportedLanguage | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -41,6 +43,11 @@ export default function ChatPage() {
     useEffect(() => {
         if (language) inputRef.current?.focus();
     }, [language]);
+
+    async function handleLogout() {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        router.push('/login');
+    }
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
@@ -129,6 +136,12 @@ export default function ChatPage() {
                 <span className="text-lg" title={LANGUAGES.find(l => l.code === language)?.nativeName}>
                     {LANGUAGES.find(l => l.code === language)?.flag}
                 </span>
+                <button
+                    onClick={handleLogout}
+                    className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
+                >
+                    Log out
+                </button>
             </header>
 
             <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
