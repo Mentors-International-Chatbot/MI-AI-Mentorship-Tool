@@ -6,7 +6,8 @@ import { hasLessonData } from '@/lib/lessons/data';
 import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
 import { prisma } from '@/lib/db';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
-import type { SupportedLanguage } from '@/lib/i18n/languages';
+import { LESSON_MESSAGES, type SupportedLanguage } from '@/lib/i18n/languages';
+import { MAX_LESSON_NUMBER } from '@/lib/ai/prompts/constants';
 
 export interface HandleMessageInput {
     externalId: string;
@@ -48,9 +49,10 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             await repo.initProgress(socio.id);
             socio = { ...socio, language: lang, name: displayName, status: 'ACTIVE' };
 
+            const langStrings = LESSON_MESSAGES[(lang as SupportedLanguage) ?? 'es'] ?? LESSON_MESSAGES['es'];
             const welcomeMsg = displayName
-                ? `¡Hola ${displayName}! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`
-                : `¡Hola! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`;
+                ? langStrings.welcomeWithName(displayName)
+                : langStrings.welcomeAnonymous;
 
             await repo.addMessage({
                 socioId: socio.id,
@@ -172,20 +174,29 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         console.log(`[Financial] socio=${socio.id} revenue=${fin.revenue} netProfit=${fin.netProfit}`);
     }
 
+    const socioLang = ((socio.language || 'es') as SupportedLanguage);
+    const lm = LESSON_MESSAGES[socioLang] ?? LESSON_MESSAGES['es'];
+
     let responseText = aiResponse.text;
+
+    // Prepend lesson number header when starting a new lesson
+    if (aiResponse.mode === InteractionMode.LESSON_START) {
+        const currentLesson = aiResponse.determineModeResult.progress?.currentLessonNumber ?? 1;
+        responseText = `${lm.lessonHeader(currentLesson, MAX_LESSON_NUMBER)}\n\n${responseText}`;
+    }
+
+    // Append completion notification when a lesson finishes
     if (aiResponse.markers.lessonsCompleted.length > 0) {
         const completedNum =
             aiResponse.markers.lessonsCompleted[aiResponse.markers.lessonsCompleted.length - 1];
         const nextLessonNum = completedNum + 1;
 
-        let completionSuffix = `\n\n---\n✅ ¡Lección ${completedNum} completada!\n\n`;
-        if (hasLessonData(nextLessonNum)) {
-            completionSuffix += `Cuando estés listo(a), escribe "siguiente" para comenzar la Lección ${nextLessonNum}.`;
-        } else {
-            completionSuffix += '¡Felicitaciones por avanzar en tu curso!';
-        }
+        let completionSuffix = `\n\n---\n${lm.lessonComplete(completedNum)}\n\n`;
+        completionSuffix += hasLessonData(nextLessonNum)
+            ? lm.nextLesson(nextLessonNum)
+            : lm.courseComplete;
 
-        responseText = aiResponse.text + completionSuffix;
+        responseText = responseText + completionSuffix;
     }
 
     await repo.addMessage({

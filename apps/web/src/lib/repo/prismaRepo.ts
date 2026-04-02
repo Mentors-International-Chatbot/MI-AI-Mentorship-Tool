@@ -3,6 +3,7 @@ import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFla
 import type { ChannelType } from "@/lib/delivery/types";
 import {
     Prisma,
+    OnboardingStatus,
     Socio as PrismaSocio,
     Message as PrismaMessage,
     SocioProgress as PrismaSocioProgress,
@@ -164,7 +165,7 @@ export const prismaRepo: Repo = {
                 language: data.language,
                 businessName: data.businessName,
                 businessDescription: data.businessDescription,
-                status: data.status,
+                status: data.status as OnboardingStatus | undefined,
                 promptOverrides: data.promptOverrides !== undefined ? (data.promptOverrides as object ?? undefined) : undefined,
             },
         });

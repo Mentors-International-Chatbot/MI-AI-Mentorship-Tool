@@ -11,6 +11,7 @@ import {
     type DetermineModeResult,
 } from './prompts';
 import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
+import { AI_ERROR_FALLBACK, type SupportedLanguage } from '@/lib/i18n/languages';
 
 async function invokeWithRetry(
     chat: ChatAnthropic,
@@ -96,8 +97,9 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
     } catch (error) {
         console.error('[AI] All retry attempts failed:', error);
 
+        const language = (socio.language || 'es') as SupportedLanguage;
         return {
-            text: 'Lo siento, tuve un problema pensando mi respuesta. ¿Me puedes repetir eso? 🤖',
+            text: AI_ERROR_FALLBACK[language] ?? AI_ERROR_FALLBACK['es'],
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },
             mode: modeResult.routerResult.mode,
             determineModeResult: modeResult,

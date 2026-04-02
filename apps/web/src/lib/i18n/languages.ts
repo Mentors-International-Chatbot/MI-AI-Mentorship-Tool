@@ -123,22 +123,74 @@ export const UI_STRINGS: Record<SupportedLanguage, UIStrings> = {
     },
 };
 
+// ─── AI Error Fallback Messages ───────────────────────────────────────
+
+export const AI_ERROR_FALLBACK: Record<SupportedLanguage, string> = {
+    es: 'Lo siento, tuve un problema pensando mi respuesta. ¿Me puedes repetir eso? 🤖',
+    en: 'Sorry, I had a problem thinking through my response. Could you repeat that? 🤖',
+    pt: 'Desculpe, tive um problema para formular minha resposta. Pode repetir isso? 🤖',
+};
+
+// ─── Lesson Notification Messages ────────────────────────────────────
+
+interface LessonMessageStrings {
+    lessonHeader: (num: number, total: number) => string;
+    lessonComplete: (num: number) => string;
+    nextLesson: (num: number) => string;
+    courseComplete: string;
+    welcomeWithName: (name: string) => string;
+    welcomeAnonymous: string;
+    welcomeStart: string;
+}
+
+export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = {
+    es: {
+        lessonHeader: (num, total) => `📚 Lección ${num} de ${total}`,
+        lessonComplete: (num) => `✅ ¡Lección ${num} completada!`,
+        nextLesson: (num) => `Cuando estés listo(a), escribe "siguiente" para comenzar la Lección ${num}.`,
+        courseComplete: '¡Felicitaciones por completar todas las lecciones!',
+        welcomeWithName: (name) => `¡Hola ${name}! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
+        welcomeAnonymous: `¡Hola! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
+        welcomeStart: 'comenzar',
+    },
+    en: {
+        lessonHeader: (num, total) => `📚 Lesson ${num} of ${total}`,
+        lessonComplete: (num) => `✅ Lesson ${num} complete!`,
+        nextLesson: (num) => `When you're ready, type "next" to start Lesson ${num}.`,
+        courseComplete: 'Congratulations on completing all the lessons!',
+        welcomeWithName: (name) => `Hi ${name}! 👋 I'm your Virtual Mentor from Mentors International.\n\nI'm here to help you strengthen your business with practical lessons on finances, sales, and more.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
+        welcomeAnonymous: `Hi! 👋 I'm your Virtual Mentor from Mentors International.\n\nI'm here to help you strengthen your business with practical lessons on finances, sales, and more.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
+        welcomeStart: 'start',
+    },
+    pt: {
+        lessonHeader: (num, total) => `📚 Lição ${num} de ${total}`,
+        lessonComplete: (num) => `✅ Lição ${num} concluída!`,
+        nextLesson: (num) => `Quando estiver pronto(a), digite "próximo" para começar a Lição ${num}.`,
+        courseComplete: 'Parabéns por completar todas as lições!',
+        welcomeWithName: (name) => `Olá ${name}! 👋 Sou seu Mentor Virtual da Mentors International.\n\nEstou aqui para ajudar você a fortalecer seu negócio com lições práticas sobre finanças, vendas e mais.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
+        welcomeAnonymous: `Olá! 👋 Sou seu Mentor Virtual da Mentors International.\n\nEstou aqui para ajudar você a fortalecer seu negócio com lições práticas sobre finanças, vendas e mais.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
+        welcomeStart: 'começar',
+    },
+};
+
 // ─── Language Directives (injected into the AI system prompt) ────────
 
 const LANGUAGE_DIRECTIVES: Record<SupportedLanguage, string> = {
     es: '',
-    en: `LANGUAGE OVERRIDE:
-You MUST respond ENTIRELY in English. The socio speaks English.
-- Translate all your responses to natural, friendly English.
+    en: `CRITICAL LANGUAGE RULE — THIS OVERRIDES ALL PREVIOUS INSTRUCTIONS:
+You MUST respond ENTIRELY in English. Every single word you write to the user must be in English — no exceptions.
+- The earlier instruction "Habla español colombiano sencillo" does NOT apply to this user. Ignore it completely.
+- Do NOT write any Spanish words, phrases, or sentences in your response.
 - Adapt cultural examples to be more universal (corner stores, local markets, small businesses).
-- System markers ([FLAG:...], [LESSON_COMPLETE:...], [ESCALATE|...]) stay in their original format.
-- Keep the same warm, encouraging tone described above, just in English.`,
-    pt: `LANGUAGE OVERRIDE:
-You MUST respond ENTIRELY in Brazilian Portuguese. The socio speaks Portuguese.
-- Translate all your responses to natural, friendly Brazilian Portuguese.
-- Adapt cultural examples to Brazilian context (padarias, lojas de bairro, vendas pelo WhatsApp, feiras locais).
-- System markers ([FLAG:...], [LESSON_COMPLETE:...], [ESCALATE|...]) stay in their original format.
-- Keep the same warm, encouraging tone described above, just in Portuguese.`,
+- System markers ([FLAG:...], [LESSON_COMPLETE:...], [ESCALATE|...]) stay in their original format — do not translate them.
+- Keep the same warm, encouraging tone, just in English.`,
+    pt: `REGRA CRÍTICA DE IDIOMA — SUBSTITUI TODAS AS INSTRUÇÕES ANTERIORES:
+Você DEVE responder INTEIRAMENTE em português brasileiro. Cada palavra que você escrever ao usuário deve estar em português — sem exceções.
+- A instrução anterior "Habla español colombiano sencillo" NÃO se aplica a este usuário. Ignore-a completamente.
+- NÃO escreva nenhuma palavra, frase ou sentença em espanhol na sua resposta.
+- Adapte exemplos culturais ao contexto brasileiro (padarias, lojas de bairro, vendas pelo WhatsApp, feiras locais).
+- Os marcadores de sistema ([FLAG:...], [LESSON_COMPLETE:...], [ESCALATE|...]) permanecem no formato original — não os traduza.
+- Mantenha o mesmo tom caloroso e encorajador, apenas em português.`,
 };
 
 export function getLanguageDirective(language: SupportedLanguage): string {
