@@ -333,6 +333,53 @@ export default function ChatPage() {
         return () => clearInterval(interval);
     }, [session, lastMessageTime]);
 
+    async function handleLanguageChange(newLang: SupportedLanguage) {
+        setLanguage(newLang);
+
+        if (isSocio) {
+            void fetch('/api/auth/me', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ language: newLang }),
+            });
+        }
+
+        if (!session || isLoading) return;
+
+        const triggers: Record<SupportedLanguage, string> = {
+            es: 'Por favor repite tu último mensaje en español.',
+            en: 'Please repeat your last message in English.',
+            pt: 'Por favor repita sua última mensagem em português.',
+        };
+
+        setIsLoading(true);
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: triggers[newLang], language: newLang }),
+            });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            const data = await res.json();
+            if (res.ok && data.response) {
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        role: 'assistant',
+                        content: data.response,
+                        createdAt: new Date().toISOString(),
+                        isError: Boolean(data.isError),
+                    },
+                ]);
+            }
+        } catch {
+            // silently ignore
+        } finally {
+            setIsLoading(false);
+            inputRef.current?.focus();
+        }
+    }
+
     async function handleLogout() {
         await fetch('/api/auth/logout', { method: 'POST' });
         router.push('/login');
@@ -450,29 +497,20 @@ export default function ChatPage() {
                             : 'Mentors International'}
                     </p>
                 </div>
-                {!isSocio && (
-                    <label className="flex items-center gap-1 text-xs text-zinc-500">
-                        <span className="sr-only">Language</span>
-                        <select
-                            value={language}
-                            onChange={(e) =>
-                                setLanguage(e.target.value as SupportedLanguage)
-                            }
-                            className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-sm text-zinc-900 dark:text-zinc-100"
-                        >
-                            {LANGUAGES.map((l) => (
-                                <option key={l.code} value={l.code}>
-                                    {l.flag} {l.nativeName}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                )}
-                {isSocio && (
-                    <span className="text-lg" title={LANGUAGES.find((l) => l.code === language)?.nativeName}>
-                        {LANGUAGES.find((l) => l.code === language)?.flag}
-                    </span>
-                )}
+                <label className="flex items-center gap-1 text-xs text-zinc-500">
+                    <span className="sr-only">Language</span>
+                    <select
+                        value={language}
+                        onChange={(e) => void handleLanguageChange(e.target.value as SupportedLanguage)}
+                        className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-sm text-zinc-900 dark:text-zinc-100"
+                    >
+                        {LANGUAGES.map((l) => (
+                            <option key={l.code} value={l.code}>
+                                {l.flag} {l.nativeName}
+                            </option>
+                        ))}
+                    </select>
+                </label>
                 <button
                     type="button"
                     onClick={handleLogout}

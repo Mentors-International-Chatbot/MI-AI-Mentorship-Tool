@@ -25,7 +25,7 @@ async function invokeWithRetry(
             const response = await chat.invoke(messages);
             return typeof response.content === 'string'
                 ? response.content
-                : JSON.stringify(response.content); 
+                : JSON.stringify(response.content);
         } catch (error) {
             lastError = error as Error;
             console.error(`[AI] Attempt ${attempt + 1}/${maxRetries + 1} failed:`, error);

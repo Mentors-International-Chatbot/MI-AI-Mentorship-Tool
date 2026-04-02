@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useDashboardLang } from '../../DashboardLangContext';
 
 export function SendMessageForm({ socioId }: { socioId: string }) {
   const { t } = useDashboardLang();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -32,6 +33,7 @@ export function SendMessageForm({ socioId }: { socioId: string }) {
 
       setText('');
       setSent(true);
+      textareaRef.current?.focus();
       setTimeout(() => setSent(false), 3000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t.sendError);
@@ -43,6 +45,7 @@ export function SendMessageForm({ socioId }: { socioId: string }) {
   return (
     <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-4">
       <textarea
+        ref={textareaRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={t.sendPlaceholder}

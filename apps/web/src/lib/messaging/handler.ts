@@ -110,6 +110,12 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         };
     }
 
+    // Update language if the client sends a different one (e.g. language switcher)
+    if (language && language !== socio.language) {
+        await repo.updateSocio(socio.id, { language });
+        socio = { ...socio, language };
+    }
+
     const userMsg = await repo.addMessage({
         socioId: socio.id,
         role: 'user',
