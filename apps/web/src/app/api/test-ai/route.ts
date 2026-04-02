@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
             name: socioName || 'Test User',
             businessDescription: businessDescription || null,
             status: 'ACTIVE' as const,
+            aiPaused: false,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
