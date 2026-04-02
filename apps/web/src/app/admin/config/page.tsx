@@ -18,7 +18,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   flagging: 'Flagging Thresholds',
   reminders: 'Reminders',
   onboarding: 'Onboarding',
+  sentiment: 'Sentiment',
+  summaries: 'Weekly summaries',
 };
+
+const SUMMARY_LANGUAGE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'es', label: 'Español' },
+  { value: 'en', label: 'English' },
+  { value: 'pt', label: 'Português' },
+];
 
 export default function AdminConfigPage() {
   const [configs, setConfigs] = useState<ConfigRow[]>([]);
@@ -154,6 +162,23 @@ function ConfigField({
               }`}
             />
           </button>
+        ) : type === 'string' && key === 'SUMMARY_LANGUAGE' ? (
+          <select
+            value={SUMMARY_LANGUAGE_OPTIONS.some((o) => o.value === value) ? value : 'es'}
+            onChange={(e) => {
+              const next = e.target.value;
+              onChange(key, next);
+              onSave(key, next);
+            }}
+            className="border rounded px-2 py-1.5 text-sm text-gray-900 min-w-[10rem]"
+            aria-label={label}
+          >
+            {SUMMARY_LANGUAGE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         ) : (
           <>
             <input

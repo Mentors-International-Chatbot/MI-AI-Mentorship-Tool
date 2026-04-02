@@ -40,6 +40,7 @@ export default function AdminSociosPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -67,6 +68,48 @@ export default function AdminSociosPage() {
       .then((data) => setMentors(data.map((m: MentorOption) => ({ id: m.id, name: m.name }))));
   }, []);
 
+  function toggleSocioSelected(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function toggleSelectAllOnPage() {
+    const pageIds = socios.map((s) => s.id);
+    const allSelected =
+      pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !pageIds.includes(id)));
+    } else {
+      setSelectedIds((prev) => [...new Set([...prev, ...pageIds])]);
+    }
+  }
+
+  async function deleteSelectedSocios() {
+    if (selectedIds.length === 0) return;
+    const labels = selectedIds.slice(0, 3).map((id) => {
+      const row = socios.find((s) => s.id === id);
+      return row?.name ?? id;
+    });
+    const suffix =
+      selectedIds.length > 3 ? ` and ${selectedIds.length - 3} more` : '';
+    if (
+      !confirm(
+        `Delete ${selectedIds.length} socios (${labels.join(', ')}${suffix})? This will remove all their messages, flags, progress, and summaries.`,
+      )
+    ) {
+      return;
+    }
+    await fetch('/api/admin/socios', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ socioIds: selectedIds }),
+    });
+    setSelectedIds([]);
+    setLoading(true);
+    setRefreshTick((v) => v + 1);
+  }
+
   async function deleteSocio(socioId: string, name: string | null) {
     if (!confirm(`Delete socio "${name ?? 'unnamed'}"? This will remove all their messages, flags, progress, and summaries.`)) return;
     await fetch('/api/admin/socios', {
@@ -74,6 +117,7 @@ export default function AdminSociosPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ socioId }),
     });
+    setSelectedIds((prev) => prev.filter((id) => id !== socioId));
     setLoading(true);
     setRefreshTick((v) => v + 1);
   }
@@ -98,10 +142,18 @@ export default function AdminSociosPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-900">
           All Socios <span className="text-gray-400 font-normal text-lg">({total})</span>
         </h2>
+        <button
+          type="button"
+          disabled={selectedIds.length === 0}
+          onClick={() => void deleteSelectedSocios()}
+          className="px-3 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-40 disabled:pointer-events-none"
+        >
+          Delete selected ({selectedIds.length})
+        </button>
       </div>
 
       {/* Filters */}
@@ -147,6 +199,18 @@ export default function AdminSociosPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-600">
                 <tr>
+                  <th className="w-10 px-2 py-3">
+                    <input
+                      type="checkbox"
+                      checked={
+                        socios.length > 0 &&
+                        socios.every((s) => selectedIds.includes(s.id))
+                      }
+                      onChange={toggleSelectAllOnPage}
+                      aria-label="Select all socios on this page"
+                      className="rounded border-gray-300"
+                    />
+                  </th>
                   <th className="text-left px-4 py-3">Status</th>
                   <th className="text-left px-4 py-3">Name</th>
                   <th className="text-left px-4 py-3">Business</th>
@@ -160,6 +224,15 @@ export default function AdminSociosPage() {
               <tbody className="divide-y">
                 {socios.map((s) => (
                   <tr key={s.id} className="hover:bg-gray-50">
+                    <td className="px-2 py-3 align-middle">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(s.id)}
+                        onChange={() => toggleSocioSelected(s.id)}
+                        aria-label={`Select socio ${s.name ?? s.id}`}
+                        className="rounded border-gray-300"
+                      />
+                    </td>
                     <td className="px-4 py-3">{flagBadge(s.flags)}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">
                       {s.name ?? <span className="text-gray-400">No name</span>}

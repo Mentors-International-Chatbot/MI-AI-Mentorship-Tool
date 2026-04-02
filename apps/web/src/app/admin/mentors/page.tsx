@@ -17,6 +17,7 @@ export default function AdminMentorsPage() {
   const [mentors, setMentors] = useState<MentorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   function loadMentors() {
     fetch('/api/admin/mentors')
@@ -32,6 +33,46 @@ export default function AdminMentorsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
+    setSelectedIds((prev) => prev.filter((x) => x !== id));
+    setLoading(true);
+    loadMentors();
+  }
+
+  function toggleMentorSelected(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function toggleSelectAllMentors() {
+    const ids = mentors.map((m) => m.id);
+    const allSelected =
+      ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+    } else {
+      setSelectedIds((prev) => [...new Set([...prev, ...ids])]);
+    }
+  }
+
+  async function deleteSelectedMentors() {
+    if (selectedIds.length === 0) return;
+    const labels = selectedIds.slice(0, 3).map((id) => mentors.find((m) => m.id === id)?.name ?? id);
+    const suffix =
+      selectedIds.length > 3 ? ` and ${selectedIds.length - 3} more` : '';
+    if (
+      !confirm(
+        `Delete ${selectedIds.length} mentors (${labels.join(', ')}${suffix})? Their socios will be unassigned.`,
+      )
+    ) {
+      return;
+    }
+    await fetch('/api/admin/mentors', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: selectedIds }),
+    });
+    setSelectedIds([]);
     setLoading(true);
     loadMentors();
   }
@@ -40,14 +81,24 @@ export default function AdminMentorsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Mentors</h2>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-        >
-          + Add Mentor
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={selectedIds.length === 0}
+            onClick={() => void deleteSelectedMentors()}
+            className="px-3 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            Delete selected ({selectedIds.length})
+          </button>
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+          >
+            + Add Mentor
+          </button>
+        </div>
       </div>
 
       {showCreate && (
@@ -63,8 +114,28 @@ export default function AdminMentorsPage() {
         <p className="text-gray-500">No mentors yet.</p>
       ) : (
         <div className="grid gap-4">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={
+                mentors.length > 0 &&
+                mentors.every((m) => selectedIds.includes(m.id))
+              }
+              onChange={toggleSelectAllMentors}
+              aria-label="Select all mentors on this page"
+              className="rounded border-gray-300"
+            />
+            <span>Select all</span>
+          </div>
           {mentors.map((m) => (
-            <div key={m.id} className="bg-white rounded-lg border p-4 flex items-center gap-6">
+            <div key={m.id} className="bg-white rounded-lg border p-4 flex items-center gap-4">
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(m.id)}
+                onChange={() => toggleMentorSelected(m.id)}
+                aria-label={`Select mentor ${m.name}`}
+                className="rounded border-gray-300 shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-gray-900">{m.name}</span>

@@ -76,11 +76,41 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(mentor, { status: 201 });
 }
 
+const BATCH_DELETE_MAX = 100;
+
 export async function DELETE(request: NextRequest) {
-  const { id } = (await request.json()) as { id?: string };
+  const body = (await request.json()) as { id?: string; ids?: string[] };
+
+  if (body.ids && Array.isArray(body.ids)) {
+    const ids = [...new Set(body.ids.filter((x): x is string => Boolean(x)))].slice(0, BATCH_DELETE_MAX);
+    if (ids.length === 0) {
+      return NextResponse.json({ error: 'ids must be a non-empty array' }, { status: 400 });
+    }
+
+    await prisma.socio.updateMany({
+      where: { mentorId: { in: ids } },
+      data: { mentorId: null },
+    });
+
+    await prisma.mentor.deleteMany({ where: { id: { in: ids } } });
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: 'admin',
+        action: 'deleted_mentor_batch',
+        targetType: 'mentor',
+        targetId: null,
+        metadata: { mentorIds: ids, count: ids.length },
+      },
+    });
+
+    return NextResponse.json({ success: true, deleted: ids.length });
+  }
+
+  const { id } = body;
 
   if (!id) {
-    return NextResponse.json({ error: 'id required' }, { status: 400 });
+    return NextResponse.json({ error: 'id or ids required' }, { status: 400 });
   }
 
   // Unassign any socios linked to this mentor first

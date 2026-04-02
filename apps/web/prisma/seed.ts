@@ -91,6 +91,8 @@ const CONFIG_SEEDS = [
   { key: 'SENTIMENT_URGENCY_RED',       value: '8', type: 'number', label: 'Urgency → Red Flag',           description: 'Urgency score at or above this triggers a RED flag',                 category: 'sentiment' },
   { key: 'SENTIMENT_CONFUSION_YELLOW',  value: '7', type: 'number', label: 'Confusion → Yellow Flag',      description: 'Confusion score at or above this triggers a YELLOW flag',             category: 'sentiment' },
   { key: 'SENTIMENT_FRUSTRATION_YELLOW', value: '7', type: 'number', label: 'Frustration → Yellow Flag',   description: 'Frustration score at or above this triggers a YELLOW flag',           category: 'sentiment' },
+  // ── Weekly summaries (mentor dashboard / cron) ──
+  { key: 'SUMMARY_LANGUAGE', value: 'es', type: 'string', label: 'Weekly summary language', description: 'Language for AI-generated weekly mentor summaries (cron and dashboard).', category: 'summaries' },
 ];
 
 async function main() {

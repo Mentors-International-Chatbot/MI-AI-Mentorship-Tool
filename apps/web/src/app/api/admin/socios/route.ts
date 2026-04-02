@@ -139,11 +139,48 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json(updated);
 }
 
+const BATCH_DELETE_MAX = 100;
+
 export async function DELETE(request: NextRequest) {
-  const { socioId } = (await request.json()) as { socioId?: string };
+  const body = (await request.json()) as { socioId?: string; socioIds?: string[] };
+
+  if (body.socioIds && Array.isArray(body.socioIds)) {
+    const ids = [...new Set(body.socioIds.filter((id): id is string => Boolean(id)))].slice(
+      0,
+      BATCH_DELETE_MAX,
+    );
+    if (ids.length === 0) {
+      return NextResponse.json({ error: 'socioIds must be a non-empty array' }, { status: 400 });
+    }
+
+    await prisma.$transaction([
+      prisma.messageSentiment.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.message.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.socioFlag.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.lessonProgress.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.socioProgress.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.summary.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.financialSnapshot.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.socio.deleteMany({ where: { id: { in: ids } } }),
+    ]);
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: 'admin',
+        action: 'deleted_socio_batch',
+        targetType: 'socio',
+        targetId: null,
+        metadata: { socioIds: ids, count: ids.length },
+      },
+    });
+
+    return NextResponse.json({ success: true, deleted: ids.length });
+  }
+
+  const { socioId } = body;
 
   if (!socioId) {
-    return NextResponse.json({ error: 'socioId required' }, { status: 400 });
+    return NextResponse.json({ error: 'socioId or socioIds required' }, { status: 400 });
   }
 
   // Delete all related records first (no cascade in schema)

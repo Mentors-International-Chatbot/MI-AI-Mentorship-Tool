@@ -17,6 +17,8 @@ const DEFAULTS: Record<string, string> = {
   SENTIMENT_URGENCY_RED: '8',
   SENTIMENT_CONFUSION_YELLOW: '7',
   SENTIMENT_FRUSTRATION_YELLOW: '7',
+  /** Weekly mentor-facing AI summary output: es | en | pt */
+  SUMMARY_LANGUAGE: 'es',
 };
 
 // ─── In-memory cache (60s TTL) ──────────────────────────────────────
