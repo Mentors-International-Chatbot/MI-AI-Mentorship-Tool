@@ -47,6 +47,7 @@ export const inMemoryRepo: Repo = {
             language: 'es',
             name: null,
             status: "NEW",
+            aiPaused: false,
             mentorId: null,
             createdAt: new Date(),
             updatedAt: new Date(),
