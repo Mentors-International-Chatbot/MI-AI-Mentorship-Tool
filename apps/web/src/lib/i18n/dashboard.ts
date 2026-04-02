@@ -25,6 +25,11 @@ export interface DashboardStrings {
   roleAI: string;
   roleMentor: string;
   roleSystem: string;
+  // AI toggle
+  aiActive: string;
+  aiPausedLabel: string;
+  takeOver: string;
+  handBackToAi: string;
   // Send message
   sendPlaceholder: string;
   sendButton: string;
@@ -75,6 +80,10 @@ const es: DashboardStrings = {
   roleAI: 'IA',
   roleMentor: 'Mentor',
   roleSystem: 'Sistema',
+  aiActive: 'Chatbot activo',
+  aiPausedLabel: 'Chatbot pausado',
+  takeOver: 'Pausar chatbot y responder manualmente',
+  handBackToAi: 'Devolver control al chatbot',
   sendPlaceholder: 'Escribir mensaje como mentor...',
   sendButton: 'Enviar mensaje',
   sending: 'Enviando...',
@@ -121,6 +130,10 @@ const en: DashboardStrings = {
   roleAI: 'AI',
   roleMentor: 'Mentor',
   roleSystem: 'System',
+  aiActive: 'Chatbot active',
+  aiPausedLabel: 'Chatbot paused',
+  takeOver: 'Pause chatbot & respond manually',
+  handBackToAi: 'Hand back to chatbot',
   sendPlaceholder: 'Write a message as mentor...',
   sendButton: 'Send message',
   sending: 'Sending...',
@@ -167,6 +180,10 @@ const pt: DashboardStrings = {
   roleAI: 'IA',
   roleMentor: 'Mentor',
   roleSystem: 'Sistema',
+  aiActive: 'Chatbot ativo',
+  aiPausedLabel: 'Chatbot pausado',
+  takeOver: 'Pausar chatbot e responder manualmente',
+  handBackToAi: 'Devolver controle ao chatbot',
   sendPlaceholder: 'Escrever mensagem como mentor...',
   sendButton: 'Enviar mensagem',
   sending: 'Enviando...',

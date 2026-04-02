@@ -7,7 +7,7 @@ This document consolidates the Project Charter, Task List, and Technical Impleme
 # Part 1: Project Charter
 
 ## 1. Project Overview
-**One-Sentence Goal**: Design and pilot an AI-powered WhatsApp mentoring system that delivers Mentors International–aligned, personalized, 24/7 support to socios while reducing mentor workload and maintaining high socio satisfaction.
+**One-Sentence Goal** Design and pilot an AI-powered WhatsApp mentoring system that delivers Mentors International–aligned, personalized, 24/7 support to socios while reducing mentor workload and maintaining high socio satisfaction.
 
 **Primary Users**:
 - Socios (micro-entrepreneurs in Colombia)

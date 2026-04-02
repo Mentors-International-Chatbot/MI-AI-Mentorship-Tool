@@ -123,6 +123,17 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
     await repo.touchInteraction(socio.id);
 
+    // If a mentor has taken over, skip AI entirely
+    if (socio.aiPaused) {
+        return {
+            responseText: '',
+            mode: InteractionMode.LESSON_DELIVERY,
+            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },
+            socioId: socio.id,
+            isNewSocio,
+        };
+    }
+
     const aiResponse = await generateAIResponse(socio, message);
 
     for (const flag of aiResponse.markers.flags) {

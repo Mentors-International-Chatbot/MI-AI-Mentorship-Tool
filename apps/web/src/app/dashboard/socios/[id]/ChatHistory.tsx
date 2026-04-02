@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { useDashboardLang } from '../../DashboardLangContext';
 
 type SerializedMessage = {
@@ -16,8 +17,54 @@ const ROLE_STYLES: Record<string, string> = {
   system: 'bg-gray-100 text-gray-500 mr-auto italic',
 };
 
-export function ChatHistory({ messages }: { messages: SerializedMessage[] }) {
+export function ChatHistory({
+  socioId,
+  messages: initialMessages,
+}: {
+  socioId: string;
+  messages: SerializedMessage[];
+}) {
   const { lang, t } = useDashboardLang();
+  const [messages, setMessages] = useState<SerializedMessage[]>(initialMessages);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const lastTimestampRef = useRef<string | null>(
+    initialMessages.length > 0
+      ? initialMessages[initialMessages.length - 1].createdAt
+      : null,
+  );
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Poll for new messages every 3 seconds
+  useEffect(() => {
+    const poll = async () => {
+      const since = lastTimestampRef.current;
+      const url = `/api/dashboard/socios/${socioId}/conversation${since ? `?since=${encodeURIComponent(since)}` : ''}`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = (await res.json()) as { messages: SerializedMessage[] };
+        if (data.messages.length === 0) return;
+
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMsgs = data.messages.filter((m) => !existingIds.has(m.id));
+          if (newMsgs.length === 0) return prev;
+          const updated = [...prev, ...newMsgs];
+          lastTimestampRef.current = updated[updated.length - 1].createdAt;
+          return updated;
+        });
+      } catch {
+        // ignore poll errors silently
+      }
+    };
+
+    const interval = setInterval(poll, 3000);
+    return () => clearInterval(interval);
+  }, [socioId]);
 
   const roleLabels: Record<string, string> = {
     user: t.roleSocio,
@@ -50,6 +97,7 @@ export function ChatHistory({ messages }: { messages: SerializedMessage[] }) {
             <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
           </div>
         ))}
+        <div ref={bottomRef} />
       </div>
     </div>
   );

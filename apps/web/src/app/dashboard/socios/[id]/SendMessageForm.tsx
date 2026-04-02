@@ -47,7 +47,7 @@ export function SendMessageForm({ socioId }: { socioId: string }) {
         onChange={(e) => setText(e.target.value)}
         placeholder={t.sendPlaceholder}
         rows={3}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2A4A] resize-none"
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B2A4A] resize-none"
       />
       <div className="flex items-center justify-between mt-2">
         <div className="text-sm">

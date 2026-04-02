@@ -46,6 +46,7 @@ function toSocio(p: PrismaSocio): Socio {
         businessDescription: p.businessDescription,
         status: p.status,
         promptOverrides: p.promptOverrides as Record<string, unknown> | null,
+        aiPaused: p.aiPaused,
         mentorId: p.mentorId,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
@@ -167,6 +168,7 @@ export const prismaRepo: Repo = {
                 businessDescription: data.businessDescription,
                 status: data.status as OnboardingStatus | undefined,
                 promptOverrides: data.promptOverrides !== undefined ? (data.promptOverrides as object ?? undefined) : undefined,
+                aiPaused: data.aiPaused,
             },
         });
         return toSocio(socio);

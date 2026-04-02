@@ -39,6 +39,7 @@ model Socio {
   businessDescription String?          @map("business_description")
   status              OnboardingStatus @default(NEW)
   promptOverrides     Json?            @map("prompt_overrides")
+  aiPaused            Boolean          @default(false) @map("ai_paused")
   metadata            Json?
   mentorId            String?          @map("mentor_id")
   createdAt           DateTime         @default(now()) @map("created_at")

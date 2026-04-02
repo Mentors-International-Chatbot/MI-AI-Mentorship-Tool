@@ -68,11 +68,13 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
     // 3. Fetch conversation history (last 10 messages for context)
     const recentHistory = await repo.getMessages(socio.id, 10);
 
-    const previousMessages = recentHistory.map((msg: Message) => {
-        if (msg.role === 'user') return new HumanMessage(msg.content);
-        if (msg.role === 'assistant') return new AIMessage(msg.content);
-        return new SystemMessage(msg.content);
-    });
+    const previousMessages = recentHistory
+        .map((msg: Message) => {
+            if (msg.role === 'user') return new HumanMessage(msg.content);
+            if (msg.role === 'assistant' || msg.role === 'mentor') return new AIMessage(msg.content);
+            return null; // skip system messages — only allowed at position 0
+        })
+        .filter((m): m is HumanMessage | AIMessage => m !== null);
 
     const messages = [
         new SystemMessage(systemPrompt),

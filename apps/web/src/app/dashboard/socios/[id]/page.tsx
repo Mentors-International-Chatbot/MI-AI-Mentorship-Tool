@@ -11,6 +11,7 @@ import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/language
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
 import { ChatHistory } from './ChatHistory';
 import { SendMessageForm } from './SendMessageForm';
+import { AiToggleButton } from './AiToggleButton';
 import { SliderPanel } from './SliderPanel';
 import { FlagsPanel } from './FlagsPanel';
 import { LessonProgressPanel } from './LessonProgressPanel';
@@ -129,7 +130,8 @@ export default async function SocioDetailPage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column: Chat + Send */}
         <div className="lg:col-span-2 space-y-4">
-          <ChatHistory messages={serializedMessages} />
+          <AiToggleButton socioId={id} initialAiPaused={socio.aiPaused} />
+          <ChatHistory socioId={id} messages={serializedMessages} />
           <SendMessageForm socioId={id} />
         </div>
 

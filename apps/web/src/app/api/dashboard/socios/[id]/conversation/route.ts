@@ -12,9 +12,13 @@ export async function GET(
   if (!auth.authorized) return auth.response;
 
   const limit = Number(req.nextUrl.searchParams.get('limit') ?? 50);
+  const since = req.nextUrl.searchParams.get('since');
 
   const messages = await prisma.message.findMany({
-    where: { socioId },
+    where: {
+      socioId,
+      ...(since ? { createdAt: { gt: new Date(since) } } : {}),
+    },
     orderBy: { createdAt: 'desc' },
     take: limit,
     include: {

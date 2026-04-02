@@ -20,6 +20,7 @@ export type Socio = {
     businessDescription?: string | null;
     status: SocioStatus;
     promptOverrides?: Record<string, unknown> | null;
+    aiPaused: boolean;
     mentorId?: string | null;
     createdAt: Date;
     updatedAt: Date;
