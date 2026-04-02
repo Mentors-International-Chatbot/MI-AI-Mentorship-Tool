@@ -215,8 +215,11 @@ function CreateMentorForm({
       <h3 className="text-lg font-semibold mb-4">Add New Mentor</h3>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <label htmlFor="create-mentor-name" className="block text-sm font-medium text-gray-700 mb-1">
+            Name
+          </label>
           <input
+            id="create-mentor-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full border rounded px-3 py-2 text-gray-900"
@@ -224,8 +227,11 @@ function CreateMentorForm({
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <label htmlFor="create-mentor-email" className="block text-sm font-medium text-gray-700 mb-1">
+            Email
+          </label>
           <input
+            id="create-mentor-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -234,8 +240,11 @@ function CreateMentorForm({
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+          <label htmlFor="create-mentor-role" className="block text-sm font-medium text-gray-700 mb-1">
+            Role
+          </label>
           <select
+            id="create-mentor-role"
             value={role}
             onChange={(e) => setRole(e.target.value)}
             className="w-full border rounded px-3 py-2 text-gray-900"
@@ -245,8 +254,11 @@ function CreateMentorForm({
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <label htmlFor="create-mentor-password" className="block text-sm font-medium text-gray-700 mb-1">
+            Password
+          </label>
           <input
+            id="create-mentor-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
