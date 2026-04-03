@@ -16,19 +16,30 @@ import type { SupportedLanguage } from '@/lib/i18n/languages';
 //
 // Total: ~950 tokens (vs ~3,000+ for a monolithic prompt)
 
+function stripInternalPromptOverrides(raw: unknown): PromptOverrides | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = { ...(raw as Record<string, unknown>) };
+  delete o.awaitingFeedback;
+  delete o.feedbackLessonNum;
+  if (Object.keys(o).length === 0) return null;
+  return o as PromptOverrides;
+}
+
 export async function buildSystemPrompt(
   socio: Socio,
   routerResult: RouterResult,
   progress?: SocioProgress,
 ): Promise<string> {
-  const overrides = (socio as Record<string, unknown>).promptOverrides as PromptOverrides | null;
+  const overrides = stripInternalPromptOverrides(
+    (socio as Record<string, unknown>).promptOverrides,
+  );
   const language = (socio.language || 'es') as SupportedLanguage;
 
   // Layer 1: Core identity + tone override + sliders + language directive (DB-backed)
   const layer1 = await buildCorePrompt(overrides ?? undefined, language);
 
-  // Layer 2: Socio context
-  const layer2 = buildContextPrompt(socio, progress);
+  // Layer 2: Socio context (now async — fetches persistent SocioContext from DB)
+  const layer2 = await buildContextPrompt(socio, progress);
 
   // Layer 3: Task context (mode-specific instructions)
   const layer3 = buildTaskPrompt(socio, routerResult, progress);

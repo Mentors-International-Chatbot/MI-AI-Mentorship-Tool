@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/messaging/handler';
 import { WhatsAppChannel } from '@/lib/delivery';
+import { logEvent } from '@/lib/logging/logger';
 
 // Verify Webhook (GET)
 export async function GET(req: NextRequest) {
@@ -35,8 +36,15 @@ export async function POST(req: NextRequest) {
                         const message = change.value.messages[0];
                         const senderPhone = message.from;
                         const textBody = message.text?.body;
+                        const messageType =
+                            typeof message.type === 'string' ? message.type : 'unknown';
 
                         if (!textBody) continue;
+
+                        void logEvent('info', 'webhook', 'Incoming WhatsApp message', {
+                            from: senderPhone,
+                            messageType,
+                        });
 
                         await handleIncomingMessage({
                             externalId: senderPhone,
@@ -52,6 +60,9 @@ export async function POST(req: NextRequest) {
         return new NextResponse('EVENT_RECEIVED', { status: 200 });
     } catch (error) {
         console.error('Webhook Error:', error);
+        void logEvent('error', 'webhook', 'Webhook processing failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
         return new NextResponse('Internal Server Error', { status: 500 });
     }
 }

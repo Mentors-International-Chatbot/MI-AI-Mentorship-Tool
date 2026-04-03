@@ -19,6 +19,10 @@ const DEFAULTS: Record<string, string> = {
   SENTIMENT_FRUSTRATION_YELLOW: '7',
   /** Weekly mentor-facing AI summary output: es | en | pt */
   SUMMARY_LANGUAGE: 'es',
+  /** Ask socios for satisfaction feedback every N completed lessons */
+  FEEDBACK_EVERY_N_LESSONS: '5',
+  /** Display name the AI uses when introducing itself (web + WhatsApp prompts) */
+  CHATBOT_NAME: 'Martín',
 };
 
 // ─── In-memory cache (60s TTL) ──────────────────────────────────────
@@ -68,6 +72,20 @@ export async function getConfigNumber(key: string): Promise<number> {
 export async function getConfigBool(key: string): Promise<boolean> {
   const raw = await getConfigRaw(key);
   return raw === 'true';
+}
+
+/** String config value (trimmed). Empty string falls back to `DEFAULTS[key]` via `getConfigRaw`. */
+export async function getConfigString(key: string): Promise<string> {
+  return (await getConfigRaw(key)).trim();
+}
+
+const FALLBACK_CHATBOT_DISPLAY_NAME = 'Mentor Virtual';
+
+/** Sanitized chatbot persona name for prompts and UI. */
+export async function getChatbotDisplayName(): Promise<string> {
+  const raw = await getConfigString('CHATBOT_NAME');
+  const n = raw.slice(0, 80).replace(/[\r\n]/g, ' ').trim();
+  return n || FALLBACK_CHATBOT_DISPLAY_NAME;
 }
 
 /** Get all config values as a key→value map. */

@@ -16,6 +16,7 @@ import { SliderPanel } from './SliderPanel';
 import { FlagsPanel } from './FlagsPanel';
 import { LessonProgressPanel } from './LessonProgressPanel';
 import { SummaryPanel } from './SummaryPanel';
+import { RevenueChart } from './RevenueChart';
 
 const STATUS_COLORS: Record<string, string> = {
   RED: 'bg-red-500',
@@ -48,18 +49,37 @@ export default async function SocioDetailPage({
     notFound();
   }
 
-  const [health, progress, flags, lessonProgress, messages, summaries] = await Promise.all([
-    computeSocioHealth(id),
-    repo.getSocioProgress(id),
-    repo.getFlags(id),
-    repo.getLessonProgressAll(id),
-    repo.getMessages(id, 50),
-    prisma.summary.findMany({
-      where: { socioId: id },
-      orderBy: { weekStartDate: 'desc' },
-      take: 8,
-    }),
-  ]);
+  const [health, progress, flags, lessonProgress, messages, summaries, financialRows, latestFeedback] =
+    await Promise.all([
+      computeSocioHealth(id),
+      repo.getSocioProgress(id),
+      repo.getFlags(id),
+      repo.getLessonProgressAll(id),
+      repo.getMessages(id, 50),
+      prisma.summary.findMany({
+        where: { socioId: id },
+        orderBy: { weekStartDate: 'desc' },
+        take: 8,
+      }),
+      prisma.financialSnapshot.findMany({
+        where: { socioId: id },
+        orderBy: { weekStartDate: 'desc' },
+        take: 20,
+      }),
+      prisma.socioFeedback.findFirst({
+        where: { socioId: id },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+  const serializedFinancials = [...financialRows]
+    .reverse()
+    .map((f) => ({
+      id: f.id,
+      revenue: f.revenue,
+      netProfit: f.netProfit,
+      weekStartDate: f.weekStartDate.toISOString(),
+    }));
 
   const overrides = (socio.promptOverrides ?? {}) as Record<string, number | string | undefined>;
 
@@ -70,8 +90,9 @@ export default async function SocioDetailPage({
     createdAt: m.createdAt.toISOString(),
   }));
 
-  const serializedFlags = flags.map(f => ({
+  const serializedFlags = flags.map((f) => ({
     ...f,
+    source: f.source,
     resolvedAt: f.resolvedAt?.toISOString() ?? null,
     createdAt: f.createdAt.toISOString(),
   }));
@@ -115,10 +136,16 @@ export default async function SocioDetailPage({
           <span className={`inline-block w-4 h-4 rounded-full ${STATUS_COLORS[health.status]}`} />
           <h2 className="text-2xl font-bold text-gray-900">{socio.name || t.noName}</h2>
         </div>
-        <div className="flex gap-4 mt-1 text-sm text-gray-500">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-gray-500">
           <span>{t.channel}: {socio.channelType}</span>
           <span>{t.language}: {socio.language}</span>
           <span>{t.currentLesson}: {progress.currentLessonNumber}</span>
+          {latestFeedback?.rating != null && (
+            <span>
+              {t.satisfactionLabel}:{' '}
+              <span className="font-medium text-gray-900">{latestFeedback.rating}/10</span>
+            </span>
+          )}
         </div>
         <div className="mt-1 text-sm text-gray-500">
           {health.reasons.map((r, i) => (
@@ -143,9 +170,10 @@ export default async function SocioDetailPage({
             initialWarmth={(overrides.warmth as number) ?? 0.5}
             initialPositivity={(overrides.positivity as number) ?? 0.5}
           />
-          <FlagsPanel flags={serializedFlags} />
+          <FlagsPanel flags={serializedFlags} socioId={id} />
           <LessonProgressPanel lessonProgress={serializedLessonProgress} />
           <SummaryPanel socioId={id} summaries={serializedSummaries} />
+          <RevenueChart data={serializedFinancials} />
         </div>
       </div>
     </div>

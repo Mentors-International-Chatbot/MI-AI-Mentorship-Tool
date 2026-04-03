@@ -18,6 +18,19 @@ model SystemPrompt {
   @@map("system_prompts")
 }
 
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String // "info", "warn", "error"
+  category  String // "ai", "webhook", "auth", "cron", "system"
+  message   String
+  metadata  String? // JSON string
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([category, createdAt])
+  @@index([level, createdAt])
+  @@map("system_logs")
+}
+
 enum OnboardingStatus {
   NEW
   AWAITING_LANGUAGE
@@ -53,18 +66,34 @@ model Socio {
   lessonProgress LessonProgress[]
   sentiments MessageSentiment[]
   financialSnapshots FinancialSnapshot[]
+  context            SocioContext?
+  feedback           SocioFeedback[]
 
   @@unique([channelType, externalId], map: "socios_channel_external_id_key")
   @@map("socios")
 }
 
-model Mentor {
+model SocioFeedback {
   id        String   @id @default(uuid())
-  name      String
-  email        String   @unique
-  passwordHash String?  @map("password_hash")
-  role         String   // "mentor", "admin"
+  socioId   String   @map("socio_id")
+  lessonNum Int      @map("lesson_num")
+  rating    Int?
+  comment   String?
   createdAt DateTime @default(now()) @map("created_at")
+
+  socio Socio @relation(fields: [socioId], references: [id], onDelete: Cascade)
+
+  @@map("socio_feedback")
+}
+
+model Mentor {
+  id                 String   @id @default(uuid())
+  name               String
+  email              String   @unique
+  passwordHash       String?  @map("password_hash")
+  role               String   // "mentor", "admin"
+  preferredLanguage  String   @default("en") @map("preferred_language")
+  createdAt          DateTime @default(now()) @map("created_at")
 
   socios Socio[]
 
@@ -212,6 +241,27 @@ model MessageSentiment {
   socio   Socio   @relation(fields: [socioId], references: [id])
 
   @@map("message_sentiments")
+}
+
+model SocioContext {
+  id               String   @id @default(uuid())
+  socioId          String   @unique @map("socio_id")
+  businessType     String?  @map("business_type")
+  products         String?  @map("products")
+  monthlyRevenue   String?  @map("monthly_revenue")
+  monthlyExpenses  String?  @map("monthly_expenses")
+  numEmployees     String?  @map("num_employees")
+  location         String?  @map("location")
+  challenges       String?  @map("challenges")
+  goals            String?  @map("goals")
+  familyContext    String?  @map("family_context")
+  customFacts      String?  @map("custom_facts")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  socio Socio @relation(fields: [socioId], references: [id])
+
+  @@map("socio_contexts")
 }
 
 model FinancialSnapshot {

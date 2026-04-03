@@ -4,10 +4,12 @@ import { generateAIResponse } from '@/lib/ai/service';
 import { InteractionMode, parseScore, type ParsedMarkers } from '@/lib/ai/prompts';
 import { hasLessonData } from '@/lib/lessons/data';
 import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
+import { extractAndStoreContext } from '@/lib/ai/contextExtractor';
 import { prisma } from '@/lib/db';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
 import { LESSON_MESSAGES, type SupportedLanguage } from '@/lib/i18n/languages';
 import { MAX_LESSON_NUMBER } from '@/lib/ai/prompts/constants';
+import { getConfigNumber } from '@/lib/config/service';
 
 export interface HandleMessageInput {
     externalId: string;
@@ -129,12 +131,93 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
     await repo.touchInteraction(socio.id);
 
-    // If a mentor has taken over, skip AI entirely
     if (socio.aiPaused) {
         return {
             responseText: '',
             mode: InteractionMode.LESSON_DELIVERY,
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },
+            socioId: socio.id,
+            isNewSocio,
+        };
+    }
+
+    const promptOverridesRaw = socio.promptOverrides as Record<string, unknown> | null;
+    if (promptOverridesRaw?.awaitingFeedback === true) {
+        const scoreMatch = message.match(/\b(\d{1,2})\b/);
+        const parsed = scoreMatch ? parseInt(scoreMatch[1], 10) : NaN;
+        const rating = Number.isFinite(parsed) ? parsed : NaN;
+        const lessonNum =
+            typeof promptOverridesRaw.feedbackLessonNum === 'number'
+                ? promptOverridesRaw.feedbackLessonNum
+                : Number(promptOverridesRaw.feedbackLessonNum) || 0;
+
+        if (rating >= 1 && rating <= 10) {
+            await prisma.socioFeedback.create({
+                data: {
+                    socioId: socio.id,
+                    lessonNum,
+                    rating,
+                    comment: message.trim() || null,
+                },
+            });
+
+            const rest = { ...promptOverridesRaw };
+            delete rest.awaitingFeedback;
+            delete rest.feedbackLessonNum;
+            await repo.updateSocio(socio.id, {
+                promptOverrides:
+                    Object.keys(rest).length > 0 ? (rest as Record<string, unknown>) : null,
+            });
+
+            const thankYou =
+                '¡Gracias por compartir tu opinión! Lo que nos cuentas nos ayuda a mejorar. ¿En qué más te puedo ayudar hoy?';
+
+            await repo.addMessage({
+                socioId: socio.id,
+                role: 'assistant',
+                content: thankYou,
+                senderType: 'ai',
+            } as Parameters<typeof repo.addMessage>[0]);
+
+            await channel.sendMessage(externalId, thankYou);
+
+            return {
+                responseText: thankYou,
+                mode: InteractionMode.LESSON_DELIVERY,
+                markers: {
+                    cleanText: thankYou,
+                    flags: [],
+                    lessonsCompleted: [],
+                    escalations: [],
+                    financials: [],
+                },
+                socioId: socio.id,
+                isNewSocio,
+            };
+        }
+
+        const nudge =
+            'Por favor responde con un número del 1 al 10 (qué tan útil ha sido el programa para tu negocio). Puedes añadir un comentario si quieres.';
+
+        await repo.addMessage({
+            socioId: socio.id,
+            role: 'assistant',
+            content: nudge,
+            senderType: 'ai',
+        } as Parameters<typeof repo.addMessage>[0]);
+
+        await channel.sendMessage(externalId, nudge);
+
+        return {
+            responseText: nudge,
+            mode: InteractionMode.LESSON_DELIVERY,
+            markers: {
+                cleanText: nudge,
+                flags: [],
+                lessonsCompleted: [],
+                escalations: [],
+                financials: [],
+            },
             socioId: socio.id,
             isNewSocio,
         };
@@ -150,15 +233,6 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             source: 'ai_marker',
         });
         console.log(`[Flag:${flag.level}] socio=${socio.id} reason=${flag.reason}`);
-    }
-    for (const escalation of aiResponse.markers.escalations) {
-        await repo.createFlag({
-            socioId: socio.id,
-            level: 'RED',
-            reason: `Escalación: ${escalation}`,
-            source: 'ai_marker',
-        });
-        console.log(`[Escalation Persisted] socio=${socio.id} reason=${escalation}`);
     }
 
     for (const lessonNum of aiResponse.markers.lessonsCompleted) {
@@ -214,6 +288,52 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             : lm.courseComplete;
 
         responseText = responseText + completionSuffix;
+
+        let feedbackInterval = 5;
+        try {
+            feedbackInterval = await getConfigNumber('FEEDBACK_EVERY_N_LESSONS');
+        } catch {
+            feedbackInterval = 5;
+        }
+        if (!Number.isFinite(feedbackInterval) || feedbackInterval < 1) {
+            feedbackInterval = 5;
+        }
+
+        if (completedNum > 0 && completedNum % feedbackInterval === 0) {
+            const feedbackPrompt = `\n\n💬 ¡Has completado ${completedNum} lecciones! Me encantaría saber tu opinión. Del 1 al 10, ¿qué tan útil ha sido este programa para tu negocio? Puedes agregar cualquier comentario.`;
+            responseText += feedbackPrompt;
+
+            const existingPo = (socio.promptOverrides || {}) as Record<string, unknown>;
+            await repo.updateSocio(socio.id, {
+                promptOverrides: {
+                    ...existingPo,
+                    awaitingFeedback: true,
+                    feedbackLessonNum: completedNum,
+                },
+            });
+        }
+    }
+
+    if (aiResponse.markers.escalations.length > 0) {
+        for (const reason of aiResponse.markers.escalations) {
+            await repo.createFlag({
+                socioId: socio.id,
+                level: 'RED',
+                reason: `Solicitud de escalación: ${reason}`,
+                source: 'ai_marker',
+            });
+            console.log(`[Escalation Persisted] socio=${socio.id} reason=${reason}`);
+        }
+
+        const escalationConfirmation =
+            '\n\n📋 He notificado a tu mentor humano. Te contactará lo más pronto posible. Mientras tanto, puedo seguir ayudándote con cualquier pregunta.';
+        responseText = responseText + escalationConfirmation;
+
+        if (socio.mentorId) {
+            console.log(
+                `[ESCALATE] Socio ${socio.id} (${socio.name ?? 'unknown'}) requested mentor contact. Mentor: ${socio.mentorId}`,
+            );
+        }
     }
 
     await repo.addMessage({
@@ -222,6 +342,11 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         content: responseText,
         senderType: 'ai',
     } as Parameters<typeof repo.addMessage>[0]);
+
+    // Context extraction — fire-and-forget, don't block the response
+    extractAndStoreContext(socio.id, message, responseText).catch(err =>
+        console.error('[ContextExtractor] Background extraction failed:', err)
+    );
 
     const isLessonMode =
         aiResponse.mode === InteractionMode.LESSON_DELIVERY ||

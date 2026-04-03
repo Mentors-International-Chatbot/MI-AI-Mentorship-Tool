@@ -7,12 +7,14 @@ const NAV_ITEMS = [
   { href: '/dashboard/socios', label: 'Mentor dashboard' },
   { href: '/chat', label: 'Web chat' },
   { href: '/admin', label: 'Overview' },
+  { href: '/admin/logs', label: 'Logs' },
   { href: '/admin/config', label: 'Config' },
   { href: '/admin/prompts', label: 'Prompts' },
   { href: '/admin/socios', label: 'Socios' },
   { href: '/admin/mentors', label: 'Mentors' },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/feedback', label: 'Feedback' },
+  { href: '/admin/socio-feedback', label: 'All satisfaction' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -5,6 +5,81 @@ import { computeSocioHealth } from '@/lib/health/service';
 
 export const dynamic = 'force-dynamic';
 
+const INTERNAL_OVERRIDE_KEYS = new Set(['awaitingFeedback', 'feedbackLessonNum']);
+
+const TONE_LABELS: Record<string, string> = {
+  more_encouraging: 'More encouraging',
+  more_direct: 'More direct',
+  simpler_language: 'Simpler language',
+  family_focused: 'Family focused',
+  struggling_business: 'Struggling business support',
+};
+
+const CONCISE_LABELS: Record<string, string> = {
+  very_brief: 'Very brief',
+  brief: 'Brief',
+  standard: 'Standard',
+  detailed: 'Detailed',
+  very_detailed: 'Very detailed',
+};
+
+function normalizeSliderTen(v: unknown): number {
+  const n = Number(v);
+  if (Number.isNaN(n)) return NaN;
+  return n <= 1 ? Math.round(n * 10) : Math.round(n);
+}
+
+function PromptOverridesDetail({
+  overrides,
+}: {
+  overrides: Record<string, unknown> | null;
+}) {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    return <p className="text-sm text-gray-500">Default settings.</p>;
+  }
+
+  const entries = Object.entries(overrides).filter(([k]) => !INTERNAL_OVERRIDE_KEYS.has(k));
+  if (entries.length === 0) {
+    return <p className="text-sm text-gray-500">Default settings.</p>;
+  }
+
+  const labels: Record<string, string> = {
+    warmth: 'Warmth',
+    complexity: 'Language Complexity',
+    positivity: 'Positivity',
+    toneOverride: 'Tone Override',
+    conciseness: 'Conciseness',
+  };
+
+  return (
+    <div className="space-y-2">
+      {entries.map(([key, value]) => {
+        const isSlider = ['warmth', 'complexity', 'positivity'].includes(key);
+        let displayVal: string;
+        if (isSlider) {
+          const ten = normalizeSliderTen(value);
+          displayVal = Number.isNaN(ten) ? String(value) : `${ten}/10`;
+        } else if (key === 'toneOverride') {
+          displayVal = TONE_LABELS[String(value)] ?? String(value);
+        } else if (key === 'conciseness') {
+          displayVal = CONCISE_LABELS[String(value)] ?? String(value);
+        } else if (typeof value === 'object' && value !== null) {
+          displayVal = JSON.stringify(value);
+        } else {
+          displayVal = String(value);
+        }
+
+        return (
+          <div key={key} className="flex items-center justify-between gap-3">
+            <span className="text-sm text-gray-600">{labels[key] ?? key}</span>
+            <span className="text-sm font-medium text-gray-900 text-right shrink-0">{displayVal}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default async function AdminSocioDetailPage({
   params,
 }: {
@@ -18,14 +93,19 @@ export default async function AdminSocioDetailPage({
   });
   if (!socio) return notFound();
 
-  const [health, progress, flags, lessonProgress, messages, financialSnapshots] = await Promise.all([
-    computeSocioHealth(id),
-    prisma.socioProgress.findUnique({ where: { socioId: id } }),
-    prisma.socioFlag.findMany({ where: { socioId: id }, orderBy: { createdAt: 'desc' } }),
-    prisma.lessonProgress.findMany({ where: { socioId: id }, orderBy: { lessonNumber: 'asc' } }),
-    prisma.message.findMany({ where: { socioId: id }, orderBy: { createdAt: 'desc' }, take: 50 }),
-    prisma.financialSnapshot.findMany({ where: { socioId: id }, orderBy: { weekStartDate: 'asc' }, take: 52 }),
-  ]);
+  const [health, progress, flags, lessonProgress, messages, financialSnapshots, feedback] =
+    await Promise.all([
+      computeSocioHealth(id),
+      prisma.socioProgress.findUnique({ where: { socioId: id } }),
+      prisma.socioFlag.findMany({ where: { socioId: id }, orderBy: { createdAt: 'desc' } }),
+      prisma.lessonProgress.findMany({ where: { socioId: id }, orderBy: { lessonNumber: 'asc' } }),
+      prisma.message.findMany({ where: { socioId: id }, orderBy: { createdAt: 'desc' }, take: 50 }),
+      prisma.financialSnapshot.findMany({ where: { socioId: id }, orderBy: { weekStartDate: 'asc' }, take: 52 }),
+      prisma.socioFeedback.findMany({
+        where: { socioId: id },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
   const healthColor =
     health.status === 'RED' ? 'bg-red-500' : health.status === 'YELLOW' ? 'bg-yellow-400' : 'bg-green-400';
@@ -130,16 +210,52 @@ export default async function AdminSocioDetailPage({
           )}
         </div>
 
+        {/* Socio satisfaction feedback */}
+        <div className="bg-white rounded-lg border p-4 lg:col-span-2">
+          <h3 className="font-semibold text-gray-900 mb-3">
+            Satisfaction Ratings ({feedback.length})
+          </h3>
+          {feedback.length === 0 ? (
+            <p className="text-sm text-gray-400">No feedback collected yet.</p>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {feedback.map((f) => (
+                <div key={f.id} className="flex items-start gap-3 text-sm">
+                  <span
+                    className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold flex-shrink-0 ${
+                      (f.rating ?? 0) >= 8
+                        ? 'bg-green-100 text-green-700'
+                        : (f.rating ?? 0) >= 5
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-red-100 text-red-700'
+                    }`}
+                  >
+                    {f.rating ?? '?'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-700">{f.comment || 'No comment'}</p>
+                    <p className="text-xs text-gray-400">
+                      After lesson {f.lessonNum} · {new Date(f.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Prompt Overrides */}
         <div className="bg-white rounded-lg border p-4">
           <h3 className="font-semibold text-gray-900 mb-3">Prompt Overrides</h3>
-          {socio.promptOverrides ? (
-            <pre className="text-sm text-gray-600 whitespace-pre-wrap">
-              {JSON.stringify(socio.promptOverrides, null, 2)}
-            </pre>
-          ) : (
-            <p className="text-sm text-gray-500">Default settings.</p>
-          )}
+          <PromptOverridesDetail
+            overrides={
+              socio.promptOverrides &&
+              typeof socio.promptOverrides === 'object' &&
+              !Array.isArray(socio.promptOverrides)
+                ? (socio.promptOverrides as Record<string, unknown>)
+                : null
+            }
+          />
         </div>
 
         {/* Recent conversation */}

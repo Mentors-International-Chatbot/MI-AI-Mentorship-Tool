@@ -78,6 +78,8 @@ const CONFIG_SEEDS = [
   // ── AI behavior ──
   { key: 'MAX_SENTENCES_PER_MESSAGE', value: '4',   type: 'number',  label: 'Max Sentences Per Message',   description: 'Max sentences the AI should use per WhatsApp message',               category: 'ai_behavior' },
   { key: 'MAX_EMOJIS_PER_MESSAGE',   value: '2',    type: 'number',  label: 'Max Emojis Per Message',      description: 'Max emojis the AI should use per message',                           category: 'ai_behavior' },
+  { key: 'FEEDBACK_EVERY_N_LESSONS', value: '5',    type: 'number',  label: 'Feedback Every N Lessons',    description: 'Ask for feedback every N completed lessons',                        category: 'ai_behavior' },
+  { key: 'CHATBOT_NAME', value: 'Martín', type: 'string', label: 'Chatbot Display Name', description: 'The name the AI chatbot uses to introduce itself', category: 'ai_behavior' },
   // ── Flagging ──
   { key: 'FLAG_YELLOW_THRESHOLD',   value: '5',     type: 'number',  label: 'Yellow Flag Threshold',       description: 'Score at or below this triggers a YELLOW flag',                      category: 'flagging' },
   { key: 'FLAG_RED_THRESHOLD',      value: '2',     type: 'number',  label: 'Red Flag Threshold',          description: 'Score at or below this triggers a RED flag',                         category: 'flagging' },

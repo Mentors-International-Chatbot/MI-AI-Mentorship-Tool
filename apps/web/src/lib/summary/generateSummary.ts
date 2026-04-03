@@ -1,7 +1,6 @@
 import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { prisma } from '@/lib/db';
-import { getConfigRaw } from '@/lib/config/service';
 import {
   DEFAULT_LANGUAGE,
   type SupportedLanguage,
@@ -61,7 +60,7 @@ ACTIVE FLAGS: ${ctx.activeFlagsLine}
 AVERAGE CONFUSION: ${ctx.avgConfusion}/10
 AVERAGE FRUSTRATION: ${ctx.avgFrustration}/10
 
-RECENT CONVERSATION:
+RECENT CONVERSATION (in Spanish — the socio speaks Spanish):
 ${ctx.recentConvo}
 
 Respond ONLY with valid JSON, no backticks:
@@ -85,7 +84,7 @@ BANDEIRAS ATIVAS: ${ctx.activeFlagsLine}
 CONFUSÃO MÉDIA: ${ctx.avgConfusion}/10
 FRUSTRAÇÃO MÉDIA: ${ctx.avgFrustration}/10
 
-CONVERSA RECENTE:
+CONVERSA RECENTE (em espanhol — o sócio fala espanhol):
 ${ctx.recentConvo}
 
 Responda APENAS com JSON válido, sem backticks:
@@ -109,7 +108,7 @@ BANDERAS ACTIVAS: ${ctx.activeFlagsLine}
 CONFUSIÓN PROMEDIO: ${ctx.avgConfusion}/10
 FRUSTRACIÓN PROMEDIO: ${ctx.avgFrustration}/10
 
-CONVERSACIÓN RECIENTE:
+CONVERSACIÓN RECIENTE (el socio escribe en español):
 ${ctx.recentConvo}
 
 Responde ÚNICAMENTE con JSON válido, sin backticks:
@@ -132,13 +131,15 @@ function systemMessageForLang(lang: SupportedLanguage): string {
   return 'Eres un asistente que genera resúmenes semanales en JSON. Responde SOLO con JSON válido.';
 }
 
+/**
+ * @param language Output language for the mentor-facing summary (es | en | pt).
+ *        Default `es`. Cron/dashboard pass the mentor’s preference explicitly.
+ */
 export async function generateSummary(
   socioId: string,
-  options?: { language?: string },
+  language: string = 'es',
 ): Promise<GeneratedSummary | null> {
-  const lang = normalizeSummaryLanguage(
-    options?.language ?? (await getConfigRaw('SUMMARY_LANGUAGE')),
-  );
+  const lang = normalizeSummaryLanguage(language);
 
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
