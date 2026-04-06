@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 type LogRow = {
   id: string;
@@ -13,19 +13,29 @@ type LogRow = {
 
 type Stats = { errorCount24h: number; totalEvents24h: number };
 
+type LogKindFilter = 'all' | 'error' | 'operational';
+
 export default function AdminLogsPage() {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [logKind, setLogKind] = useState<LogKindFilter>('all');
   const [level, setLevel] = useState('');
   const [category, setCategory] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
+  const buildQuery = useCallback(() => {
     const q = new URLSearchParams();
+    if (logKind === 'error') q.set('type', 'error');
+    else if (logKind === 'operational') q.set('type', 'operational');
     if (level) q.set('level', level);
     if (category) q.set('category', category);
     q.set('limit', '100');
+    return q;
+  }, [logKind, level, category]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const q = buildQuery();
 
     void (async () => {
       await Promise.resolve();
@@ -45,13 +55,10 @@ export default function AdminLogsPage() {
     return () => {
       cancelled = true;
     };
-  }, [level, category]);
+  }, [buildQuery]);
 
   async function refresh() {
-    const q = new URLSearchParams();
-    if (level) q.set('level', level);
-    if (category) q.set('category', category);
-    q.set('limit', '100');
+    const q = buildQuery();
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/logs?${q.toString()}`);
@@ -84,7 +91,39 @@ export default function AdminLogsPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="flex flex-wrap gap-3 mb-4 items-center">
+        <div
+          className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5"
+          role="radiogroup"
+          aria-label="Log kind"
+        >
+          {(
+            [
+              { id: 'all' as const, label: 'All' },
+              { id: 'operational' as const, label: 'Operational' },
+              { id: 'error' as const, label: 'Errors' },
+            ] as const
+          ).map(({ id, label }) => (
+            <label
+              key={id}
+              className={
+                logKind === id
+                  ? 'cursor-pointer rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-900 shadow-sm'
+                  : 'cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900'
+              }
+            >
+              <input
+                type="radio"
+                name="admin-log-kind"
+                value={id}
+                checked={logKind === id}
+                onChange={() => setLogKind(id)}
+                className="sr-only"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
         <select
           aria-label="Filter by level"
           value={level}
