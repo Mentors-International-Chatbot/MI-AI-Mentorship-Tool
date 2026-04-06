@@ -6,6 +6,9 @@ import {
     type SupportedLanguage,
     isSupportedLanguage,
     DEFAULT_LANGUAGE,
+    UI_STRINGS,
+    CHAT_SUBTITLE,
+    CHAT_EMPTY_STATE_SOCIO,
 } from '@/lib/i18n/languages';
 
 interface ChatMessage {
@@ -37,24 +40,6 @@ const LANGUAGES: { code: SupportedLanguage; flag: string; nativeName: string }[]
     { code: 'en', flag: '🇺🇸', nativeName: 'English' },
     { code: 'pt', flag: '🇧🇷', nativeName: 'Português' },
 ];
-
-const UI: Record<SupportedLanguage, { placeholder: string; send: string; error: string }> = {
-    es: {
-        placeholder: 'Escribe tu mensaje...',
-        send: 'Enviar',
-        error: 'Error al conectar con el servidor. Intenta de nuevo.',
-    },
-    en: {
-        placeholder: 'Type your message...',
-        send: 'Send',
-        error: 'Error connecting to the server. Please try again.',
-    },
-    pt: {
-        placeholder: 'Digite sua mensagem...',
-        send: 'Enviar',
-        error: 'Erro ao conectar com o servidor. Tente novamente.',
-    },
-};
 
 function coerceUiLanguage(raw: string | undefined): SupportedLanguage {
     if (raw && isSupportedLanguage(raw)) return raw;
@@ -481,7 +466,7 @@ export default function ChatPage() {
                     ...prev,
                     {
                         role: 'assistant',
-                        content: data.error ?? UI[language].error,
+                        content: data.error ?? UI_STRINGS[language].error,
                         createdAt: new Date().toISOString(),
                         isError: true,
                     },
@@ -505,7 +490,7 @@ export default function ChatPage() {
                 ...prev,
                 {
                     role: 'assistant',
-                    content: UI[language].error,
+                    content: UI_STRINGS[language].error,
                     createdAt: new Date().toISOString(),
                     isError: true,
                 },
@@ -544,7 +529,7 @@ export default function ChatPage() {
         );
     }
 
-    const ui = UI[language];
+    const ui = UI_STRINGS[language];
     const isSocio = session.role === 'socio';
 
     return (
@@ -559,8 +544,8 @@ export default function ChatPage() {
                     </h1>
                     <p className="text-xs text-zinc-500">
                         {isSocio && currentLesson !== null
-                            ? `Tu mentor virtual · Lección ${currentLesson} · Mentors International`
-                            : `Tu mentor virtual · Mentors International`}
+                            ? `${CHAT_SUBTITLE[language].mentor} · ${CHAT_SUBTITLE[language].lesson(currentLesson)} · Mentors International`
+                            : `${CHAT_SUBTITLE[language].mentor} · Mentors International`}
                     </p>
                 </div>
                 <label className="flex items-center gap-1 text-xs text-zinc-500">
@@ -590,9 +575,7 @@ export default function ChatPage() {
                 {messages.length === 0 && !isLoading && (
                     <div className="flex items-center justify-center h-full text-zinc-400 text-sm text-center px-8">
                         {isSocio ? (
-                            <>
-                                ¡Hola{session.name ? `, ${session.name}` : ''}! Escribe un mensaje para comenzar.
-                            </>
+                            CHAT_EMPTY_STATE_SOCIO[language](session.name || undefined)
                         ) : (
                             ui.placeholder
                         )}

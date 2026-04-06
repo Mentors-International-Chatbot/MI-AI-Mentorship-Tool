@@ -123,6 +123,32 @@ export const UI_STRINGS: Record<SupportedLanguage, UIStrings> = {
     },
 };
 
+/** Web chat header subtitle (mentor line + optional lesson; brand unchanged). */
+export const CHAT_SUBTITLE: Record<
+    SupportedLanguage,
+    { mentor: string; lesson: (n: number) => string }
+> = {
+    es: { mentor: 'Tu mentor virtual', lesson: (n) => `Lección ${n}` },
+    en: { mentor: 'Your virtual mentor', lesson: (n) => `Lesson ${n}` },
+    pt: { mentor: 'Seu mentor virtual', lesson: (n) => `Lição ${n}` },
+};
+
+/** Empty chat placeholder for socios when there are no messages yet. */
+export const CHAT_EMPTY_STATE_SOCIO: Record<SupportedLanguage, (name?: string) => string> = {
+    es: (name) =>
+        name
+            ? `¡Hola, ${name}! Escribe un mensaje para comenzar.`
+            : '¡Hola! Escribe un mensaje para comenzar.',
+    en: (name) =>
+        name
+            ? `Hi, ${name}! Type a message to get started.`
+            : 'Hi! Type a message to get started.',
+    pt: (name) =>
+        name
+            ? `Olá, ${name}! Escreva uma mensagem para começar.`
+            : 'Olá! Escreva uma mensagem para começar.',
+};
+
 // ─── AI Error Fallback Messages ───────────────────────────────────────
 
 export const AI_ERROR_FALLBACK: Record<SupportedLanguage, string> = {

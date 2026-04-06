@@ -148,6 +148,14 @@ export const prismaRepo: Repo = {
             },
         });
 
+        // Web chat passes session.userId (socio UUID) as externalId; match by id when
+        // the row was created with a different externalId (e.g. legacy phone-based).
+        if (!socio && channelType === "web") {
+            socio = await prisma.socio.findUnique({
+                where: { id: externalId },
+            });
+        }
+
         // Fallback: if not found by externalId, try matching by whatsappPhoneNumber
         // (happens when the socio signed up via web before messaging on WhatsApp)
         if (!socio && channelType === 'whatsapp') {
