@@ -46,7 +46,14 @@ export async function extractAndStoreContext(
             ? response.content
             : JSON.stringify(response.content);
 
-        const parsed = JSON.parse(raw.replace(/```json\s*|```/g, '').trim());
+        const cleaned = raw.replace(/```json\s*|```/g, '').trim();
+        const firstBrace = cleaned.indexOf('{');
+        const lastBrace = cleaned.lastIndexOf('}');
+        if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+            console.log('[ContextExtractor] No JSON object found in response, skipping');
+            return;
+        }
+        const parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
 
         const hasData = Object.values(parsed).some(v => v !== null && v !== undefined && v !== '');
         if (hasData) {

@@ -42,7 +42,7 @@ export async function buildSystemPrompt(
   const layer2 = await buildContextPrompt(socio, progress);
 
   // Layer 3: Task context (mode-specific instructions)
-  const layer3 = buildTaskPrompt(socio, routerResult, progress);
+  const layer3 = await buildTaskPrompt(socio, routerResult, progress);
 
   // Layer 4: Lesson content (only for teaching modes)
   const layer4 = buildContentPrompt(routerResult);
