@@ -13,7 +13,6 @@ const PUBLIC_PATHS = [
   '/api/webhook',
   '/api/feedback',
   '/api/chat',
-  '/api/test-ai',
   '/api/cron',
   '/_next',
   '/favicon.ico',

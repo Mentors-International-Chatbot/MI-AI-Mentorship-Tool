@@ -1,6 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import {
+  ADMIN_LOGS_PAGE_INTRO,
+  type SupportedLanguage,
+  DEFAULT_LANGUAGE,
+  isSupportedLanguage,
+} from '@/lib/i18n/languages';
 
 type LogRow = {
   id: string;
@@ -15,10 +21,17 @@ type Stats = { errorCount24h: number; totalEvents24h: number };
 
 type LogKindFilter = 'all' | 'error' | 'operational';
 
+function coerceUiLanguage(raw: string | undefined): SupportedLanguage {
+  if (raw && isSupportedLanguage(raw)) return raw;
+  return DEFAULT_LANGUAGE;
+}
+
 export default function AdminLogsPage() {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  /** Initial `en` matches `Mentor.preferredLanguage` default until `/api/auth/me` returns. */
+  const [uiLang, setUiLang] = useState<SupportedLanguage>('en');
   const [logKind, setLogKind] = useState<LogKindFilter>('all');
   const [level, setLevel] = useState('');
   const [category, setCategory] = useState('');
@@ -57,6 +70,23 @@ export default function AdminLogsPage() {
     };
   }, [buildQuery]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { language?: string };
+        if (!cancelled) setUiLang(coerceUiLanguage(data.language));
+      } catch {
+        /* keep default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function refresh() {
     const q = buildQuery();
     setLoading(true);
@@ -75,9 +105,7 @@ export default function AdminLogsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">System logs</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Recent structured events (console + database). For pilot visibility only.
-          </p>
+          <p className="text-sm text-gray-500 mt-1">{ADMIN_LOGS_PAGE_INTRO[uiLang]}</p>
         </div>
         {stats && (
           <div className="flex gap-3 text-sm">

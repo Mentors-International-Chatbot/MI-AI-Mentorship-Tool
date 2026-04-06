@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { sendWhatsAppMessage } from '@/lib/whatsapp/client';
+import { WhatsAppChannel } from '@/lib/delivery';
 
 const CHECKIN_MESSAGE =
   'Hola! Es momento de tu reporte semanal de negocio. ' +
@@ -13,6 +13,8 @@ export async function GET(req: NextRequest) {
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
+
+  const whatsappChannel = new WhatsAppChannel();
 
   const socios = await prisma.socio.findMany({
     where: { status: 'ACTIVE', channelType: 'whatsapp' },
@@ -27,7 +29,7 @@ export async function GET(req: NextRequest) {
     if (!phone) continue;
 
     try {
-      await sendWhatsAppMessage(phone, CHECKIN_MESSAGE);
+      await whatsappChannel.sendMessage(phone, CHECKIN_MESSAGE);
 
       await prisma.message.create({
         data: {

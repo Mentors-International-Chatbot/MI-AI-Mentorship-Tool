@@ -123,6 +123,16 @@ export const UI_STRINGS: Record<SupportedLanguage, UIStrings> = {
     },
 };
 
+/** Admin system logs page subtitle (follows `/api/auth/me` language for mentor/admin). */
+export const ADMIN_LOGS_PAGE_INTRO: Record<SupportedLanguage, string> = {
+    es:
+        'Eventos estructurados recientes (consola y base de datos). Solo para el piloto. Solo los administradores pueden ver estos registros.',
+    en:
+        'Recent structured events (console + database). For pilot visibility only. Only administrators can view these logs.',
+    pt:
+        'Eventos estruturados recentes (console e banco de dados). Apenas para o piloto. Somente administradores podem ver estes registros.',
+};
+
 /** Web chat header subtitle (mentor line + optional lesson; brand unchanged). */
 export const CHAT_SUBTITLE: Record<
     SupportedLanguage,

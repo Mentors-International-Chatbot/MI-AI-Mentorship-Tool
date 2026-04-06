@@ -1,7 +1,22 @@
+import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/messaging/handler';
 import { WhatsAppChannel } from '@/lib/delivery';
 import { logEvent } from '@/lib/logging/logger';
+
+function verifyMetaSignature(rawBody: string, signature: string | null): boolean {
+    const appSecret = process.env.META_APP_SECRET;
+    if (!appSecret) {
+        console.warn('[Webhook] META_APP_SECRET not set — skipping signature verification');
+        return true; // Allow in dev; set META_APP_SECRET in production
+    }
+    if (!signature) return false;
+    const expectedSig =
+        'sha256=' +
+        crypto.createHmac('sha256', appSecret).update(rawBody, 'utf8').digest('hex');
+    if (signature.length !== expectedSig.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
+}
 
 // Verify Webhook (GET)
 export async function GET(req: NextRequest) {
@@ -27,19 +42,46 @@ export async function GET(req: NextRequest) {
 // Handle Events (POST)
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json();
+        const rawBody = await req.text();
+        const signature = req.headers.get('x-hub-signature-256');
 
-        if (body.object === 'whatsapp_business_account') {
+        if (!verifyMetaSignature(rawBody, signature)) {
+            return new NextResponse('Invalid signature', { status: 403 });
+        }
+
+        const whatsappChannel = new WhatsAppChannel();
+
+        const body = JSON.parse(rawBody) as {
+            object?: string;
+            entry?: {
+                changes?: {
+                    value?: { messages?: Array<{ from?: string; text?: { body?: string }; type?: string }> };
+                }[];
+            }[];
+        };
+
+        if (body.object === 'whatsapp_business_account' && body.entry) {
             for (const entry of body.entry) {
-                for (const change of entry.changes) {
-                    if (change.value.messages) {
-                        const message = change.value.messages[0];
+                for (const change of entry.changes ?? []) {
+                    const messages = change.value?.messages;
+                    if (messages?.length) {
+                        const message = messages[0];
                         const senderPhone = message.from;
                         const textBody = message.text?.body;
                         const messageType =
                             typeof message.type === 'string' ? message.type : 'unknown';
 
-                        if (!textBody) continue;
+                        if (!senderPhone) continue;
+
+                        if (!textBody) {
+                            if (messageType !== 'text') {
+                                await whatsappChannel.sendMessage(
+                                    senderPhone,
+                                    'Hola! Por ahora solo puedo leer mensajes de texto. ¿Podrías escribirme tu pregunta? 😊',
+                                );
+                            }
+                            continue;
+                        }
 
                         void logEvent('info', 'webhook', 'Incoming WhatsApp message', {
                             from: senderPhone,
@@ -50,7 +92,7 @@ export async function POST(req: NextRequest) {
                             externalId: senderPhone,
                             channelType: 'whatsapp',
                             message: textBody,
-                            channel: new WhatsAppChannel(),
+                            channel: whatsappChannel,
                         });
                     }
                 }
