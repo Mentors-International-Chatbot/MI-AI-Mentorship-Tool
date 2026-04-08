@@ -2,6 +2,7 @@ import { ToneOverride, PromptOverrides, ConcisivenessLevel } from '../types';
 import { MAX_SENTENCES_PER_MESSAGE, MAX_EMOJIS_PER_MESSAGE } from '../constants';
 import { getLanguageDirective, type SupportedLanguage } from '@/lib/i18n/languages';
 import { prisma } from '@/lib/db';
+import { getChatbotDisplayName } from '@/lib/config/service';
 
 // ─── Conciseness Mapping ────────────────────────────────────────────
 
@@ -138,6 +139,10 @@ export function buildSliderSnippet(overrides?: PromptOverrides): string {
 export async function buildCorePrompt(overrides?: PromptOverrides, language?: SupportedLanguage): Promise<string> {
   const dbPrompt = await loadActivePrompt('core');
   let prompt = dbPrompt ?? buildCoreSystemPromptDefault();
+
+  const chatbotName = await getChatbotDisplayName().catch(() => 'Mentor Virtual');
+  const nameInstruction = `IDENTIDAD — NOMBRE:\nTu nombre es ${chatbotName}. Cuando te presentes o saludes, usa este nombre de forma natural.\n\n`;
+  prompt = nameInstruction + prompt;
 
   // Apply conciseness override — replace the default sentence limit line
   if (overrides?.conciseness && overrides.conciseness !== 'standard') {

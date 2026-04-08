@@ -56,15 +56,21 @@ export async function POST(req: NextRequest) {
           name: existing.name || name,
         };
       } else {
-        const socio = await prisma.socio.create({
-          data: {
-            whatsappPhoneNumber: identifier,
-            channelType: 'web',
-            externalId: identifier,
-            name,
-            passwordHash: hashed,
-            status: 'ACTIVE',
-          },
+        const socio = await prisma.$transaction(async (tx) => {
+          const created = await tx.socio.create({
+            data: {
+              whatsappPhoneNumber: identifier,
+              channelType: 'web',
+              externalId: identifier,
+              name,
+              passwordHash: hashed,
+              status: 'ACTIVE',
+            },
+          });
+          return tx.socio.update({
+            where: { id: created.id },
+            data: { externalId: created.id },
+          });
         });
 
         session = {

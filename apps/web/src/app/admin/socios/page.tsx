@@ -18,6 +18,12 @@ type SocioRow = {
     lastInteractionAt: string | null;
   } | null;
   flags: { id: string; level: string }[];
+  latestRating: {
+    rating: number | null;
+    comment: string | null;
+    lessonNum: number;
+    createdAt: string;
+  } | null;
 };
 
 type MentorOption = { id: string; name: string };
@@ -216,6 +222,7 @@ export default function AdminSociosPage() {
                   <th className="text-left px-4 py-3">Business</th>
                   <th className="text-left px-4 py-3">Onboarding</th>
                   <th className="text-left px-4 py-3">Lesson</th>
+                  <th className="px-4 py-3 text-center">Rating</th>
                   <th className="text-left px-4 py-3">Last Active</th>
                   <th className="text-left px-4 py-3">Mentor</th>
                   <th className="text-left px-4 py-3"></th>
@@ -251,6 +258,28 @@ export default function AdminSociosPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {s.progress?.currentLessonNumber ?? '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {s.latestRating?.rating != null ? (
+                        <span
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
+                            s.latestRating.rating >= 8
+                              ? 'bg-green-100 text-green-700'
+                              : s.latestRating.rating >= 5
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-red-100 text-red-700'
+                          }`}
+                          title={
+                            s.latestRating.createdAt
+                              ? `Latest: ${new Date(s.latestRating.createdAt).toLocaleString()}`
+                              : undefined
+                          }
+                        >
+                          {s.latestRating.rating}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
                       {s.progress?.lastInteractionAt

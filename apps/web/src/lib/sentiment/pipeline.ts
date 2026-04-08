@@ -35,7 +35,7 @@ export async function analyzeSentimentAndFlag(
     await repo.createFlag({
       socioId,
       level: 'RED',
-      reason: `Detección automática: urgencia=${result.urgency}, sentimiento=${result.sentiment}`,
+      reason: `Alto nivel de urgencia detectado (${result.urgency}/10). Sentimiento: ${result.sentiment}. Temas: ${result.topics.join(', ')}`,
       source: 'sentiment_auto',
       messageId,
     });
@@ -43,7 +43,7 @@ export async function analyzeSentimentAndFlag(
     await repo.createFlag({
       socioId,
       level: 'YELLOW',
-      reason: `Detección automática: confusión=${result.confusion}, frustración=${result.frustration}`,
+      reason: `Confusión (${result.confusion}/10) o frustración (${result.frustration}/10) elevada. Temas: ${result.topics.join(', ')}`,
       source: 'sentiment_auto',
       messageId,
     });

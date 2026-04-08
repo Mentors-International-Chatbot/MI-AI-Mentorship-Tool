@@ -123,6 +123,42 @@ export const UI_STRINGS: Record<SupportedLanguage, UIStrings> = {
     },
 };
 
+/** Admin system logs page subtitle (follows `/api/auth/me` language for mentor/admin). */
+export const ADMIN_LOGS_PAGE_INTRO: Record<SupportedLanguage, string> = {
+    es:
+        'Eventos estructurados recientes (consola y base de datos). Solo para el piloto. Solo los administradores pueden ver estos registros.',
+    en:
+        'Recent structured events (console + database). For pilot visibility only. Only administrators can view these logs.',
+    pt:
+        'Eventos estruturados recentes (console e banco de dados). Apenas para o piloto. Somente administradores podem ver estes registros.',
+};
+
+/** Web chat header subtitle (mentor line + optional lesson; brand unchanged). */
+export const CHAT_SUBTITLE: Record<
+    SupportedLanguage,
+    { mentor: string; lesson: (n: number) => string }
+> = {
+    es: { mentor: 'Tu mentor virtual', lesson: (n) => `Lección ${n}` },
+    en: { mentor: 'Your virtual mentor', lesson: (n) => `Lesson ${n}` },
+    pt: { mentor: 'Seu mentor virtual', lesson: (n) => `Lição ${n}` },
+};
+
+/** Empty chat placeholder for socios when there are no messages yet. */
+export const CHAT_EMPTY_STATE_SOCIO: Record<SupportedLanguage, (name?: string) => string> = {
+    es: (name) =>
+        name
+            ? `¡Hola, ${name}! Escribe un mensaje para comenzar.`
+            : '¡Hola! Escribe un mensaje para comenzar.',
+    en: (name) =>
+        name
+            ? `Hi, ${name}! Type a message to get started.`
+            : 'Hi! Type a message to get started.',
+    pt: (name) =>
+        name
+            ? `Olá, ${name}! Escreva uma mensagem para começar.`
+            : 'Olá! Escreva uma mensagem para começar.',
+};
+
 // ─── AI Error Fallback Messages ───────────────────────────────────────
 
 export const AI_ERROR_FALLBACK: Record<SupportedLanguage, string> = {

@@ -4,10 +4,13 @@ import { hashPassword } from '@/lib/auth/password';
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, password } = (await req.json()) as {
+    const body = (await req.json()) as {
       token?: string;
       password?: string;
+      newPassword?: string;
     };
+    const { token } = body;
+    const password = body.password ?? body.newPassword;
 
     if (!token || !password) {
       return NextResponse.json(

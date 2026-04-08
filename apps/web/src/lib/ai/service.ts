@@ -12,6 +12,7 @@ import {
 } from './prompts';
 import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
 import { AI_ERROR_FALLBACK, type SupportedLanguage } from '@/lib/i18n/languages';
+import { logEvent } from '@/lib/logging/logger';
 
 async function invokeWithRetry(
     chat: ChatAnthropic,
@@ -90,6 +91,13 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
         const markers = parseMarkers(rawContent);
         const sanitized = sanitizeForDelivery(markers.cleanText);
 
+        void logEvent('info', 'ai', 'AI response generated', {
+            socioId: socio.id,
+            mode: modeResult.routerResult.mode,
+            promptTokensApprox: systemPrompt.length,
+            responseLength: rawContent.length,
+        });
+
         return {
             text: sanitized,
             markers,
@@ -98,6 +106,11 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
         };
     } catch (error) {
         console.error('[AI] All retry attempts failed:', error);
+
+        void logEvent('error', 'ai', 'AI generation failed after retries', {
+            socioId: socio.id,
+            error: error instanceof Error ? error.message : String(error),
+        });
 
         const language = (socio.language || 'es') as SupportedLanguage;
         return {

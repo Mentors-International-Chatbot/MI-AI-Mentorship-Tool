@@ -36,6 +36,13 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      const appBase =
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.NEXT_PUBLIC_BASE_URL ||
+        'http://localhost:3000';
+      const resetUrl = `${appBase.replace(/\/$/, '')}/reset-password?token=${token}`;
+      console.log(`[PASSWORD RESET] Link for ${normalizedEmail}: ${resetUrl}`);
+
       try {
         await sendPasswordResetEmail(normalizedEmail, token);
       } catch (emailErr) {

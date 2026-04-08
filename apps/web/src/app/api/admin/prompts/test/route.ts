@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import { verifySession } from '@/lib/auth/session';
 
 export async function POST(request: NextRequest) {
+  const session = await verifySession();
+  if (!session || session.role === 'socio') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const body = await request.json();
   const { promptContent, testMessage } = body as {
     promptContent: string;

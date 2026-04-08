@@ -90,6 +90,23 @@ export type LessonProgressRecord = {
     updatedAt: Date;
 };
 
+export type SocioContext = {
+    id: string;
+    socioId: string;
+    businessType: string | null;
+    products: string | null;
+    monthlyRevenue: string | null;
+    monthlyExpenses: string | null;
+    numEmployees: string | null;
+    location: string | null;
+    challenges: string | null;
+    goals: string | null;
+    familyContext: string | null;
+    customFacts: string | null;
+    updatedAt: Date;
+    createdAt: Date;
+};
+
 export type StaleSocio = {
     socio: Socio;
     progress: SocioProgress;
@@ -129,4 +146,8 @@ export interface Repo {
     // Sentiment methods
     saveSentiment(data: Omit<MessageSentimentRecord, 'id' | 'createdAt'>): Promise<MessageSentimentRecord>;
     getSentimentsBySocio(socioId: string, since?: Date): Promise<MessageSentimentRecord[]>;
+
+    // Context memory methods
+    getSocioContext(socioId: string): Promise<SocioContext | null>;
+    upsertSocioContext(socioId: string, data: Partial<SocioContext>): Promise<SocioContext>;
 }

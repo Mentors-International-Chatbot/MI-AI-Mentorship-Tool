@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const PAGE_OPTIONS = [
   { value: 'chat', label: 'Web Chat (/chat)' },
@@ -15,17 +15,28 @@ const PAGE_OPTIONS = [
   { value: 'other', label: 'Other / General' },
 ];
 
-export default function FeedbackButton() {
+type FeedbackButtonProps = {
+  /** When `socio`, page is fixed to `chat` and the page dropdown is hidden. */
+  userRole?: 'socio' | 'mentor' | 'admin' | null;
+};
+
+export default function FeedbackButton({ userRole }: FeedbackButtonProps) {
+  const isSocio = userRole === 'socio';
+
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState('');
+  const [page, setPage] = useState(isSocio ? 'chat' : '');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    setPage(isSocio ? 'chat' : '');
+  }, [isSocio]);
+
   function reset() {
-    setPage('');
+    setPage(isSocio ? 'chat' : '');
     setSubject('');
     setBody('');
     setError('');
@@ -38,7 +49,8 @@ export default function FeedbackButton() {
   }
 
   async function handleSubmit() {
-    if (!page || !subject.trim() || !body.trim()) {
+    const effectivePage = isSocio ? 'chat' : page;
+    if (!effectivePage || !subject.trim() || !body.trim()) {
       setError('Please fill in all fields.');
       return;
     }
@@ -50,7 +62,11 @@ export default function FeedbackButton() {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page, subject: subject.trim(), body: body.trim() }),
+        body: JSON.stringify({
+          page: effectivePage,
+          subject: subject.trim(),
+          body: body.trim(),
+        }),
       });
 
       if (!res.ok) {
@@ -135,22 +151,30 @@ export default function FeedbackButton() {
                   Help us improve! Tell us what&apos;s working, what&apos;s broken, or what you&apos;d change.
                 </p>
 
-                {/* Page dropdown */}
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Which page is this about?
-                </label>
-                <select
-                  value={page}
-                  onChange={(e) => setPage(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 mb-4 focus:outline-none focus:ring-2 focus:ring-[#1B2A4A]/30"
-                >
-                  <option value="">Select a page...</option>
-                  {PAGE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                {/* Page — hidden for socios (they only use Web Chat) */}
+                {!isSocio && (
+                  <>
+                    <label
+                      htmlFor="feedback-page"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      Which page is this about?
+                    </label>
+                    <select
+                      id="feedback-page"
+                      value={page}
+                      onChange={(e) => setPage(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 mb-4 focus:outline-none focus:ring-2 focus:ring-[#1B2A4A]/30"
+                    >
+                      <option value="">Select a page...</option>
+                      {PAGE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
 
                 {/* Subject */}
                 <label className="block text-sm font-medium text-gray-700 mb-1">

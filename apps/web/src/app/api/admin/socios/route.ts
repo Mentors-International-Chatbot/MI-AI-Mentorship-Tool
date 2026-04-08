@@ -2,6 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 
+const SOCIO_LIST_INCLUDE = {
+  progress: true,
+  flags: { where: { resolved: false } },
+  mentor: { select: { id: true, name: true } },
+  feedback: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
+    select: { rating: true, comment: true, createdAt: true, lessonNum: true },
+  },
+} satisfies Prisma.SocioInclude;
+
+type SocioListRow = Prisma.SocioGetPayload<{ include: typeof SOCIO_LIST_INCLUDE }>;
+
+function mapSocioLatestRating(s: SocioListRow) {
+  const latest = s.feedback[0];
+  const { feedback, ...rest } = s;
+  void feedback;
+  return {
+    ...rest,
+    latestRating: latest
+      ? {
+          rating: latest.rating,
+          comment: latest.comment,
+          lessonNum: latest.lessonNum,
+          createdAt: latest.createdAt.toISOString(),
+        }
+      : null,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const status = params.get('status');
@@ -64,9 +94,7 @@ export async function GET(request: NextRequest) {
     const socios = await prisma.socio.findMany({
       where,
       include: {
-        progress: true,
-        flags: { where: { resolved: false } },
-        mentor: { select: { id: true, name: true } },
+        ...SOCIO_LIST_INCLUDE,
         _count: {
           select: {
             messages: { where: { createdAt: { gte: weekAgo }, role: 'user' } },
@@ -79,7 +107,12 @@ export async function GET(request: NextRequest) {
     // Sort by message count descending
     socios.sort((a, b) => (b._count?.messages ?? 0) - (a._count?.messages ?? 0));
 
-    const paginated = socios.slice((page - 1) * pageSize, page * pageSize);
+    const paginated = socios
+      .slice((page - 1) * pageSize, page * pageSize)
+      .map((row) => {
+        const { _count, ...s } = row;
+        return { ...mapSocioLatestRating(s), _count };
+      });
     return NextResponse.json({
       socios: paginated,
       total: socios.length,
@@ -92,11 +125,7 @@ export async function GET(request: NextRequest) {
   const [socios, total] = await Promise.all([
     prisma.socio.findMany({
       where,
-      include: {
-        progress: true,
-        flags: { where: { resolved: false } },
-        mentor: { select: { id: true, name: true } },
-      },
+      include: SOCIO_LIST_INCLUDE,
       orderBy: { updatedAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -105,7 +134,7 @@ export async function GET(request: NextRequest) {
   ]);
 
   return NextResponse.json({
-    socios,
+    socios: socios.map(mapSocioLatestRating),
     total,
     page,
     pageSize,
@@ -161,6 +190,8 @@ export async function DELETE(request: NextRequest) {
       prisma.socioProgress.deleteMany({ where: { socioId: { in: ids } } }),
       prisma.summary.deleteMany({ where: { socioId: { in: ids } } }),
       prisma.financialSnapshot.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.socioFeedback.deleteMany({ where: { socioId: { in: ids } } }),
+      prisma.socioContext.deleteMany({ where: { socioId: { in: ids } } }),
       prisma.socio.deleteMany({ where: { id: { in: ids } } }),
     ]);
 
@@ -192,6 +223,8 @@ export async function DELETE(request: NextRequest) {
     prisma.socioProgress.deleteMany({ where: { socioId } }),
     prisma.summary.deleteMany({ where: { socioId } }),
     prisma.financialSnapshot.deleteMany({ where: { socioId } }),
+    prisma.socioFeedback.deleteMany({ where: { socioId } }),
+    prisma.socioContext.deleteMany({ where: { socioId } }),
     prisma.socio.delete({ where: { id: socioId } }),
   ]);
 

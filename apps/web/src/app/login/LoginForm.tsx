@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ForgotPasswordLink } from './ForgotPasswordModal';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -220,20 +221,40 @@ export default function LoginForm() {
 
             {/* Password */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-1">
                 Password
               </label>
               <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
-                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                  required
-                  minLength={mode === 'signup' ? 6 : undefined}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B2A4A]/30 focus:border-[#1B2A4A] pr-10"
-                />
+                {mode === 'signup' ? (
+                  <input
+                    id="login-password"
+                    name="new-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    autoComplete="new-password"
+                    required
+                    minLength={6}
+                    className={`w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B2A4A]/30 focus:border-[#1B2A4A] pr-10 ${
+                      showPassword ? '[-webkit-text-security:none]' : ''
+                    }`}
+                  />
+                ) : (
+                  <input
+                    id="login-password"
+                    name="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    required
+                    className={`w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B2A4A]/30 focus:border-[#1B2A4A] pr-10 ${
+                      showPassword ? '[-webkit-text-security:none]' : ''
+                    }`}
+                  />
+                )}
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
@@ -253,10 +274,8 @@ export default function LoginForm() {
                 </button>
               </div>
               {mode === 'signin' && userType === 'mentor' && (
-                <div className="text-right mt-1">
-                  <a href="/forgot-password" className="text-xs text-[#1B2A4A] hover:underline">
-                    Forgot password?
-                  </a>
+                <div className="flex justify-end mt-1">
+                  <ForgotPasswordLink />
                 </div>
               )}
             </div>

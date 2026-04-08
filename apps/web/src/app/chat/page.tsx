@@ -6,6 +6,9 @@ import {
     type SupportedLanguage,
     isSupportedLanguage,
     DEFAULT_LANGUAGE,
+    UI_STRINGS,
+    CHAT_SUBTITLE,
+    CHAT_EMPTY_STATE_SOCIO,
 } from '@/lib/i18n/languages';
 
 interface ChatMessage {
@@ -38,45 +41,77 @@ const LANGUAGES: { code: SupportedLanguage; flag: string; nativeName: string }[]
     { code: 'pt', flag: '🇧🇷', nativeName: 'Português' },
 ];
 
-const UI: Record<SupportedLanguage, { placeholder: string; send: string; error: string }> = {
-    es: {
-        placeholder: 'Escribe tu mensaje...',
-        send: 'Enviar',
-        error: 'Error al conectar con el servidor. Intenta de nuevo.',
-    },
-    en: {
-        placeholder: 'Type your message...',
-        send: 'Send',
-        error: 'Error connecting to the server. Please try again.',
-    },
-    pt: {
-        placeholder: 'Digite sua mensagem...',
-        send: 'Enviar',
-        error: 'Erro ao conectar com o servidor. Tente novamente.',
-    },
-};
-
 function coerceUiLanguage(raw: string | undefined): SupportedLanguage {
     if (raw && isSupportedLanguage(raw)) return raw;
     return DEFAULT_LANGUAGE;
 }
 
-function renderMessageContent(content: string) {
+function isMathLine(line: string): boolean {
+    const t = line.trim();
+    if (!t.includes('=')) return false;
+    if (
+        /^\s*[\wÀ-ÿ\s,.+\-×÷*/]+\s*=\s*[\d,.\s+\-×÷*/\wÀ-ÿ]+$/.test(line) &&
+        /\d/.test(t)
+    ) {
+        return true;
+    }
+    return /^\s*\d[\d,.]*\s*[+\-×÷*/]\s*\d[\d,.]*\s*=\s*\d[\d,.]*/.test(line);
+}
+
+function isStepLine(line: string): boolean {
+    return /^\s*(\d+[.):]|Paso\s+\d+)/i.test(line);
+}
+
+/** Line-level math / step styling for web chat (plain text on WhatsApp). */
+function formatLinesWithMathAndSteps(content: string) {
+    const lines = content.split('\n');
+
+    return lines.map((line, i) => {
+        if (isMathLine(line)) {
+            return (
+                <div
+                    key={i}
+                    className="my-1 px-3 py-1.5 bg-zinc-50 dark:bg-zinc-900 rounded font-mono text-sm border-l-2 border-emerald-400"
+                >
+                    {line}
+                </div>
+            );
+        }
+        if (isStepLine(line)) {
+            return (
+                <div
+                    key={i}
+                    className="my-0.5 pl-2 border-l-2 border-emerald-200 dark:border-emerald-800"
+                >
+                    {line}
+                </div>
+            );
+        }
+        return (
+            <span key={i}>
+                {line}
+                {i < lines.length - 1 ? '\n' : ''}
+            </span>
+        );
+    });
+}
+
+function renderAssistantMessageContent(content: string) {
     const parts = content.split(/\n\n---\n/);
 
     if (parts.length === 1) {
-        return <span className="whitespace-pre-wrap">{content}</span>;
+        return <>{formatLinesWithMathAndSteps(content)}</>;
     }
 
     return (
         <>
-            <span className="whitespace-pre-wrap">{parts[0]}</span>
+            {formatLinesWithMathAndSteps(parts[0])}
             {parts.slice(1).map((part, i) => (
                 <div
                     key={i}
                     className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-800"
                 >
-                    <span className="font-medium whitespace-pre-wrap">{part}</span>
+                    <div className="font-medium">{formatLinesWithMathAndSteps(part)}</div>
                 </div>
             ))}
         </>
@@ -98,6 +133,7 @@ export default function ChatPage() {
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const formRef = useRef<HTMLFormElement>(null);
     const [historyReady, setHistoryReady] = useState(false);
+    const [chatbotName, setChatbotName] = useState('Mentor Virtual');
 
     useEffect(() => {
         async function init() {
@@ -112,6 +148,18 @@ export default function ChatPage() {
 
                 const lang = coerceUiLanguage(sessionData.language);
                 setLanguage(lang);
+
+                try {
+                    const configRes = await fetch('/api/config/public');
+                    if (configRes.ok) {
+                        const cfg = (await configRes.json()) as { chatbotName?: string };
+                        if (typeof cfg.chatbotName === 'string' && cfg.chatbotName.trim()) {
+                            setChatbotName(cfg.chatbotName.trim());
+                        }
+                    }
+                } catch {
+                    // keep default
+                }
 
                 const historyRes = await fetch('/api/chat/history');
                 if (historyRes.ok) {
@@ -392,6 +440,9 @@ export default function ChatPage() {
 
         setLastUserMessage(text);
         setInput('');
+        if (inputRef.current) {
+            inputRef.current.style.height = 'auto';
+        }
         const stamp = new Date().toISOString();
         setMessages((prev) => [...prev, { role: 'user', content: text, createdAt: stamp }]);
         setIsLoading(true);
@@ -415,7 +466,7 @@ export default function ChatPage() {
                     ...prev,
                     {
                         role: 'assistant',
-                        content: data.error ?? UI[language].error,
+                        content: data.error ?? UI_STRINGS[language].error,
                         createdAt: new Date().toISOString(),
                         isError: true,
                     },
@@ -439,14 +490,14 @@ export default function ChatPage() {
                 ...prev,
                 {
                     role: 'assistant',
-                    content: UI[language].error,
+                    content: UI_STRINGS[language].error,
                     createdAt: new Date().toISOString(),
                     isError: true,
                 },
             ]);
         } finally {
             setIsLoading(false);
-            inputRef.current?.focus();
+            setTimeout(() => inputRef.current?.focus(), 50);
         }
     }
 
@@ -478,7 +529,7 @@ export default function ChatPage() {
         );
     }
 
-    const ui = UI[language];
+    const ui = UI_STRINGS[language];
     const isSocio = session.role === 'socio';
 
     return (
@@ -488,13 +539,13 @@ export default function ChatPage() {
                     MI
                 </div>
                 <div className="flex-1 min-w-0">
-                    <h1 className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        Mentor Virtual
+                    <h1 className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                        {chatbotName}
                     </h1>
                     <p className="text-xs text-zinc-500">
                         {isSocio && currentLesson !== null
-                            ? `Lección ${currentLesson} • Mentors International`
-                            : 'Mentors International'}
+                            ? `${CHAT_SUBTITLE[language].mentor} · ${CHAT_SUBTITLE[language].lesson(currentLesson)} · Mentors International`
+                            : `${CHAT_SUBTITLE[language].mentor} · Mentors International`}
                     </p>
                 </div>
                 <label className="flex items-center gap-1 text-xs text-zinc-500">
@@ -524,9 +575,7 @@ export default function ChatPage() {
                 {messages.length === 0 && !isLoading && (
                     <div className="flex items-center justify-center h-full text-zinc-400 text-sm text-center px-8">
                         {isSocio ? (
-                            <>
-                                ¡Hola{session.name ? `, ${session.name}` : ''}! Escribe un mensaje para comenzar.
-                            </>
+                            CHAT_EMPTY_STATE_SOCIO[language](session.name || undefined)
                         ) : (
                             ui.placeholder
                         )}
@@ -558,11 +607,15 @@ export default function ChatPage() {
                             <div
                                 className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                                     msg.role === 'user'
-                                        ? 'bg-emerald-600 text-white rounded-br-md'
+                                        ? 'bg-emerald-600 text-white rounded-br-md whitespace-pre-wrap'
                                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-bl-md'
                                 }`}
                             >
-                                {renderMessageContent(msg.content)}
+                                {msg.role === 'assistant' ? (
+                                    renderAssistantMessageContent(msg.content)
+                                ) : (
+                                    msg.content
+                                )}
                                 {msg.role === 'assistant' && msg.senderType === 'mentor' && (
                                     <span className="text-xs text-blue-500 dark:text-blue-400 block mt-2 font-medium">
                                         — Tu mentor

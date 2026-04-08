@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 import {
     Prisma,
@@ -10,6 +10,7 @@ import {
     SocioFlag as PrismaSocioFlag,
     LessonProgress as PrismaLessonProgress,
     MessageSentiment as PrismaMessageSentiment,
+    SocioContext as PrismaSocioContext,
 } from "@prisma/client";
 
 /** Race-safe: concurrent create/upsert paths can hit P2002 on socio_id; retry read after conflict. */
@@ -108,6 +109,25 @@ function toSentiment(p: PrismaMessageSentiment): MessageSentimentRecord {
     };
 }
 
+function toSocioContext(p: PrismaSocioContext): SocioContext {
+    return {
+        id: p.id,
+        socioId: p.socioId,
+        businessType: p.businessType,
+        products: p.products,
+        monthlyRevenue: p.monthlyRevenue,
+        monthlyExpenses: p.monthlyExpenses,
+        numEmployees: p.numEmployees,
+        location: p.location,
+        challenges: p.challenges,
+        goals: p.goals,
+        familyContext: p.familyContext,
+        customFacts: p.customFacts,
+        updatedAt: p.updatedAt,
+        createdAt: p.createdAt,
+    };
+}
+
 function toLessonProgress(p: PrismaLessonProgress): LessonProgressRecord {
     return {
         id: p.id,
@@ -127,6 +147,14 @@ export const prismaRepo: Repo = {
                 channelType_externalId: { channelType, externalId },
             },
         });
+
+        // Web chat passes session.userId (socio UUID) as externalId; match by id when
+        // the row was created with a different externalId (e.g. legacy phone-based).
+        if (!socio && channelType === "web") {
+            socio = await prisma.socio.findUnique({
+                where: { id: externalId },
+            });
+        }
 
         // Fallback: if not found by externalId, try matching by whatsappPhoneNumber
         // (happens when the socio signed up via web before messaging on WhatsApp)
@@ -418,5 +446,44 @@ export const prismaRepo: Repo = {
             orderBy: { createdAt: 'desc' },
         });
         return rows.map(toSentiment);
+    },
+
+    async getSocioContext(socioId) {
+        const ctx = await prisma.socioContext.findUnique({
+            where: { socioId },
+        });
+        return ctx ? toSocioContext(ctx) : null;
+    },
+
+    async upsertSocioContext(socioId, data) {
+        const ctx = await prisma.socioContext.upsert({
+            where: { socioId },
+            create: {
+                socioId,
+                businessType: data.businessType ?? null,
+                products: data.products ?? null,
+                monthlyRevenue: data.monthlyRevenue ?? null,
+                monthlyExpenses: data.monthlyExpenses ?? null,
+                numEmployees: data.numEmployees ?? null,
+                location: data.location ?? null,
+                challenges: data.challenges ?? null,
+                goals: data.goals ?? null,
+                familyContext: data.familyContext ?? null,
+                customFacts: data.customFacts ?? null,
+            },
+            update: {
+                ...(data.businessType !== undefined && { businessType: data.businessType }),
+                ...(data.products !== undefined && { products: data.products }),
+                ...(data.monthlyRevenue !== undefined && { monthlyRevenue: data.monthlyRevenue }),
+                ...(data.monthlyExpenses !== undefined && { monthlyExpenses: data.monthlyExpenses }),
+                ...(data.numEmployees !== undefined && { numEmployees: data.numEmployees }),
+                ...(data.location !== undefined && { location: data.location }),
+                ...(data.challenges !== undefined && { challenges: data.challenges }),
+                ...(data.goals !== undefined && { goals: data.goals }),
+                ...(data.familyContext !== undefined && { familyContext: data.familyContext }),
+                ...(data.customFacts !== undefined && { customFacts: data.customFacts }),
+            },
+        });
+        return toSocioContext(ctx);
     },
 };

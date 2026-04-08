@@ -1,4 +1,4 @@
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 
 const sociosByKey = new Map<string, Socio>();
@@ -8,6 +8,7 @@ const progressBySocio = new Map<string, SocioProgress>();
 const flagsBySocio = new Map<string, SocioFlag[]>();
 const lessonProgressBySocio = new Map<string, Map<number, LessonProgressRecord>>();
 const sentimentsByMessage = new Map<string, MessageSentimentRecord>();
+const contextBySocio = new Map<string, SocioContext>();
 
 function channelKey(channelType: string, externalId: string): string {
     return `${channelType}:${externalId}`;
@@ -286,5 +287,32 @@ export const inMemoryRepo: Repo = {
             }
         }
         return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    },
+
+    async getSocioContext(socioId) {
+        return contextBySocio.get(socioId) ?? null;
+    },
+
+    async upsertSocioContext(socioId, data) {
+        const existing = contextBySocio.get(socioId);
+        const now = new Date();
+        const ctx: SocioContext = {
+            id: existing?.id ?? Math.random().toString(36).substring(7),
+            socioId,
+            businessType: data.businessType !== undefined ? (data.businessType ?? null) : (existing?.businessType ?? null),
+            products: data.products !== undefined ? (data.products ?? null) : (existing?.products ?? null),
+            monthlyRevenue: data.monthlyRevenue !== undefined ? (data.monthlyRevenue ?? null) : (existing?.monthlyRevenue ?? null),
+            monthlyExpenses: data.monthlyExpenses !== undefined ? (data.monthlyExpenses ?? null) : (existing?.monthlyExpenses ?? null),
+            numEmployees: data.numEmployees !== undefined ? (data.numEmployees ?? null) : (existing?.numEmployees ?? null),
+            location: data.location !== undefined ? (data.location ?? null) : (existing?.location ?? null),
+            challenges: data.challenges !== undefined ? (data.challenges ?? null) : (existing?.challenges ?? null),
+            goals: data.goals !== undefined ? (data.goals ?? null) : (existing?.goals ?? null),
+            familyContext: data.familyContext !== undefined ? (data.familyContext ?? null) : (existing?.familyContext ?? null),
+            customFacts: data.customFacts !== undefined ? (data.customFacts ?? null) : (existing?.customFacts ?? null),
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        contextBySocio.set(socioId, ctx);
+        return ctx;
     },
 };

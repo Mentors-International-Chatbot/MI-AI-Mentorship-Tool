@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth/session';
+import { prisma } from '@/lib/db';
 import { repo } from '@/lib/repo';
 import { isSupportedLanguage } from '@/lib/i18n/languages';
 
@@ -18,7 +19,12 @@ export async function GET() {
       language = socio.language || 'es';
     }
   } else {
-    language = 'en';
+    const mentor = await prisma.mentor.findUnique({
+      where: { id: session.userId },
+      select: { preferredLanguage: true },
+    });
+    const pl = mentor?.preferredLanguage ?? 'en';
+    language = isSupportedLanguage(pl) ? pl : 'en';
   }
 
   return NextResponse.json({
