@@ -35,6 +35,7 @@ export async function sendWhatsAppMessage(to: string, text: string) {
         if (!response.ok) {
             const errorData = await response.json();
             console.error("Error sending WhatsApp message:", errorData);
+            throw new Error(JSON.stringify(errorData));
         }
     } catch (error) {
         console.error("Network error sending WhatsApp message:", error);
