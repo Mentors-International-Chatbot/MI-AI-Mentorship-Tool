@@ -26,13 +26,18 @@ export function SendMessageForm({ socioId }: { socioId: string }) {
         body: JSON.stringify({ content: text.trim() }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.error || t.sendError);
       }
 
       setText('');
-      setSent(true);
+      if (data.whatsappError) {
+        setError(`Saved, but WhatsApp delivery failed: ${data.whatsappError}`);
+      } else {
+        setSent(true);
+      }
       textareaRef.current?.focus();
       setTimeout(() => setSent(false), 3000);
     } catch (err: unknown) {

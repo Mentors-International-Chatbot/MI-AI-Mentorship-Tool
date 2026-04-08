@@ -31,14 +31,20 @@ export async function POST(
   });
 
   // Deliver via WhatsApp if applicable
+  let whatsappDelivered = false;
+  let whatsappError: string | null = null;
+
   if (socio.channelType === 'whatsapp' && socio.whatsappPhoneNumber) {
     try {
       const channel = new WhatsAppChannel();
       await channel.sendMessage(socio.whatsappPhoneNumber, content.trim());
+      whatsappDelivered = true;
     } catch (error) {
-      console.error('[DashboardMessage] WhatsApp delivery failed:', error);
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[DashboardMessage] WhatsApp delivery failed:', msg);
+      whatsappError = msg;
     }
   }
 
-  return NextResponse.json({ success: true, message: savedMessage });
+  return NextResponse.json({ success: true, message: savedMessage, whatsappDelivered, whatsappError });
 }
