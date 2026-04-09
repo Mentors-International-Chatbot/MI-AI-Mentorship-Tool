@@ -157,9 +157,8 @@ export default async function SocioDetailPage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column: Chat + Send */}
         <div className="lg:col-span-2 space-y-4">
-          <AiToggleButton socioId={id} initialAiPaused={socio.aiPaused} />
           <ChatHistory socioId={id} messages={serializedMessages} />
-          <SendMessageForm socioId={id} />
+          <SendMessageForm socioId={id} initialAiPaused={socio.aiPaused} />
         </div>
 
         {/* Right column: Panels */}

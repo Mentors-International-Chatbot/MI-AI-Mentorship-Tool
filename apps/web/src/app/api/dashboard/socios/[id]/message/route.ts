@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { repo } from '@/lib/repo';
 import { WhatsAppChannel } from '@/lib/delivery';
 import { verifyMentorOwnership } from '@/lib/auth/ownership';
+import type { SupportedLanguage } from '@/lib/i18n/languages';
+
+const MENTOR_PREFIX: Record<SupportedLanguage, string> = {
+  es: 'Tu mentor:',
+  en: 'Your mentor:',
+  pt: 'Seu mentor:',
+};
 
 export async function POST(
   req: NextRequest,
@@ -36,8 +43,11 @@ export async function POST(
 
   if (socio.channelType === 'whatsapp' && socio.whatsappPhoneNumber) {
     try {
+      const lang = (socio.language ?? 'es') as SupportedLanguage;
+      const prefix = MENTOR_PREFIX[lang] ?? MENTOR_PREFIX['es'];
+      const whatsappText = `${prefix} ${content.trim()}`;
       const channel = new WhatsAppChannel();
-      await channel.sendMessage(socio.whatsappPhoneNumber, content.trim());
+      await channel.sendMessage(socio.whatsappPhoneNumber, whatsappText);
       whatsappDelivered = true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
