@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 
                         if (!textBody) {
                             if (messageType !== 'text') {
-                                await whatsappChannel.sendMessage(
+                                void whatsappChannel.sendMessage(
                                     senderPhone,
                                     'Hola! Por ahora solo puedo leer mensajes de texto. ¿Podrías escribirme tu pregunta? 😊',
                                 );
@@ -88,12 +88,15 @@ export async function POST(req: NextRequest) {
                             messageType,
                         });
 
-                        await handleIncomingMessage({
+                        // Fire-and-forget so Meta gets 200 OK immediately
+                        void handleIncomingMessage({
                             externalId: senderPhone,
                             channelType: 'whatsapp',
                             message: textBody,
                             channel: whatsappChannel,
-                        });
+                        }).catch(err =>
+                            console.error('[Webhook] handleIncomingMessage failed:', err)
+                        );
                     }
                 }
             }
