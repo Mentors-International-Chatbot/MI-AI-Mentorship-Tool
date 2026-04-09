@@ -4,10 +4,10 @@ import { WhatsAppChannel } from '@/lib/delivery';
 import { verifyMentorOwnership } from '@/lib/auth/ownership';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 
-const MENTOR_PREFIX: Record<SupportedLanguage, string> = {
-  es: 'Tu mentor:',
-  en: 'Your mentor:',
-  pt: 'Seu mentor:',
+const MENTOR_LABEL: Record<SupportedLanguage, string> = {
+  es: 'Tu Mentor',
+  en: 'Your Mentor',
+  pt: 'Seu Mentor',
 };
 
 export async function POST(
@@ -44,8 +44,8 @@ export async function POST(
   if (socio.channelType === 'whatsapp' && socio.whatsappPhoneNumber) {
     try {
       const lang = (socio.language ?? 'es') as SupportedLanguage;
-      const prefix = MENTOR_PREFIX[lang] ?? MENTOR_PREFIX['es'];
-      const whatsappText = `${prefix} ${content.trim()}`;
+      const label = MENTOR_LABEL[lang] ?? MENTOR_LABEL['es'];
+      const whatsappText = `${content.trim()}\n\n— ${label}`;
       const channel = new WhatsAppChannel();
       await channel.sendMessage(socio.whatsappPhoneNumber, whatsappText);
       whatsappDelivered = true;
