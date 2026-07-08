@@ -301,7 +301,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         }
 
         if (completedNum > 0 && completedNum % feedbackInterval === 0) {
-            const feedbackPrompt = `\n\n💬 ¡Has completado ${completedNum} lecciones! Me encantaría saber tu opinión. Del 1 al 10, ¿qué tan útil ha sido este programa para tu negocio? Puedes agregar cualquier comentario.`;
+            const feedbackPrompt = '\n\n' + lm.feedbackPrompt(completedNum);
             responseText += feedbackPrompt;
 
             const existingPo = (socio.promptOverrides || {}) as Record<string, unknown>;
@@ -326,8 +326,9 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             console.log(`[Escalation Persisted] socio=${socio.id} reason=${reason}`);
         }
 
-        const escalationConfirmation =
-            '\n\n📋 He notificado a tu mentor humano. Te contactará lo más pronto posible. Mientras tanto, puedo seguir ayudándote con cualquier pregunta.';
+        const lang = (socio.language ?? 'es') as SupportedLanguage;
+        const langStrings = LESSON_MESSAGES[lang] ?? LESSON_MESSAGES['es'];
+        const escalationConfirmation = '\n\n' + langStrings.escalationConfirmation;
         responseText = responseText + escalationConfirmation;
 
         if (socio.mentorId) {

@@ -177,6 +177,8 @@ interface LessonMessageStrings {
     welcomeWithName: (name: string) => string;
     welcomeAnonymous: string;
     welcomeStart: string;
+    escalationConfirmation: string;
+    feedbackPrompt: (completedNum: number) => string;
 }
 
 export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = {
@@ -188,6 +190,8 @@ export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = 
         welcomeWithName: (name) => `¡Hola ${name}! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
         welcomeAnonymous: `¡Hola! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
         welcomeStart: 'comenzar',
+        escalationConfirmation: '📋 He notificado a tu mentor humano. Te contactará lo más pronto posible. Mientras tanto, puedo seguir ayudándote con cualquier pregunta.',
+        feedbackPrompt: (n) => `💬 ¡Has completado ${n} lecciones! Me encantaría saber tu opinión. Del 1 al 10, ¿qué tan útil ha sido este programa para tu negocio? Puedes agregar cualquier comentario.`,
     },
     en: {
         lessonHeader: (num, total) => `📚 Lesson ${num} of ${total}`,
@@ -197,6 +201,8 @@ export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = 
         welcomeWithName: (name) => `Hi ${name}! 👋 I'm your Virtual Mentor from Mentors International.\n\nI'm here to help you strengthen your business with practical lessons on finances, sales, and more.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
         welcomeAnonymous: `Hi! 👋 I'm your Virtual Mentor from Mentors International.\n\nI'm here to help you strengthen your business with practical lessons on finances, sales, and more.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
         welcomeStart: 'start',
+        escalationConfirmation: "📋 I've notified your human mentor. They will contact you as soon as possible. In the meantime, I'm here if you have any questions.",
+        feedbackPrompt: (n) => `💬 You've completed ${n} lessons! I'd love to hear your thoughts. On a scale of 1 to 10, how useful has this program been for your business? Feel free to add any comments.`,
     },
     pt: {
         lessonHeader: (num, total) => `📚 Lição ${num} de ${total}`,
@@ -206,6 +212,8 @@ export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = 
         welcomeWithName: (name) => `Olá ${name}! 👋 Sou seu Mentor Virtual da Mentors International.\n\nEstou aqui para ajudar você a fortalecer seu negócio com lições práticas sobre finanças, vendas e mais.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
         welcomeAnonymous: `Olá! 👋 Sou seu Mentor Virtual da Mentors International.\n\nEstou aqui para ajudar você a fortalecer seu negócio com lições práticas sobre finanças, vendas e mais.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
         welcomeStart: 'começar',
+        escalationConfirmation: '📋 Notifiquei seu mentor humano. Ele entrará em contato o mais breve possível. Enquanto isso, estou aqui se você tiver dúvidas.',
+        feedbackPrompt: (n) => `💬 Você completou ${n} lições! Adoraria saber sua opinião. De 1 a 10, o quanto este programa tem sido útil para o seu negócio? Pode adicionar qualquer comentário.`,
     },
 };
 

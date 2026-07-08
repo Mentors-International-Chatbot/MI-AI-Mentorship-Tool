@@ -618,7 +618,7 @@ export default function ChatPage() {
                                 )}
                                 {msg.role === 'assistant' && msg.senderType === 'mentor' && (
                                     <span className="text-xs text-blue-500 dark:text-blue-400 block mt-2 font-medium">
-                                        — Tu mentor
+                                        — {CHAT_SUBTITLE[language].mentor}
                                     </span>
                                 )}
                             </div>

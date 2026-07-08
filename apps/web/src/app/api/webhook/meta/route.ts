@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 
                         if (!textBody) {
                             if (messageType !== 'text') {
-                                await whatsappChannel.sendMessage(
+                                void whatsappChannel.sendMessage(
                                     senderPhone,
                                     'Hola! Por ahora solo puedo leer mensajes de texto. ¿Podrías escribirme tu pregunta? 😊',
                                 );
