@@ -54,11 +54,20 @@ DATABASE_URL            # PostgreSQL connection string (Neon)
 META_API_TOKEN          # Meta Graph API bearer token
 META_PHONE_NUMBER_ID    # WhatsApp business phone ID
 META_VERIFY_TOKEN       # Webhook verification token
+META_APP_SECRET         # App Secret — required in production for WhatsApp webhook HMAC (X-Hub-Signature-256)
 ANTHROPIC_API_KEY       # Required for AI responses
 ```
 
-## Current Limitations (MVP)
+## Current State
 
-- No mentor dashboard UI yet
-- No authentication/role system
-- System prompts hardcoded (not DB-driven)
+- **Auth:** bcryptjs + jose JWT with httpOnly cookies. Role-based middleware (socio → /chat, mentor/admin → /dashboard, admin → /admin).
+- **Mentor Dashboard:** Live — socios list with health indicators, socio detail with summaries, flags, direct messaging, AI overrides.
+- **Admin Dashboard:** Live — system prompts (versioned, DB-backed task layers via `loadActivePrompt`), program config, mentor management, system logs.
+- **Curriculum:** 28 lessons defined in `apps/web/src/lib/lessons/data.ts`; MI reference in `/data/curriculum/mentors_manual_key_points.txt`.
+- **Channels:** WhatsApp (Meta Business API) + Web chat.
+
+## Known Limitations
+
+- WhatsApp webhook signature verification runs when `META_APP_SECRET` is set; omit only for local/dev (requests are rejected without a valid signature when set).
+- `/api/chat` uses a simple in-memory per-user rate limit (resets on deploy); swap for Redis or Vercel KV if you scale.
+- Test AI endpoints (`/api/test-ai`, `/api/admin/prompts/test`) are restricted to mentor/admin; keep `CRON_SECRET` on cron routes.

@@ -88,11 +88,19 @@ export async function POST(req: NextRequest) {
                             messageType,
                         });
 
-                        await handleIncomingMessage({
+                        // Process message asynchronously - don't block webhook response
+                        // WhatsApp requires 200 response within 5 seconds or retries
+                        void handleIncomingMessage({
                             externalId: senderPhone,
                             channelType: 'whatsapp',
                             message: textBody,
                             channel: whatsappChannel,
+                        }).catch((error) => {
+                            console.error('[Webhook] Async message processing failed:', error);
+                            void logEvent('error', 'webhook', 'Async message handler failed', {
+                                from: senderPhone,
+                                error: error instanceof Error ? error.message : String(error),
+                            });
                         });
                     }
                 }

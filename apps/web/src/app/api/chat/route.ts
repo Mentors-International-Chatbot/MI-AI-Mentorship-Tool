@@ -8,6 +8,10 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 30; // max messages per window
 const RATE_WINDOW_MS = 60 * 1000; // 1 minute
 
+// Deduplication cache: prevent duplicate requests within 10 seconds
+const requestCache = new Map<string, { response: any; timestamp: number }>();
+const DEDUP_WINDOW_MS = 10 * 1000; // 10 seconds
+
 function isRateLimited(userId: string): boolean {
     const now = Date.now();
     const entry = rateLimitMap.get(userId);
@@ -17,6 +21,31 @@ function isRateLimited(userId: string): boolean {
     }
     entry.count++;
     return entry.count > RATE_LIMIT;
+}
+
+function getCachedResponse(userId: string, message: string): any | null {
+    const now = Date.now();
+    const key = `${userId}:${message}`;
+    const cached = requestCache.get(key);
+
+    if (cached && now - cached.timestamp < DEDUP_WINDOW_MS) {
+        return cached.response;
+    }
+
+    // Cleanup expired entries
+    if (cached) {
+        requestCache.delete(key);
+    }
+
+    return null;
+}
+
+function cacheResponse(userId: string, message: string, response: any): void {
+    const key = `${userId}:${message}`;
+    requestCache.set(key, { response, timestamp: Date.now() });
+
+    // Auto-cleanup after window expires
+    setTimeout(() => requestCache.delete(key), DEDUP_WINDOW_MS);
 }
 
 const FRIENDLY_ERROR: Record<SupportedLanguage, string> = {
@@ -51,6 +80,13 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        // Check for duplicate request (prevents double-click spam)
+        const cachedResponse = getCachedResponse(session.userId, message);
+        if (cachedResponse) {
+            console.log(`[Chat] Returning cached response for duplicate request from ${session.userId}`);
+            return NextResponse.json(cachedResponse);
+        }
+
         const webChannel = new WebChannel();
 
         const result = await handleIncomingMessage({
@@ -65,14 +101,19 @@ export async function POST(req: NextRequest) {
         const response = result.responseText
             || webChannel.getMessages().join('\n');
 
-        return NextResponse.json({
+        const responseData = {
             response,
             mode: result.mode,
             markers: result.markers,
             socioId: result.socioId,
             isNewSocio: result.isNewSocio,
             isError: result.isError ?? false,
-        });
+        };
+
+        // Cache response to prevent duplicate processing
+        cacheResponse(session.userId, message, responseData);
+
+        return NextResponse.json(responseData);
     } catch (error) {
         console.error('Chat API Error:', error);
         return NextResponse.json(

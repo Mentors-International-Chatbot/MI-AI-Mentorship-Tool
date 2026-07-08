@@ -31,6 +31,7 @@ export interface HandleMessageResult {
 }
 
 export async function handleIncomingMessage(input: HandleMessageInput): Promise<HandleMessageResult> {
+    const startTime = performance.now();
     const { externalId, channelType, message, channel, language, userName } = input;
 
     let socio = await repo.getSocio(channelType, externalId);
@@ -363,6 +364,9 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     }
 
     await channel.sendMessage(externalId, responseText);
+
+    const totalTime = performance.now() - startTime;
+    console.log(`[MessageHandler] Total processing time: ${Math.round(totalTime)}ms for socio ${socio.id}`);
 
     return {
         responseText,

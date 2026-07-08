@@ -14,6 +14,21 @@ import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
 import { AI_ERROR_FALLBACK, type SupportedLanguage } from '@/lib/i18n/languages';
 import { logEvent } from '@/lib/logging/logger';
 
+const AI_TIMEOUT_MS = 30000; // 30 seconds max per request
+
+async function invokeWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    errorMessage: string
+): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        ),
+    ]);
+}
+
 async function invokeWithRetry(
     chat: ChatAnthropic,
     messages: (SystemMessage | HumanMessage | AIMessage)[],
@@ -23,13 +38,22 @@ async function invokeWithRetry(
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            const response = await chat.invoke(messages);
+            const response = await invokeWithTimeout(
+                chat.invoke(messages),
+                AI_TIMEOUT_MS,
+                `AI request timeout after ${AI_TIMEOUT_MS}ms`
+            );
             return typeof response.content === 'string'
                 ? response.content
                 : JSON.stringify(response.content);
         } catch (error) {
             lastError = error as Error;
             console.error(`[AI] Attempt ${attempt + 1}/${maxRetries + 1} failed:`, error);
+
+            // Don't retry on timeout errors - fail fast
+            if (error instanceof Error && error.message.includes('timeout')) {
+                throw error;
+            }
 
             if (attempt < maxRetries) {
                 const delay = Math.pow(2, attempt) * 1000;
@@ -50,6 +74,9 @@ export interface AIResponse {
 }
 
 export async function generateAIResponse(socio: Socio, incomingText: string): Promise<AIResponse> {
+    const startTime = performance.now();
+    const timings: Record<string, number> = {};
+
     const chat = new ChatAnthropic({
         model: "claude-haiku-4-5-20251001",
         temperature: 0.7,
@@ -57,17 +84,23 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
     });
 
     // 1. Determine interaction mode from real progress data
+    const modeStart = performance.now();
     const modeResult = await determineMode(socio, incomingText);
+    timings.determineMode = performance.now() - modeStart;
 
     // 2. Assemble 4-layer system prompt with real progress (DB-backed)
+    const promptStart = performance.now();
     const systemPrompt = await buildSystemPrompt(
         socio,
         modeResult.routerResult,
         modeResult.progress,
     );
+    timings.buildPrompt = performance.now() - promptStart;
 
     // 3. Fetch conversation history (last 10 messages for context)
+    const historyStart = performance.now();
     const recentHistory = await repo.getMessages(socio.id, 10);
+    timings.fetchHistory = performance.now() - historyStart;
 
     const previousMessages = recentHistory
         .map((msg: Message) => {
@@ -85,17 +118,31 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
 
     // 4. Call LLM with retry
     try {
+        const invokeStart = performance.now();
         const rawContent = await invokeWithRetry(chat, messages);
+        timings.llmInvoke = performance.now() - invokeStart;
 
         // 5. Parse markers from the response
+        const parseStart = performance.now();
         const markers = parseMarkers(rawContent);
         const sanitized = sanitizeForDelivery(markers.cleanText);
+        timings.parseAndSanitize = performance.now() - parseStart;
+
+        const totalTime = performance.now() - startTime;
 
         void logEvent('info', 'ai', 'AI response generated', {
             socioId: socio.id,
             mode: modeResult.routerResult.mode,
             promptTokensApprox: systemPrompt.length,
             responseLength: rawContent.length,
+            totalMs: Math.round(totalTime),
+            timings: {
+                determineMode: Math.round(timings.determineMode),
+                buildPrompt: Math.round(timings.buildPrompt),
+                fetchHistory: Math.round(timings.fetchHistory),
+                llmInvoke: Math.round(timings.llmInvoke),
+                parseAndSanitize: Math.round(timings.parseAndSanitize),
+            },
         });
 
         return {
