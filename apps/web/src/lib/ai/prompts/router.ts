@@ -2,7 +2,13 @@ import { repo } from '@/lib/repo';
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
 import { getLessonData, hasLessonData } from '@/lib/lessons/data';
-import { RETEACH_THRESHOLD, MAX_LESSON_NUMBER, FOLLOWUP_ENABLED, MAX_REMINDERS } from './constants';
+import {
+  RETEACH_THRESHOLD,
+  MAX_LESSON_NUMBER,
+  FOLLOWUP_ENABLED,
+  MAX_REMINDERS,
+  RETEACH_LEVEL_THRESHOLD,
+} from './constants';
 import {
   InteractionMode,
   SocioProgress,
@@ -10,6 +16,7 @@ import {
   LessonDeliveryState,
   ReminderState,
 } from './types';
+import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 
 // ─── Mode Router ────────────────────────────────────────────────────
 // Inspects the socio's state and returns the correct InteractionMode.
@@ -60,11 +67,28 @@ export interface DetermineModeResult {
   routerResult: RouterResult;
   progress: SocioProgress;
   repoProgress: RepoSocioProgress;
+  /** True if reteach was triggered by dimension state (continuous sensing) */
+  reteachFromDimension?: boolean;
+}
+
+/**
+ * Check if dimension state suggests reteaching is needed.
+ * Returns true if comprehension is below threshold.
+ */
+function shouldReteachFromDimensions(dimensionState?: DimensionStateMap): boolean {
+  if (!dimensionState) return false;
+
+  const comprehension = dimensionState['comprehension'];
+  if (!comprehension) return false;
+
+  // Only trigger reteach if confidence is reasonable
+  return comprehension.level < RETEACH_LEVEL_THRESHOLD && comprehension.confidence >= 0.4;
 }
 
 export async function determineMode(
   socio: Socio,
   incomingText: string,
+  dimensionState?: DimensionStateMap,
 ): Promise<DetermineModeResult> {
   const repoProgress = await repo.getSocioProgress(socio.id);
 
@@ -132,21 +156,29 @@ export async function determineMode(
     const lesson = getLessonData(repoProgress.currentLessonNumber);
 
     if (repoProgress.currentMessageIndex < lesson.messages.length) {
-      // Check if the user just gave a low understanding score (on last message)
+      // Check if reteach is needed from two signals:
+      // 1. Explicit low understanding score (on last message)
+      // 2. Continuous dimension state showing low comprehension
+      const dimensionTriggersReteach = shouldReteachFromDimensions(dimensionState);
+
       if (repoProgress.currentMessageIndex === lesson.messages.length - 1) {
         const score = parseScore(incomingText);
-        if (score !== null && score <= RETEACH_THRESHOLD) {
+        // Trigger reteach if EITHER:
+        // - User gave an explicit low score, OR
+        // - Dimension sensing shows low comprehension with reasonable confidence
+        if ((score !== null && score <= RETEACH_THRESHOLD) || dimensionTriggersReteach) {
           return {
             routerResult: {
               mode: InteractionMode.RETEACH,
               reteach: {
                 lessonNumber: repoProgress.currentLessonNumber,
                 lessonTitleEs: lesson.titleEs,
-                understandingScore: score,
+                understandingScore: score ?? Math.round(dimensionState?.['comprehension']?.level ?? 3),
               },
             },
             progress,
             repoProgress,
+            reteachFromDimension: dimensionTriggersReteach && score === null,
           };
         }
       }

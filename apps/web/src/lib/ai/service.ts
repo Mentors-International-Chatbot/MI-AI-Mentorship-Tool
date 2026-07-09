@@ -13,6 +13,13 @@ import {
 import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
 import { AI_ERROR_FALLBACK, type SupportedLanguage } from '@/lib/i18n/languages';
 import { logEvent } from '@/lib/logging/logger';
+import {
+    senseDimensions,
+    updateDimensionState,
+    getDimensionStateMap,
+    type DimensionStateMap,
+} from './sensing';
+import { getLessonData, hasLessonData } from '@/lib/lessons/data';
 
 const AI_TIMEOUT_MS = 30000; // 30 seconds max per request
 
@@ -70,10 +77,16 @@ export interface AIResponse {
     markers: ParsedMarkers;
     mode: InteractionMode;
     determineModeResult: DetermineModeResult;
+    dimensionState?: DimensionStateMap;
     isError?: boolean;
 }
 
-export async function generateAIResponse(socio: Socio, incomingText: string): Promise<AIResponse> {
+export async function generateAIResponse(
+    socio: Socio,
+    incomingText: string,
+    /** Optional pre-computed dimension state for testing */
+    overrideDimensionState?: DimensionStateMap,
+): Promise<AIResponse> {
     const startTime = performance.now();
     const timings: Record<string, number> = {};
 
@@ -83,17 +96,46 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
         anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
-    // 1. Determine interaction mode from real progress data
+    // 0. Run sensing pass to assess student's current state
+    const sensingStart = performance.now();
+    let liveState: DimensionStateMap;
+
+    if (overrideDimensionState) {
+        // Use override state (for testing)
+        liveState = overrideDimensionState;
+    } else {
+        // Run actual sensing pass
+        const priorState = await getDimensionStateMap(socio.id);
+
+        // Get lesson context for sensing
+        const repoProgress = await repo.getSocioProgress(socio.id);
+        const lessonContext = hasLessonData(repoProgress.currentLessonNumber)
+            ? getLessonData(repoProgress.currentLessonNumber).titleEs
+            : 'Conversación general de mentoría';
+
+        const sensed = await senseDimensions({
+            incomingText,
+            priorState,
+            lessonContext,
+        });
+
+        // Update state with new observations
+        liveState = await updateDimensionState(socio.id, sensed.dimensions);
+    }
+    timings.sensing = performance.now() - sensingStart;
+
+    // 1. Determine interaction mode from real progress data + dimension state
     const modeStart = performance.now();
-    const modeResult = await determineMode(socio, incomingText);
+    const modeResult = await determineMode(socio, incomingText, liveState);
     timings.determineMode = performance.now() - modeStart;
 
-    // 2. Assemble 4-layer system prompt with real progress (DB-backed)
+    // 2. Assemble 4-layer system prompt with real progress + dimension state
     const promptStart = performance.now();
     const systemPrompt = await buildSystemPrompt(
         socio,
         modeResult.routerResult,
         modeResult.progress,
+        liveState,
     );
     timings.buildPrompt = performance.now() - promptStart;
 
@@ -137,12 +179,15 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
             responseLength: rawContent.length,
             totalMs: Math.round(totalTime),
             timings: {
+                sensing: Math.round(timings.sensing),
                 determineMode: Math.round(timings.determineMode),
                 buildPrompt: Math.round(timings.buildPrompt),
                 fetchHistory: Math.round(timings.fetchHistory),
                 llmInvoke: Math.round(timings.llmInvoke),
                 parseAndSanitize: Math.round(timings.parseAndSanitize),
             },
+            dimensionState: liveState,
+            reteachFromDimension: modeResult.reteachFromDimension,
         });
 
         return {
@@ -150,6 +195,7 @@ export async function generateAIResponse(socio: Socio, incomingText: string): Pr
             markers,
             mode: modeResult.routerResult.mode,
             determineModeResult: modeResult,
+            dimensionState: liveState,
         };
     } catch (error) {
         console.error('[AI] All retry attempts failed:', error);

@@ -10,36 +10,112 @@ import {
   RouterResult,
 } from '../types';
 import { getLessonTitle } from './context';
-import { FLAG_RED_THRESHOLD } from '../constants';
+import { FLAG_RED_THRESHOLD, RETEACH_LEVEL_THRESHOLD, CONFUSION_ESCALATE_THRESHOLD } from '../constants';
 import { loadActivePrompt } from '../loadPrompt';
+import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 
 // ─── Layer 3: Task Context — One Per Interaction Mode ───────────────
 // The router determines the mode; this function returns the right prompt.
 // DB-backed prompts override instructional tone; dynamic facts are appended below.
+// dimensionState provides continuous comprehension/confusion levels for adaptive responses.
+
+/**
+ * Build a dimension state context block for the prompt.
+ * Tells the model the student's current understanding level.
+ */
+function buildDimensionContext(dimensionState?: DimensionStateMap): string {
+  if (!dimensionState || Object.keys(dimensionState).length === 0) {
+    return '';
+  }
+
+  const comprehension = dimensionState['comprehension'];
+  const confusion = dimensionState['confusion'];
+
+  const lines: string[] = ['ESTADO DEL ESTUDIANTE (medido automáticamente):'];
+
+  if (comprehension) {
+    const level = comprehension.level.toFixed(1);
+    const trend = comprehension.trend === 'improving' ? '↑ mejorando'
+      : comprehension.trend === 'declining' ? '↓ bajando'
+      : '→ estable';
+    lines.push(`- Comprensión: ${level}/10 (${trend})`);
+
+    // Add guidance based on level
+    if (comprehension.level < RETEACH_LEVEL_THRESHOLD) {
+      lines.push('  ⚠️ Comprensión baja — mezcla una breve re-explicación con tu respuesta');
+    }
+  }
+
+  if (confusion) {
+    const level = confusion.level.toFixed(1);
+    const trend = confusion.trend === 'improving' ? '↓ disminuyendo'
+      : confusion.trend === 'declining' ? '↑ aumentando'
+      : '→ estable';
+    lines.push(`- Confusión: ${level}/10 (${trend})`);
+
+    // Add guidance based on level
+    if (confusion.level >= CONFUSION_ESCALATE_THRESHOLD) {
+      lines.push('  ⚠️ Confusión alta — usa lenguaje más simple, ofrece clarificación');
+    }
+  }
+
+  // Add blending guidance when both dimensions suggest intervention
+  if (comprehension && confusion &&
+      comprehension.level < RETEACH_LEVEL_THRESHOLD &&
+      confusion.level >= 5) {
+    lines.push('');
+    lines.push('GUÍA DE MEZCLA: El estudiante muestra baja comprensión y algo de confusión.');
+    lines.push('En lugar de solo re-enseñar O solo avanzar, mezcla ambos:');
+    lines.push('- Aclara brevemente lo confuso (1-2 oraciones)');
+    lines.push('- Luego continúa con el contenido normal');
+  }
+
+  return lines.join('\n');
+}
 
 export async function buildTaskPrompt(
   socio: Socio,
   result: RouterResult,
   progress?: SocioProgress,
+  dimensionState?: DimensionStateMap,
 ): Promise<string> {
+  const dimensionContext = buildDimensionContext(dimensionState);
+
+  let basePrompt: string;
+
   switch (result.mode) {
     case InteractionMode.LESSON_START:
-      return buildLessonStartPrompt(socio, result.lesson!);
+      basePrompt = await buildLessonStartPrompt(socio, result.lesson!);
+      break;
     case InteractionMode.LESSON_DELIVERY:
-      return buildLessonDeliveryPrompt(socio, result.lesson!);
+      basePrompt = await buildLessonDeliveryPrompt(socio, result.lesson!);
+      break;
     case InteractionMode.FREEFORM_QUESTION:
-      return buildFreeformPrompt(progress);
+      basePrompt = await buildFreeformPrompt(progress);
+      break;
     case InteractionMode.CHECKIN:
-      return buildCheckinPrompt(socio, result.checkin!);
+      basePrompt = await buildCheckinPrompt(socio, result.checkin!);
+      break;
     case InteractionMode.RETEACH:
-      return buildReteachPrompt(socio, result.reteach!);
+      basePrompt = await buildReteachPrompt(socio, result.reteach!);
+      break;
     case InteractionMode.REMINDER:
-      return buildReminderPrompt(socio, result.reminder!);
+      basePrompt = await buildReminderPrompt(socio, result.reminder!);
+      break;
     case InteractionMode.MENTOR_HANDOFF:
-      return buildMentorHandoffPrompt(socio, result.mentor!);
+      basePrompt = await buildMentorHandoffPrompt(socio, result.mentor!);
+      break;
     case InteractionMode.POST_MENTOR:
-      return buildPostMentorPrompt(socio, result.mentor!);
+      basePrompt = await buildPostMentorPrompt(socio, result.mentor!);
+      break;
   }
+
+  // Append dimension context if available
+  if (dimensionContext) {
+    return `${basePrompt}\n\n${dimensionContext}`;
+  }
+
+  return basePrompt;
 }
 
 // ─── LESSON_START ───────────────────────────────────────────────────

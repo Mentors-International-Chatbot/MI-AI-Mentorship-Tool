@@ -11,6 +11,14 @@ export {
   FOLLOWUP_ENABLED,
   FOLLOWUP_DELAY_HOURS,
   MAX_REMINDERS,
+  // Dimension sensing
+  DIMENSION_DEFINITIONS,
+  RETEACH_LEVEL_THRESHOLD,
+  CONFUSION_ESCALATE_THRESHOLD,
+  DIMENSION_SMOOTHING,
+  TREND_THRESHOLD,
+  type DimensionDefinition,
+  type DimensionCategory,
 } from './constants';
 export {
   InteractionMode,

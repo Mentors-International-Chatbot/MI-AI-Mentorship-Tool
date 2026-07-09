@@ -5,6 +5,7 @@ import { buildContextPrompt } from './layers/context';
 import { buildTaskPrompt } from './layers/task';
 import { buildContentPrompt } from './layers/content';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
+import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 
 // ─── Prompt Builder ─────────────────────────────────────────────────
 // Assembles the 4-layer system prompt at runtime.
@@ -29,6 +30,7 @@ export async function buildSystemPrompt(
   socio: Socio,
   routerResult: RouterResult,
   progress?: SocioProgress,
+  dimensionState?: DimensionStateMap,
 ): Promise<string> {
   const overrides = stripInternalPromptOverrides(
     (socio as Record<string, unknown>).promptOverrides,
@@ -41,8 +43,8 @@ export async function buildSystemPrompt(
   // Layer 2: Socio context (now async — fetches persistent SocioContext from DB)
   const layer2 = await buildContextPrompt(socio, progress);
 
-  // Layer 3: Task context (mode-specific instructions)
-  const layer3 = await buildTaskPrompt(socio, routerResult, progress);
+  // Layer 3: Task context (mode-specific instructions + dimension state)
+  const layer3 = await buildTaskPrompt(socio, routerResult, progress, dimensionState);
 
   // Layer 4: Lesson content (only for teaching modes)
   const layer4 = buildContentPrompt(routerResult);

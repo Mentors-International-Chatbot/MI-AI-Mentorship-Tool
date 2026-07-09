@@ -11,6 +11,7 @@ import {
 } from '@/lib/ai/prompts';
 import { getLessonData, hasLessonData } from '@/lib/lessons/data';
 import { Socio } from '@/lib/repo/types';
+import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 
 /**
  * Test endpoint for prompt iteration.
@@ -27,6 +28,17 @@ import { Socio } from '@/lib/repo/types';
  *     "completedLessons": [1, 2],
  *     "socioName": "María",
  *     "businessDescription": "Panadería en el barrio"
+ *   }
+ *
+ * Override dimension state (for testing blended reteach behavior):
+ *   POST {
+ *     "message": "Hola",
+ *     "mode": "LESSON_DELIVERY",
+ *     "lessonNumber": 5,
+ *     "dimensionState": {
+ *       "comprehension": 3.5,
+ *       "confusion": 6.0
+ *     }
  *   }
  */
 export async function POST(req: NextRequest) {
@@ -45,7 +57,35 @@ export async function POST(req: NextRequest) {
             completedLessons,
             socioName,
             businessDescription,
+            dimensionState: rawDimensionState,
         } = body;
+
+        // Build dimension state map from simplified input
+        let dimensionState: DimensionStateMap | undefined;
+        if (rawDimensionState && typeof rawDimensionState === 'object') {
+            dimensionState = {};
+            const now = new Date();
+            if (typeof rawDimensionState.comprehension === 'number') {
+                dimensionState['comprehension'] = {
+                    dimensionKey: 'comprehension',
+                    level: rawDimensionState.comprehension,
+                    trend: 'flat',
+                    confidence: 0.8,
+                    evidence: 'Test override',
+                    updatedAt: now,
+                };
+            }
+            if (typeof rawDimensionState.confusion === 'number') {
+                dimensionState['confusion'] = {
+                    dimensionKey: 'confusion',
+                    level: rawDimensionState.confusion,
+                    trend: 'flat',
+                    confidence: 0.8,
+                    evidence: 'Test override',
+                    updatedAt: now,
+                };
+            }
+        }
 
         if (!message) {
             return NextResponse.json({ error: 'Missing "message" in body' }, { status: 400 });
@@ -125,7 +165,7 @@ export async function POST(req: NextRequest) {
                 };
             }
 
-            const systemPrompt = await buildSystemPrompt(fakeSocio, routerResult, progress);
+            const systemPrompt = await buildSystemPrompt(fakeSocio, routerResult, progress, dimensionState);
 
             const chat = new ChatAnthropic({
                 model: "claude-haiku-4-5-20251001",
@@ -149,6 +189,7 @@ export async function POST(req: NextRequest) {
                 markers,
                 mode: interactionMode,
                 systemPrompt,
+                dimensionState,
             });
         }
 
@@ -162,7 +203,7 @@ export async function POST(req: NextRequest) {
         };
 
         const defaultRouter: RouterResult = { mode: InteractionMode.FREEFORM_QUESTION };
-        const systemPrompt = await buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress);
+        const systemPrompt = await buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress, dimensionState);
 
         const chat = new ChatAnthropic({
             model: "claude-haiku-4-5-20251001",
@@ -186,6 +227,7 @@ export async function POST(req: NextRequest) {
             markers,
             mode: InteractionMode.FREEFORM_QUESTION,
             systemPrompt,
+            dimensionState,
         });
     } catch (error) {
         console.error('Test AI Error:', error);

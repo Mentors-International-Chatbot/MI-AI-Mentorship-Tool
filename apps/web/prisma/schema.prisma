@@ -69,6 +69,7 @@ model Socio {
   financialSnapshots FinancialSnapshot[]
   context            SocioContext?
   feedback           SocioFeedback[]
+  dimensionStates    SocioDimensionState[]
 
   @@unique([channelType, externalId], map: "socios_channel_external_id_key")
   @@index([mentorId, status])
@@ -292,4 +293,22 @@ model FinancialSnapshot {
   @@unique([socioId, weekStartDate], map: "financial_snapshot_socio_week_key")
   @@index([socioId, weekStartDate])
   @@map("financial_snapshots")
+}
+
+model SocioDimensionState {
+  id            String   @id @default(cuid())
+  socioId       String   @map("socio_id")
+  dimensionKey  String   @map("dimension_key") // "comprehension" | "confusion" (matches DIMENSION_DEFINITIONS)
+  level         Float    // 0-10, continuous
+  trend         String   // "improving" | "flat" | "declining"
+  confidence    Float    // 0-1, sensing model's certainty
+  evidence      String?  // short excerpt/summary backing this update
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  socio Socio @relation(fields: [socioId], references: [id], onDelete: Cascade)
+
+  @@unique([socioId, dimensionKey], map: "socio_dimension_state_unique")
+  @@index([socioId])
+  @@map("socio_dimension_states")
 }
