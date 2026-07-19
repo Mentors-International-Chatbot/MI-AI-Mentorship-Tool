@@ -1,7 +1,7 @@
 import { ToneOverride, PromptOverrides, ConcisivenessLevel } from '../types';
 import { MAX_SENTENCES_PER_MESSAGE, MAX_EMOJIS_PER_MESSAGE } from '../constants';
 import { getLanguageDirective, type SupportedLanguage } from '@/lib/i18n/languages';
-import { prisma } from '@/lib/db';
+import { repo } from '@/lib/repo';
 import { getChatbotDisplayName } from '@/lib/config/service';
 
 // ─── Conciseness Mapping ────────────────────────────────────────────
@@ -27,10 +27,8 @@ export function getConcisivenessInstruction(level?: ConcisivenessLevel): string 
 
 async function loadActivePrompt(category: string): Promise<string | null> {
   try {
-    const row = await prisma.systemPrompt.findFirst({
-      where: { category, active: true },
-    });
-    return row?.content ?? null;
+    const prompt = await repo.getActivePrompt(category);
+    return prompt?.content ?? null;
   } catch {
     return null;
   }

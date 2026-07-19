@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 import {
     Prisma,
@@ -11,6 +11,11 @@ import {
     LessonProgress as PrismaLessonProgress,
     MessageSentiment as PrismaMessageSentiment,
     SocioContext as PrismaSocioContext,
+    SocioDimensionState as PrismaSocioDimensionState,
+    SystemPrompt as PrismaSystemPrompt,
+    Summary as PrismaSummary,
+    FinancialSnapshot as PrismaFinancialSnapshot,
+    SocioFeedback as PrismaSocioFeedback,
 } from "@prisma/client";
 
 /** Race-safe: concurrent create/upsert paths can hit P2002 on socio_id; retry read after conflict. */
@@ -140,6 +145,67 @@ function toLessonProgress(p: PrismaLessonProgress): LessonProgressRecord {
     };
 }
 
+function toDimensionState(p: PrismaSocioDimensionState): SocioDimensionState {
+    return {
+        id: p.id,
+        socioId: p.socioId,
+        dimensionKey: p.dimensionKey,
+        level: p.level,
+        trend: p.trend,
+        confidence: p.confidence,
+        evidence: p.evidence,
+        updatedAt: p.updatedAt,
+        createdAt: p.createdAt,
+    };
+}
+
+function toSystemPrompt(p: PrismaSystemPrompt): SystemPrompt {
+    return {
+        id: p.id,
+        version: p.version,
+        content: p.content,
+        category: p.category,
+        active: p.active,
+        authorId: p.authorId,
+        createdAt: p.createdAt,
+    };
+}
+
+function toSummary(p: PrismaSummary): Summary {
+    return {
+        id: p.id,
+        socioId: p.socioId,
+        weekStartDate: p.weekStartDate,
+        content: p.content,
+        flags: p.flags,
+        metrics: p.metrics,
+        createdAt: p.createdAt,
+    };
+}
+
+function toFinancialSnapshot(p: PrismaFinancialSnapshot): FinancialSnapshot {
+    return {
+        id: p.id,
+        socioId: p.socioId,
+        weekStartDate: p.weekStartDate,
+        revenue: p.revenue,
+        netProfit: p.netProfit,
+        source: p.source,
+        createdAt: p.createdAt,
+    };
+}
+
+function toFeedback(p: PrismaSocioFeedback): SocioFeedback {
+    return {
+        id: p.id,
+        socioId: p.socioId,
+        lessonNum: p.lessonNum,
+        rating: p.rating,
+        comment: p.comment,
+        createdAt: p.createdAt,
+    };
+}
+
 export const prismaRepo: Repo = {
     async getSocio(channelType: ChannelType, externalId: string) {
         let socio = await prisma.socio.findUnique({
@@ -221,6 +287,31 @@ export const prismaRepo: Repo = {
             ...(limit ? { take: limit } : {}),
         });
         return messages.reverse().map(toMessage);
+    },
+
+    async getMessagesWithSentiment(socioId, opts) {
+        const messages = await prisma.message.findMany({
+            where: {
+                socioId,
+                ...(opts?.since ? { createdAt: { gt: opts.since } } : {}),
+            },
+            orderBy: { createdAt: "desc" },
+            ...(opts?.limit ? { take: opts.limit } : {}),
+            include: {
+                sentiment: {
+                    select: {
+                        confusion: true,
+                        frustration: true,
+                        urgency: true,
+                        sentiment: true,
+                    },
+                },
+            },
+        });
+        return messages.reverse().map((m) => ({
+            ...toMessage(m),
+            sentiment: m.sentiment ?? undefined,
+        }));
     },
 
     async initProgress(socioId) {
@@ -485,5 +576,151 @@ export const prismaRepo: Repo = {
             },
         });
         return toSocioContext(ctx);
+    },
+
+    // ─── Dimension State Methods ─────────────────────────────────────────────────
+
+    async getDimensionState(socioId, dimensionKey) {
+        const state = await prisma.socioDimensionState.findUnique({
+            where: { socioId_dimensionKey: { socioId, dimensionKey } },
+        });
+        return state ? toDimensionState(state) : null;
+    },
+
+    async getDimensionStateMap(socioId) {
+        const states = await prisma.socioDimensionState.findMany({
+            where: { socioId },
+        });
+        return states.map(toDimensionState);
+    },
+
+    async upsertDimensionState(socioId, state) {
+        const row = await prisma.socioDimensionState.upsert({
+            where: { socioId_dimensionKey: { socioId, dimensionKey: state.dimensionKey } },
+            create: {
+                socioId,
+                dimensionKey: state.dimensionKey,
+                level: state.level,
+                trend: state.trend,
+                confidence: state.confidence,
+                evidence: state.evidence,
+            },
+            update: {
+                level: state.level,
+                trend: state.trend,
+                confidence: state.confidence,
+                evidence: state.evidence,
+            },
+        });
+        return toDimensionState(row);
+    },
+
+    async clearDimensionState(socioId) {
+        await prisma.socioDimensionState.deleteMany({
+            where: { socioId },
+        });
+    },
+
+    // ─── System Prompt Methods ───────────────────────────────────────────────────
+
+    async getActivePrompt(category) {
+        const prompt = await prisma.systemPrompt.findFirst({
+            where: { category, active: true },
+            orderBy: { createdAt: 'desc' },
+        });
+        return prompt ? toSystemPrompt(prompt) : null;
+    },
+
+    // ─── Summary Methods ─────────────────────────────────────────────────────────
+
+    async createSummary(data) {
+        const summary = await prisma.summary.create({
+            data: {
+                socioId: data.socioId,
+                weekStartDate: data.weekStartDate,
+                content: data.content,
+                flags: data.flags as object ?? undefined,
+                metrics: data.metrics as object ?? undefined,
+            },
+        });
+        return toSummary(summary);
+    },
+
+    async getSummaries(socioId, limit) {
+        const summaries = await prisma.summary.findMany({
+            where: { socioId },
+            orderBy: { weekStartDate: 'desc' },
+            ...(limit ? { take: limit } : {}),
+        });
+        return summaries.map(toSummary);
+    },
+
+    // ─── Financial Snapshot Methods ──────────────────────────────────────────────
+
+    async upsertFinancialSnapshot(socioId, weekStartDate, data) {
+        const snapshot = await prisma.financialSnapshot.upsert({
+            where: { socioId_weekStartDate: { socioId, weekStartDate } },
+            create: {
+                socioId,
+                weekStartDate,
+                revenue: data.revenue,
+                netProfit: data.netProfit,
+                source: data.source ?? 'ai_marker',
+            },
+            update: {
+                revenue: data.revenue,
+                netProfit: data.netProfit,
+                source: data.source ?? 'ai_marker',
+            },
+        });
+        return toFinancialSnapshot(snapshot);
+    },
+
+    async getFinancialSnapshots(socioId, limit) {
+        const snapshots = await prisma.financialSnapshot.findMany({
+            where: { socioId },
+            orderBy: { weekStartDate: 'desc' },
+            ...(limit ? { take: limit } : {}),
+        });
+        return snapshots.map(toFinancialSnapshot);
+    },
+
+    // ─── Feedback Methods ────────────────────────────────────────────────────────
+
+    async createFeedback(data) {
+        const feedback = await prisma.socioFeedback.create({
+            data: {
+                socioId: data.socioId,
+                lessonNum: data.lessonNum,
+                rating: data.rating,
+                comment: data.comment,
+            },
+        });
+        return toFeedback(feedback);
+    },
+
+    async getFeedback(socioId) {
+        const feedback = await prisma.socioFeedback.findMany({
+            where: { socioId },
+            orderBy: { createdAt: 'desc' },
+        });
+        return feedback.map(toFeedback);
+    },
+
+    // ─── Flag by ID ──────────────────────────────────────────────────────────────
+
+    async getFlagById(flagId) {
+        const flag = await prisma.socioFlag.findUnique({
+            where: { id: flagId },
+        });
+        return flag ? toSocioFlag(flag) : null;
+    },
+
+    async getFlagWithSocio(flagId) {
+        const flag = await prisma.socioFlag.findUnique({
+            where: { id: flagId },
+            include: { socio: true },
+        });
+        return flag ? { ...toSocioFlag(flag), socio: toSocio(flag.socio) } : null;
     },
 };

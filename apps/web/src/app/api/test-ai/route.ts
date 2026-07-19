@@ -9,7 +9,7 @@ import {
     type RouterResult,
     type SocioProgress,
 } from '@/lib/ai/prompts';
-import { getLessonData, hasLessonData } from '@/lib/lessons/data';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 import { Socio } from '@/lib/repo/types';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 

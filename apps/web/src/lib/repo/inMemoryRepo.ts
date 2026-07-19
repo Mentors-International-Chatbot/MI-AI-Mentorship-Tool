@@ -1,4 +1,4 @@
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 
 const sociosByKey = new Map<string, Socio>();
@@ -9,6 +9,11 @@ const flagsBySocio = new Map<string, SocioFlag[]>();
 const lessonProgressBySocio = new Map<string, Map<number, LessonProgressRecord>>();
 const sentimentsByMessage = new Map<string, MessageSentimentRecord>();
 const contextBySocio = new Map<string, SocioContext>();
+const dimensionStateBySocio = new Map<string, Map<string, SocioDimensionState>>();
+const systemPrompts = new Map<string, SystemPrompt[]>();
+const summariesBySocio = new Map<string, Summary[]>();
+const financialsBySocio = new Map<string, FinancialSnapshot[]>();
+const feedbackBySocio = new Map<string, SocioFeedback[]>();
 
 function channelKey(channelType: string, externalId: string): string {
     return `${channelType}:${externalId}`;
@@ -314,5 +319,142 @@ export const inMemoryRepo: Repo = {
         };
         contextBySocio.set(socioId, ctx);
         return ctx;
+    },
+
+    // ─── New methods ─────────────────────────────────────────────────────────────
+
+    async getMessagesWithSentiment(socioId, opts) {
+        const arr = messagesBySocio.get(socioId) ?? [];
+        let filtered = arr;
+        if (opts?.since) {
+            filtered = arr.filter(m => m.createdAt > opts.since!);
+        }
+        if (opts?.limit) {
+            filtered = filtered.slice(Math.max(0, filtered.length - opts.limit));
+        }
+        return filtered.map(m => {
+            const sentiment = sentimentsByMessage.get(m.id);
+            return sentiment ? { ...m, sentiment: { confusion: sentiment.confusion, frustration: sentiment.frustration, urgency: sentiment.urgency, sentiment: sentiment.sentiment } } : m;
+        });
+    },
+
+    async getDimensionState(socioId, dimensionKey) {
+        const map = dimensionStateBySocio.get(socioId);
+        return map?.get(dimensionKey) ?? null;
+    },
+
+    async getDimensionStateMap(socioId) {
+        const map = dimensionStateBySocio.get(socioId);
+        return map ? Array.from(map.values()) : [];
+    },
+
+    async upsertDimensionState(socioId, state) {
+        const now = new Date();
+        const map = dimensionStateBySocio.get(socioId) ?? new Map();
+        const existing = map.get(state.dimensionKey);
+        const record: SocioDimensionState = {
+            id: existing?.id ?? Math.random().toString(36).substring(7),
+            socioId,
+            dimensionKey: state.dimensionKey,
+            level: state.level,
+            trend: state.trend,
+            confidence: state.confidence,
+            evidence: state.evidence,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        };
+        map.set(state.dimensionKey, record);
+        dimensionStateBySocio.set(socioId, map);
+        return record;
+    },
+
+    async clearDimensionState(socioId) {
+        dimensionStateBySocio.delete(socioId);
+    },
+
+    async getActivePrompt(category) {
+        const prompts = systemPrompts.get(category) ?? [];
+        const active = prompts.find(p => p.active);
+        return active ?? null;
+    },
+
+    async createSummary(data) {
+        const summary: Summary = {
+            id: Math.random().toString(36).substring(7),
+            ...data,
+            createdAt: new Date(),
+        };
+        const arr = summariesBySocio.get(data.socioId) ?? [];
+        arr.unshift(summary);
+        summariesBySocio.set(data.socioId, arr);
+        return summary;
+    },
+
+    async getSummaries(socioId, limit) {
+        const arr = summariesBySocio.get(socioId) ?? [];
+        return limit ? arr.slice(0, limit) : arr;
+    },
+
+    async upsertFinancialSnapshot(socioId, weekStartDate, data) {
+        const arr = financialsBySocio.get(socioId) ?? [];
+        const existing = arr.find(f => f.weekStartDate.getTime() === weekStartDate.getTime());
+        if (existing) {
+            existing.revenue = data.revenue;
+            existing.netProfit = data.netProfit;
+            existing.source = data.source ?? 'ai_marker';
+            return existing;
+        }
+        const snapshot: FinancialSnapshot = {
+            id: Math.random().toString(36).substring(7),
+            socioId,
+            weekStartDate,
+            revenue: data.revenue,
+            netProfit: data.netProfit,
+            source: data.source ?? 'ai_marker',
+            createdAt: new Date(),
+        };
+        arr.unshift(snapshot);
+        financialsBySocio.set(socioId, arr);
+        return snapshot;
+    },
+
+    async getFinancialSnapshots(socioId, limit) {
+        const arr = financialsBySocio.get(socioId) ?? [];
+        return limit ? arr.slice(0, limit) : arr;
+    },
+
+    async createFeedback(data) {
+        const feedback: SocioFeedback = {
+            id: Math.random().toString(36).substring(7),
+            ...data,
+            createdAt: new Date(),
+        };
+        const arr = feedbackBySocio.get(data.socioId) ?? [];
+        arr.unshift(feedback);
+        feedbackBySocio.set(data.socioId, arr);
+        return feedback;
+    },
+
+    async getFeedback(socioId) {
+        return feedbackBySocio.get(socioId) ?? [];
+    },
+
+    async getFlagById(flagId) {
+        for (const flags of flagsBySocio.values()) {
+            const flag = flags.find(f => f.id === flagId);
+            if (flag) return flag;
+        }
+        return null;
+    },
+
+    async getFlagWithSocio(flagId) {
+        for (const [socioId, flags] of flagsBySocio) {
+            const flag = flags.find(f => f.id === flagId);
+            if (flag) {
+                const socio = sociosById.get(socioId);
+                if (socio) return { ...flag, socio };
+            }
+        }
+        return null;
     },
 };

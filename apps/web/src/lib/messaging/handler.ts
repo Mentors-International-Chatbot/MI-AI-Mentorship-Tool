@@ -2,10 +2,9 @@ import { repo } from '@/lib/repo';
 import { handleOnboarding } from '@/lib/onboarding/service';
 import { generateAIResponse } from '@/lib/ai/service';
 import { InteractionMode, parseScore, type ParsedMarkers } from '@/lib/ai/prompts';
-import { hasLessonData } from '@/lib/lessons/data';
+import { hasLessonData } from '@/lib/lessons/db-lesson-service';
 import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
 import { extractAndStoreContext } from '@/lib/ai/contextExtractor';
-import { prisma } from '@/lib/db';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
 import { LESSON_MESSAGES, type SupportedLanguage } from '@/lib/i18n/languages';
 import { MAX_LESSON_NUMBER } from '@/lib/ai/prompts/constants';
@@ -153,13 +152,11 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
                 : Number(promptOverridesRaw.feedbackLessonNum) || 0;
 
         if (rating >= 1 && rating <= 10) {
-            await prisma.socioFeedback.create({
-                data: {
-                    socioId: socio.id,
-                    lessonNum,
-                    rating,
-                    comment: message.trim() || null,
-                },
+            await repo.createFeedback({
+                socioId: socio.id,
+                lessonNum,
+                rating,
+                comment: message.trim() || null,
             });
 
             const rest = { ...promptOverridesRaw };
@@ -250,18 +247,10 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         const day = now.getUTCDay();
         const mondayOffset = day === 0 ? 6 : day - 1;
         const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - mondayOffset));
-        await prisma.financialSnapshot.upsert({
-            where: {
-                socioId_weekStartDate: { socioId: socio.id, weekStartDate: weekStart },
-            },
-            update: { revenue: fin.revenue, netProfit: fin.netProfit },
-            create: {
-                socioId: socio.id,
-                weekStartDate: weekStart,
-                revenue: fin.revenue,
-                netProfit: fin.netProfit,
-                source: 'ai_marker',
-            },
+        await repo.upsertFinancialSnapshot(socio.id, weekStart, {
+            revenue: fin.revenue,
+            netProfit: fin.netProfit,
+            source: 'ai_marker',
         });
         console.log(`[Financial] socio=${socio.id} revenue=${fin.revenue} netProfit=${fin.netProfit}`);
     }

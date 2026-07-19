@@ -1,5 +1,5 @@
 import { InteractionMode, LessonDeliveryState, ReteachState, RouterResult } from '../types';
-import { getLessonData, hasLessonData } from '@/lib/lessons/data';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 
 // ─── Layer 4: Lesson Content — Only During Teaching Modes ───────────
 // Provides the actual curriculum material the AI needs to teach from.

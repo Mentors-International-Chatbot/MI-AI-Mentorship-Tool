@@ -112,6 +112,57 @@ export type StaleSocio = {
     progress: SocioProgress;
 };
 
+export type SocioDimensionState = {
+    id: string;
+    socioId: string;
+    dimensionKey: string;
+    level: number;
+    trend: string;
+    confidence: number;
+    evidence: string | null;
+    updatedAt: Date;
+    createdAt: Date;
+};
+
+export type SystemPrompt = {
+    id: string;
+    version: string;
+    content: string;
+    category: string;
+    active: boolean;
+    authorId: string;
+    createdAt: Date;
+};
+
+export type Summary = {
+    id: string;
+    socioId: string;
+    weekStartDate: Date;
+    content: string;
+    flags: unknown | null;
+    metrics: unknown | null;
+    createdAt: Date;
+};
+
+export type FinancialSnapshot = {
+    id: string;
+    socioId: string;
+    weekStartDate: Date;
+    revenue: number;
+    netProfit: number;
+    source: string;
+    createdAt: Date;
+};
+
+export type SocioFeedback = {
+    id: string;
+    socioId: string;
+    lessonNum: number;
+    rating: number | null;
+    comment: string | null;
+    createdAt: Date;
+};
+
 export interface Repo {
     getSocio(channelType: ChannelType, externalId: string): Promise<Socio | null>;
     createSocio(channelType: ChannelType, externalId: string): Promise<Socio>;
@@ -119,6 +170,7 @@ export interface Repo {
 
     addMessage(data: Omit<Message, "id" | "createdAt">): Promise<Message>;
     getMessages(socioId: string, limit?: number): Promise<Message[]>;
+    getMessagesWithSentiment(socioId: string, opts?: { limit?: number; since?: Date }): Promise<(Message & { sentiment?: { confusion: number; frustration: number; urgency: number; sentiment: string } })[]>;
 
     initProgress(socioId: string): Promise<SocioProgress>;
     getSocioProgress(socioId: string): Promise<SocioProgress>;
@@ -150,4 +202,29 @@ export interface Repo {
     // Context memory methods
     getSocioContext(socioId: string): Promise<SocioContext | null>;
     upsertSocioContext(socioId: string, data: Partial<SocioContext>): Promise<SocioContext>;
+
+    // Dimension state methods (sensing/steering)
+    getDimensionState(socioId: string, dimensionKey: string): Promise<SocioDimensionState | null>;
+    getDimensionStateMap(socioId: string): Promise<SocioDimensionState[]>;
+    upsertDimensionState(socioId: string, state: Omit<SocioDimensionState, 'id' | 'socioId' | 'createdAt' | 'updatedAt'>): Promise<SocioDimensionState>;
+    clearDimensionState(socioId: string): Promise<void>;
+
+    // System prompt methods
+    getActivePrompt(category: string): Promise<SystemPrompt | null>;
+
+    // Summary methods
+    createSummary(data: Omit<Summary, 'id' | 'createdAt'>): Promise<Summary>;
+    getSummaries(socioId: string, limit?: number): Promise<Summary[]>;
+
+    // Financial snapshot methods
+    upsertFinancialSnapshot(socioId: string, weekStartDate: Date, data: { revenue: number; netProfit: number; source?: string }): Promise<FinancialSnapshot>;
+    getFinancialSnapshots(socioId: string, limit?: number): Promise<FinancialSnapshot[]>;
+
+    // Feedback methods
+    createFeedback(data: Omit<SocioFeedback, 'id' | 'createdAt'>): Promise<SocioFeedback>;
+    getFeedback(socioId: string): Promise<SocioFeedback[]>;
+
+    // Flag by ID
+    getFlagById(flagId: string): Promise<SocioFlag | null>;
+    getFlagWithSocio(flagId: string): Promise<(SocioFlag & { socio: Socio }) | null>;
 }

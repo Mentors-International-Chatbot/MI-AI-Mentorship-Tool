@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth/session';
 import { repo } from '@/lib/repo';
-import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,13 +27,7 @@ export async function GET(req: NextRequest) {
 
   const progress = await repo.getSocioProgress(socio.id);
 
-  const newMessages = await prisma.message.findMany({
-    where: {
-      socioId: socio.id,
-      createdAt: { gt: sinceDate },
-    },
-    orderBy: { createdAt: 'asc' },
-  });
+  const newMessages = await repo.getMessagesWithSentiment(socio.id, { since: sinceDate });
 
   return NextResponse.json({
     messages: newMessages

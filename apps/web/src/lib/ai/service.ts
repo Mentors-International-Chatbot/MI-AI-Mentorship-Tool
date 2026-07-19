@@ -19,7 +19,7 @@ import {
     getDimensionStateMap,
     type DimensionStateMap,
 } from './sensing';
-import { getLessonData, hasLessonData } from '@/lib/lessons/data';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 
 const AI_TIMEOUT_MS = 30000; // 30 seconds max per request
 

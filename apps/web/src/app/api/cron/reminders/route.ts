@@ -14,7 +14,7 @@ import {
     type SocioProgress as PromptProgress,
     type ReminderState,
 } from '@/lib/ai/prompts';
-import { getLessonData, hasLessonData } from '@/lib/lessons/data';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 
 export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('authorization');

@@ -1,7 +1,7 @@
 import { repo } from '@/lib/repo';
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
-import { getLessonData, hasLessonData } from '@/lib/lessons/data';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 import {
   RETEACH_THRESHOLD,
   MAX_LESSON_NUMBER,

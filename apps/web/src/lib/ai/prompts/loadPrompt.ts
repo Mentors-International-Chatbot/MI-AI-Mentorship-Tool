@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db';
+import { repo } from '@/lib/repo';
 
 /**
  * Loads the active SystemPrompt for a given category from the DB.
@@ -9,11 +9,8 @@ export async function loadActivePrompt(
   fallback: string,
 ): Promise<string> {
   try {
-    const row = await prisma.systemPrompt.findFirst({
-      where: { category, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
-    return row?.content ?? fallback;
+    const prompt = await repo.getActivePrompt(category);
+    return prompt?.content ?? fallback;
   } catch {
     return fallback;
   }

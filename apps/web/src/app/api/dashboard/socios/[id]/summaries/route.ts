@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { repo } from '@/lib/repo';
 import { verifyMentorOwnership } from '@/lib/auth/ownership';
 
 export async function GET(
@@ -11,11 +11,7 @@ export async function GET(
   const auth = await verifyMentorOwnership(socioId);
   if (!auth.authorized) return auth.response;
 
-  const summaries = await prisma.summary.findMany({
-    where: { socioId },
-    orderBy: { weekStartDate: 'desc' },
-    take: 8,
-  });
+  const summaries = await repo.getSummaries(socioId, 8);
 
   return NextResponse.json({
     summaries: summaries.map((s) => ({

@@ -1,6 +1,6 @@
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress } from '../types';
-import { getLessonTitle } from '@/lib/lessons/data';
+import { getLessonTitle } from '@/lib/lessons/db-lesson-service';
 import { repo } from '@/lib/repo';
 
 // ─── Layer 2: Socio Context (~150 tokens) — Always Sent ────────────
