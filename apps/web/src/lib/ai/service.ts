@@ -1,4 +1,3 @@
-import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
 import { repo } from '@/lib/repo';
 import { Socio, Message } from '@/lib/repo/types';
@@ -20,6 +19,7 @@ import {
     type DimensionStateMap,
 } from './sensing';
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 const AI_TIMEOUT_MS = 30000; // 30 seconds max per request
 
@@ -37,7 +37,7 @@ async function invokeWithTimeout<T>(
 }
 
 async function invokeWithRetry(
-    chat: ChatAnthropic,
+    chat: { invoke: (messages: (SystemMessage | HumanMessage | AIMessage)[]) => Promise<{ content: unknown }> },
     messages: (SystemMessage | HumanMessage | AIMessage)[],
     maxRetries: number = 2,
 ): Promise<string> {
@@ -90,10 +90,8 @@ export async function generateAIResponse(
     const startTime = performance.now();
     const timings: Record<string, number> = {};
 
-    const chat = new ChatAnthropic({
-        model: "claude-haiku-4-5-20251001",
+    const chat = createOpenRouterChat({
         temperature: 0.7,
-        anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     // 0. Run sensing pass to assess student's current state

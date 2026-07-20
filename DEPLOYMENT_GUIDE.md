@@ -281,7 +281,7 @@ See `PERFORMANCE_IMPROVEMENTS.md` for detailed Phase 2 and 3 improvements:
 1. Check logs: `vercel logs --follow`
 2. Run monitor: `npx tsx scripts/monitor.ts`
 3. Check database: Neon dashboard → Queries
-4. Check AI usage: Anthropic dashboard
+4. Check AI usage: OpenRouter dashboard
 
 **Emergency rollback:**
 ```bash

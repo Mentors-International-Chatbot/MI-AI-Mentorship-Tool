@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { verifySession } from '@/lib/auth/session';
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 export async function POST(request: NextRequest) {
   const session = await verifySession();
@@ -23,10 +23,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const chat = new ChatAnthropic({
-      model: 'claude-haiku-4-5-20251001',
+    const chat = createOpenRouterChat({
       temperature: 0.7,
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     const response = await chat.invoke([

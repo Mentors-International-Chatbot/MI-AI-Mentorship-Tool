@@ -45,7 +45,7 @@ Added 15+ indexes to eliminate table scans:
 
 **File:** `apps/web/src/lib/ai/service.ts:17-47`
 
-**Impact:** Better error handling, no indefinite hangs when Anthropic API is slow.
+**Impact:** Better error handling, no indefinite hangs when OpenRouter API is slow.
 
 ---
 
@@ -470,7 +470,7 @@ LIMIT 20;
 1. Check monitoring script: `npx tsx scripts/monitor.ts`
 2. Review system logs in Neon dashboard
 3. Check Vercel function logs
-4. Monitor AI API usage in Anthropic dashboard
+4. Monitor AI API usage in OpenRouter dashboard
 
 **Emergency rollback:**
 ```bash

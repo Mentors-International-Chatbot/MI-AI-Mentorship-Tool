@@ -1,6 +1,6 @@
-import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { repo } from '@/lib/repo';
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 const EXTRACTION_PROMPT = `Analiza esta conversación reciente y extrae SOLO datos nuevos o actualizados sobre el socio.
 Responde ÚNICAMENTE con JSON válido. Solo incluye campos donde encontraste información nueva o actualizada.
@@ -30,11 +30,9 @@ export async function extractAndStoreContext(
     aiResponse: string,
 ): Promise<void> {
     try {
-        const chat = new ChatAnthropic({
-            model: 'claude-haiku-4-5-20251001',
+        const chat = createOpenRouterChat({
             temperature: 0,
             maxTokens: 300,
-            anthropicApiKey: process.env.ANTHROPIC_API_KEY,
         });
 
         const response = await chat.invoke([

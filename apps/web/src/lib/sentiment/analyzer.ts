@@ -1,6 +1,6 @@
-import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { loadActivePrompt } from '@/lib/ai/prompts/loadPrompt';
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 export interface SentimentResult {
   confusion: number;    // 0-10
@@ -42,11 +42,9 @@ export async function analyzeSentiment(message: string): Promise<SentimentResult
       SENTIMENT_SYSTEM_PROMPT_DEFAULT,
     );
 
-    const chat = new ChatAnthropic({
-      model: 'claude-haiku-4-5-20251001',
+    const chat = createOpenRouterChat({
       temperature: 0,
       maxTokens: 150,
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     const response = await chat.invoke([
