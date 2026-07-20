@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { verifySession } from '@/lib/auth/session';
 import {
@@ -12,6 +11,7 @@ import {
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 import { Socio } from '@/lib/repo/types';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 /**
  * Test endpoint for prompt iteration.
@@ -167,10 +167,8 @@ export async function POST(req: NextRequest) {
 
             const systemPrompt = await buildSystemPrompt(fakeSocio, routerResult, progress, dimensionState);
 
-            const chat = new ChatAnthropic({
-                model: "claude-haiku-4-5-20251001",
+            const chat = createOpenRouterChat({
                 temperature: 0.7,
-                anthropicApiKey: process.env.ANTHROPIC_API_KEY,
             });
 
             const response = await chat.invoke([
@@ -205,10 +203,8 @@ export async function POST(req: NextRequest) {
         const defaultRouter: RouterResult = { mode: InteractionMode.FREEFORM_QUESTION };
         const systemPrompt = await buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress, dimensionState);
 
-        const chat = new ChatAnthropic({
-            model: "claude-haiku-4-5-20251001",
+        const chat = createOpenRouterChat({
             temperature: 0.7,
-            anthropicApiKey: process.env.ANTHROPIC_API_KEY,
         });
 
         const response = await chat.invoke([

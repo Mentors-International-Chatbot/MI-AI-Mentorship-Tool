@@ -1,7 +1,7 @@
-import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { SupportedLanguage } from "@/lib/i18n/languages";
 import { loadActivePrompt } from "@/lib/ai/prompts/loadPrompt";
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 const NAME_EXTRACTION_PROMPT_DEFAULT =
     "Extract only the person's name from this message. Return just the name, nothing else. If no name is found, return exactly NONE.";
@@ -65,11 +65,9 @@ export async function extractName(
     );
 
     try {
-        const chat = new ChatAnthropic({
-            model: "claude-haiku-4-5-20251001",
+        const chat = createOpenRouterChat({
             temperature: 0,
             maxTokens: 50,
-            anthropicApiKey: process.env.ANTHROPIC_API_KEY,
         });
 
         const response = await chat.invoke([

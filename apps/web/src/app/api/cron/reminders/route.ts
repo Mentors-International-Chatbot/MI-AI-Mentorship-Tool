@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { repo } from '@/lib/repo';
 import { WhatsAppChannel } from '@/lib/delivery';
@@ -15,6 +14,7 @@ import {
     type ReminderState,
 } from '@/lib/ai/prompts';
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('authorization');
@@ -67,10 +67,8 @@ export async function GET(req: NextRequest) {
 
             const systemPrompt = await buildSystemPrompt(socio, routerResult, promptProgress);
 
-            const chat = new ChatAnthropic({
-                model: 'claude-haiku-4-5-20251001',
+            const chat = createOpenRouterChat({
                 temperature: 0.7,
-                anthropicApiKey: process.env.ANTHROPIC_API_KEY,
             });
 
             const response = await chat.invoke([

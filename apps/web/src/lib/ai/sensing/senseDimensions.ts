@@ -12,13 +12,13 @@
  * - Runs every turn to build up continuous state
  */
 
-import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { DIMENSION_DEFINITIONS } from '@/lib/ai/prompts/constants';
 import type { SensedDimension, DimensionStateMap, SensingResult } from './types';
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 const SENSING_TIMEOUT_MS = 10000; // 10 seconds max - this should be fast
-const SENSING_MODEL = "claude-haiku-4-5-20251001"; // Use fastest model for sensing
+const SENSING_MODEL = "anthropic/claude-3.5-haiku"; // Use a fast model for sensing
 
 const SENSING_SYSTEM_PROMPT = `You are a student assessment system. Analyze the student's message and output ONLY a JSON array.
 
@@ -127,10 +127,9 @@ export async function senseDimensions(params: {
     };
   }
 
-  const chat = new ChatAnthropic({
+  const chat = createOpenRouterChat({
     model: SENSING_MODEL,
     temperature: 0, // Deterministic for structured output
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
     maxTokens: 300, // Keep it tight - we only need JSON
   });
 

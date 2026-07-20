@@ -44,7 +44,7 @@ npx prisma generate       # Regenerate Prisma client after schema changes
 - **Path alias:** Use `@/lib/*` imports
 - **All user-facing text in Spanish** - maintain Colombian Spanish tone
 - **AI context:** Last 10 messages passed to LLM for conversation continuity
-- **Model:** Claude Haiku 4.5 via LangChain (model-agnostic architecture)
+- **Model:** OpenRouter via LangChain (`OPENROUTER_MODEL`, defaults to Claude Haiku)
 - **Curriculum reference:** `/data/curriculum/mentors_manual_key_points.txt` contains 28 MI training modules
 
 ## Environment Variables
@@ -55,7 +55,8 @@ META_API_TOKEN          # Meta Graph API bearer token
 META_PHONE_NUMBER_ID    # WhatsApp business phone ID
 META_VERIFY_TOKEN       # Webhook verification token
 META_APP_SECRET         # App Secret — required in production for WhatsApp webhook HMAC (X-Hub-Signature-256)
-ANTHROPIC_API_KEY       # Required for AI responses
+OPENROUTER_API_KEY      # Required for AI responses
+OPENROUTER_MODEL        # Optional (default: anthropic/claude-3.5-haiku)
 ```
 
 ## Current State

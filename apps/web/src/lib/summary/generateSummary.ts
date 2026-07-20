@@ -1,6 +1,6 @@
-import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { prisma } from '@/lib/db';
+import { createOpenRouterChat } from '@/lib/ai/openrouter';
 import {
   DEFAULT_LANGUAGE,
   type SupportedLanguage,
@@ -212,11 +212,9 @@ export async function generateSummary(
 
   const prompt = buildHumanPrompt(lang, ctx);
 
-  const chat = new ChatAnthropic({
-    model: 'claude-haiku-4-5-20251001',
+  const chat = createOpenRouterChat({
     temperature: 0.3,
     maxTokens: 500,
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   });
 
   const response = await chat.invoke([
