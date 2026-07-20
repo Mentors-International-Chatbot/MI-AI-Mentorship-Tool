@@ -22,6 +22,7 @@ export type Socio = {
     promptOverrides?: Record<string, unknown> | null;
     aiPaused: boolean;
     mentorId?: string | null;
+    curriculumCollectionKey?: string | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -227,4 +228,7 @@ export interface Repo {
     // Flag by ID
     getFlagById(flagId: string): Promise<SocioFlag | null>;
     getFlagWithSocio(flagId: string): Promise<(SocioFlag & { socio: Socio }) | null>;
+
+    // Curriculum selection
+    setSocioCurriculum(socioId: string, collectionKey: string): Promise<Socio>;
 }

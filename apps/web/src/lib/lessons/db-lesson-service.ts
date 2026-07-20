@@ -1,19 +1,29 @@
 /**
- * Database-backed Lesson Service
+ * Database-backed Lesson Service (Collection-Aware)
  * ═══════════════════════════════════════════════════════════════════════════
- * Provides the same interface as the legacy hardcoded data.ts but reads from
- * the database (LessonVersion.body). Used after JourneyPackage migration.
+ * Provides lessons from the database, scoped by ContentCollection slug.
+ * Each socio's curriculumCollectionKey determines which collection they see.
  *
  * Key mapping:
  *   - lesson-01 → lessonNumber: 1
  *   - LessonVersion.body.blocks[].role → message.type (scenario → escenario, etc.)
  *
- * This service caches lessons in memory after first load since curriculum
- * changes infrequently and we need sync access for existing callers.
+ * Cache structure: Map<collectionKey, Map<lessonNumber, LessonData>>
+ * Lessons are loaded lazily per collection on first access.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { prisma } from "@/lib/db";
 import type { PackageLesson, LessonBlock } from "@/lib/journey-package/journey-package.schema";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Default collection for backwards compatibility.
+ * Used when a socio has no curriculumCollectionKey set.
+ */
+export const DEFAULT_COLLECTION_KEY = "mi-colombia-curriculum";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types (matching legacy data.ts interface)
@@ -51,26 +61,31 @@ const ROLE_TO_TYPE: Record<TeachRole, LessonMessage["type"]> = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Cache
+// Cache (keyed by collectionKey)
 // ═══════════════════════════════════════════════════════════════════════════
 
-let lessonsCache: Map<number, LessonData> | null = null;
-let cachePromise: Promise<void> | null = null;
+/** Cache: collectionKey → (lessonNumber → LessonData) */
+const collectionsCache = new Map<string, Map<number, LessonData>>();
+
+/** In-flight load promises to prevent duplicate loads */
+const loadPromises = new Map<string, Promise<Map<number, LessonData>>>();
 
 /**
  * Extracts lesson number from key format: "lesson-01" → 1
+ * Also handles non-numbered keys by returning the order index + 1
  */
-function keyToLessonNumber(key: string): number {
+function keyToLessonNumber(key: string, fallbackIndex: number): number {
   const match = key.match(/^lesson-(\d+)$/);
-  if (!match) return 0;
-  return parseInt(match[1], 10);
+  if (match) return parseInt(match[1], 10);
+  // For non-numbered keys (like "assemble-the-sandwich"), use fallback
+  return fallbackIndex + 1;
 }
 
 /**
  * Transforms PackageLesson (DB format) to LessonData (legacy format).
  */
-function transformToLessonData(pkg: PackageLesson): LessonData {
-  const lessonNumber = keyToLessonNumber(pkg.key);
+function transformToLessonData(pkg: PackageLesson, orderIndex: number): LessonData {
+  const lessonNumber = keyToLessonNumber(pkg.key, orderIndex);
 
   // Extract teach blocks and transform to messages
   const messages: LessonMessage[] = pkg.blocks
@@ -97,26 +112,37 @@ function transformToLessonData(pkg: PackageLesson): LessonData {
 }
 
 /**
- * Loads all active lessons from the database into memory.
- * Called once on first access, then cached.
+ * Loads lessons for a specific collection from the database.
  */
-async function loadLessonsFromDb(): Promise<Map<number, LessonData>> {
+async function loadLessonsFromDb(collectionKey: string): Promise<Map<number, LessonData>> {
   const lessons = new Map<number, LessonData>();
 
-  // Get all active lesson versions
+  // Get active lesson versions for this collection
   const versions = await prisma.lessonVersion.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      lesson: {
+        collection: {
+          slug: collectionKey,
+        },
+      },
+    },
     include: {
-      lesson: true,
+      lesson: {
+        include: {
+          collection: true,
+        },
+      },
     },
     orderBy: { lesson: { orderIndex: "asc" } },
   });
 
-  for (const version of versions) {
+  for (let i = 0; i < versions.length; i++) {
+    const version = versions[i];
     const body = version.body as PackageLesson;
     if (!body || !body.key) continue;
 
-    const lessonData = transformToLessonData(body);
+    const lessonData = transformToLessonData(body, i);
     if (lessonData.lessonNumber > 0) {
       lessons.set(lessonData.lessonNumber, lessonData);
     }
@@ -126,50 +152,64 @@ async function loadLessonsFromDb(): Promise<Map<number, LessonData>> {
 }
 
 /**
- * Ensures lessons are loaded (idempotent, concurrent-safe).
+ * Ensures lessons for a collection are loaded (idempotent, concurrent-safe).
  */
-async function ensureLessonsLoaded(): Promise<Map<number, LessonData>> {
-  if (lessonsCache) return lessonsCache;
+async function ensureCollectionLoaded(collectionKey: string): Promise<Map<number, LessonData>> {
+  // Return cached if available
+  const cached = collectionsCache.get(collectionKey);
+  if (cached) return cached;
 
-  if (!cachePromise) {
-    cachePromise = loadLessonsFromDb().then((lessons) => {
-      lessonsCache = lessons;
+  // Check for in-flight load
+  let loadPromise = loadPromises.get(collectionKey);
+  if (!loadPromise) {
+    // Start loading
+    loadPromise = loadLessonsFromDb(collectionKey).then((lessons) => {
+      collectionsCache.set(collectionKey, lessons);
+      loadPromises.delete(collectionKey);
+      return lessons;
     });
+    loadPromises.set(collectionKey, loadPromise);
   }
 
-  await cachePromise;
-  return lessonsCache!;
+  return loadPromise;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Public API (matching legacy data.ts)
+// Public API (collection-aware)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Gets lesson data by number. Async version - use when await is possible.
+ * Gets lesson data by collection and lesson number. Async version.
  */
-export async function getLessonDataAsync(lessonNumber: number): Promise<LessonData> {
-  const lessons = await ensureLessonsLoaded();
+export async function getLessonDataAsync(
+  collectionKey: string,
+  lessonNumber: number
+): Promise<LessonData> {
+  const lessons = await ensureCollectionLoaded(collectionKey);
   const lesson = lessons.get(lessonNumber);
   if (!lesson) {
-    throw new Error(`Lesson ${lessonNumber} not found in database.`);
+    throw new Error(`Lesson ${lessonNumber} not found in collection "${collectionKey}".`);
   }
   return lesson;
 }
 
 /**
- * Gets lesson data by number. Sync version - throws if cache not loaded.
- * Call preloadLessons() at app startup if using this.
+ * Gets lesson data by collection and lesson number. Sync version.
+ * Throws if the collection hasn't been preloaded.
  */
-export function getLessonData(lessonNumber: number): LessonData {
-  if (!lessonsCache) {
+export function getLessonData(collectionKey: string, lessonNumber: number): LessonData {
+  const lessons = collectionsCache.get(collectionKey);
+  if (!lessons) {
     throw new Error(
-      "Lessons not loaded. Call preloadLessons() at app startup or use getLessonDataAsync()."
+      `Collection "${collectionKey}" not loaded. Call preloadCollection() first or use getLessonDataAsync().`
     );
   }
-  const lesson = lessonsCache.get(lessonNumber);
+  const lesson = lessons.get(lessonNumber);
   if (!lesson) {
-    throw new Error(`Lesson ${lessonNumber} not found. Only lessons 1-${lessonsCache.size} are available.`);
+    throw new Error(
+      `Lesson ${lessonNumber} not found in collection "${collectionKey}". ` +
+      `Available: 1-${lessons.size}`
+    );
   }
   return lesson;
 }
@@ -177,40 +217,57 @@ export function getLessonData(lessonNumber: number): LessonData {
 /**
  * Gets just the lesson title. Sync version.
  */
-export function getLessonTitle(lessonNumber: number): string {
-  if (!lessonsCache) return `Lección ${lessonNumber}`;
-  const lesson = lessonsCache.get(lessonNumber);
+export function getLessonTitle(collectionKey: string, lessonNumber: number): string {
+  const lessons = collectionsCache.get(collectionKey);
+  if (!lessons) return `Lección ${lessonNumber}`;
+  const lesson = lessons.get(lessonNumber);
   if (!lesson) return `Lección ${lessonNumber}`;
   return lesson.titleEs;
 }
 
 /**
- * Checks if lesson exists. Sync version.
+ * Checks if lesson exists in collection. Sync version.
  */
-export function hasLessonData(lessonNumber: number): boolean {
-  if (!lessonsCache) return false;
-  return lessonsCache.has(lessonNumber);
+export function hasLessonData(collectionKey: string, lessonNumber: number): boolean {
+  const lessons = collectionsCache.get(collectionKey);
+  if (!lessons) return false;
+  return lessons.has(lessonNumber);
 }
 
 /**
- * Preloads all lessons into cache. Call at app startup.
+ * Preloads a specific collection into cache.
+ */
+export async function preloadCollection(collectionKey: string): Promise<void> {
+  await ensureCollectionLoaded(collectionKey);
+  const lessons = collectionsCache.get(collectionKey);
+  console.log(`[LessonService] Loaded ${lessons?.size ?? 0} lessons for collection "${collectionKey}"`);
+}
+
+/**
+ * Preloads the default collection. Called at app startup.
  */
 export async function preloadLessons(): Promise<void> {
-  await ensureLessonsLoaded();
-  console.log(`[LessonService] Loaded ${lessonsCache?.size ?? 0} lessons from database`);
+  await preloadCollection(DEFAULT_COLLECTION_KEY);
 }
 
 /**
- * Clears the cache. Useful for testing or after publishing new versions.
+ * Clears all cached collections.
  */
 export function clearLessonsCache(): void {
-  lessonsCache = null;
-  cachePromise = null;
+  collectionsCache.clear();
+  loadPromises.clear();
 }
 
 /**
- * Returns total lesson count. Sync version.
+ * Returns lesson count for a collection. Sync version.
  */
-export function getLessonCount(): number {
-  return lessonsCache?.size ?? 0;
+export function getLessonCount(collectionKey: string): number {
+  return collectionsCache.get(collectionKey)?.size ?? 0;
+}
+
+/**
+ * Checks if a collection is loaded.
+ */
+export function isCollectionLoaded(collectionKey: string): boolean {
+  return collectionsCache.has(collectionKey);
 }

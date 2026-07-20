@@ -18,8 +18,10 @@ import {
     getDimensionStateMap,
     type DimensionStateMap,
 } from './sensing';
-import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+
+import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
+
 
 const AI_TIMEOUT_MS = 30000; // 30 seconds max per request
 
@@ -84,6 +86,8 @@ export interface AIResponse {
 export async function generateAIResponse(
     socio: Socio,
     incomingText: string,
+    /** Curriculum collection key (falls back to DEFAULT_COLLECTION_KEY) */
+    collectionKey: string = DEFAULT_COLLECTION_KEY,
     /** Optional pre-computed dimension state for testing */
     overrideDimensionState?: DimensionStateMap,
 ): Promise<AIResponse> {
@@ -107,8 +111,8 @@ export async function generateAIResponse(
 
         // Get lesson context for sensing
         const repoProgress = await repo.getSocioProgress(socio.id);
-        const lessonContext = hasLessonData(repoProgress.currentLessonNumber)
-            ? getLessonData(repoProgress.currentLessonNumber).titleEs
+        const lessonContext = hasLessonData(collectionKey, repoProgress.currentLessonNumber)
+            ? getLessonData(collectionKey, repoProgress.currentLessonNumber).titleEs
             : 'Conversación general de mentoría';
 
         const sensed = await senseDimensions({
@@ -124,7 +128,7 @@ export async function generateAIResponse(
 
     // 1. Determine interaction mode from real progress data + dimension state
     const modeStart = performance.now();
-    const modeResult = await determineMode(socio, incomingText, liveState);
+    const modeResult = await determineMode(socio, incomingText, collectionKey, liveState);
     timings.determineMode = performance.now() - modeStart;
 
     // 2. Assemble 4-layer system prompt with real progress + dimension state
@@ -133,6 +137,7 @@ export async function generateAIResponse(
         socio,
         modeResult.routerResult,
         modeResult.progress,
+        collectionKey,
         liveState,
     );
     timings.buildPrompt = performance.now() - promptStart;

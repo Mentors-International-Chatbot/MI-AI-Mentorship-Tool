@@ -1,6 +1,6 @@
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress } from '../types';
-import { getLessonTitle } from '@/lib/lessons/db-lesson-service';
+import { getLessonTitle, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import { repo } from '@/lib/repo';
 
 // ─── Layer 2: Socio Context (~150 tokens) — Always Sent ────────────
@@ -8,16 +8,17 @@ import { repo } from '@/lib/repo';
 
 export { getLessonTitle };
 
-function formatCompletedLessons(completed: number[]): string {
+function formatCompletedLessons(completed: number[], collectionKey: string): string {
   if (completed.length === 0) return 'Ninguna';
   return completed
-    .map((n) => `${n} (${getLessonTitle(n)})`)
+    .map((n) => `${n} (${getLessonTitle(collectionKey, n)})`)
     .join(', ');
 }
 
 export async function buildContextPrompt(
   socio: Socio,
   progress?: SocioProgress,
+  collectionKey: string = DEFAULT_COLLECTION_KEY,
 ): Promise<string> {
   const context = await repo.getSocioContext(socio.id);
 
@@ -25,14 +26,14 @@ export async function buildContextPrompt(
     return buildNewSocioContext(socio, context);
   }
 
-  const currentTitle = getLessonTitle(progress.currentLessonNumber);
+  const currentTitle = getLessonTitle(collectionKey, progress.currentLessonNumber);
 
   let block = `CONTEXTO DEL SOCIO:
 - Nombre: ${socio.name || 'Amigo'}
 - Negocio: ${socio.businessDescription || 'No especificado aún'}
 - Tipo de negocio: ${socio.businessName || 'No especificado'}
-- Lección actual: ${progress.currentLessonNumber} de 28 — "${currentTitle}"
-- Lecciones completadas: ${formatCompletedLessons(progress.completedLessons)}
+- Lección actual: ${progress.currentLessonNumber} — "${currentTitle}"
+- Lecciones completadas: ${formatCompletedLessons(progress.completedLessons, collectionKey)}
 - Última comprensión: ${progress.weeklyUnderstanding ?? 'N/A'}/10
 - Última implementación: ${progress.weeklyImplementation ?? 'N/A'}/10
 - Días desde último contacto: ${progress.daysSinceLastInteraction}

@@ -56,6 +56,7 @@ model Socio {
   aiPaused            Boolean          @default(false) @map("ai_paused")
   metadata            Json?
   mentorId            String?          @map("mentor_id")
+  curriculumCollectionKey String?      @map("curriculum_collection_key")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 

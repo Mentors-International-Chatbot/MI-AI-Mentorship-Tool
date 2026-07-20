@@ -33,6 +33,7 @@ type ClientSession = {
     name: string;
     role: 'socio' | 'mentor' | 'admin';
     language: string;
+    curriculumCollectionKey: string | null;
 };
 
 const LANGUAGES: { code: SupportedLanguage; flag: string; nativeName: string }[] = [
@@ -144,6 +145,13 @@ export default function ChatPage() {
                     return;
                 }
                 const sessionData = (await sessionRes.json()) as ClientSession;
+
+                // Gate: redirect socios without curriculum to /join
+                if (sessionData.role === 'socio' && !sessionData.curriculumCollectionKey) {
+                    router.replace('/join');
+                    return;
+                }
+
                 setSession(sessionData);
 
                 const lang = coerceUiLanguage(sessionData.language);

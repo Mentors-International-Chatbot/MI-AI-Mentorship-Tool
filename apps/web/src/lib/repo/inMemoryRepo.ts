@@ -55,6 +55,7 @@ export const inMemoryRepo: Repo = {
             status: "NEW",
             aiPaused: false,
             mentorId: null,
+            curriculumCollectionKey: null,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
@@ -456,5 +457,12 @@ export const inMemoryRepo: Repo = {
             }
         }
         return null;
+    },
+
+    async setSocioCurriculum(socioId, collectionKey) {
+        const socio = sociosById.get(socioId);
+        if (!socio) throw new Error("Socio not found");
+        socio.curriculumCollectionKey = collectionKey;
+        return socio;
     },
 };

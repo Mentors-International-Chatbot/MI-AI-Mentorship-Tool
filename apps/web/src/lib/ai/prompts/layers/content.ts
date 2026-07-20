@@ -1,5 +1,5 @@
 import { InteractionMode, LessonDeliveryState, ReteachState, RouterResult } from '../types';
-import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 
 // ─── Layer 4: Lesson Content — Only During Teaching Modes ───────────
 // Provides the actual curriculum material the AI needs to teach from.
@@ -7,6 +7,7 @@ import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 
 export function buildContentPrompt(
   result: RouterResult,
+  collectionKey: string = DEFAULT_COLLECTION_KEY,
 ): string | null {
   switch (result.mode) {
     case InteractionMode.LESSON_START:
@@ -15,7 +16,7 @@ export function buildContentPrompt(
     case InteractionMode.FREEFORM_QUESTION:
       return buildFreeformReferenceBlock();
     case InteractionMode.RETEACH:
-      return buildReteachContentBlock(result.reteach!);
+      return buildReteachContentBlock(result.reteach!, collectionKey);
     default:
       return null;
   }
@@ -96,9 +97,12 @@ Si la pregunta del socio no se puede responder con esta referencia, di honestame
 // During reteaching, include more detail than normal delivery.
 // Future: pull full lesson detail from a lessons DB table.
 
-function buildReteachContentBlock(reteach: ReteachState): string {
-  if (hasLessonData(reteach.lessonNumber)) {
-    const lesson = getLessonData(reteach.lessonNumber);
+function buildReteachContentBlock(
+  reteach: ReteachState,
+  collectionKey: string = DEFAULT_COLLECTION_KEY,
+): string {
+  if (hasLessonData(collectionKey, reteach.lessonNumber)) {
+    const lesson = getLessonData(collectionKey, reteach.lessonNumber);
     const keyConcepts = lesson.keyConcepts.map(c => `- ${c}`).join('\n');
     const selfCheck = lesson.selfCheckQuestions.map(q => `- ${q}`).join('\n');
 

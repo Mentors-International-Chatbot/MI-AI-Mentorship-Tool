@@ -2,7 +2,7 @@ import { repo } from '@/lib/repo';
 import { handleOnboarding } from '@/lib/onboarding/service';
 import { generateAIResponse } from '@/lib/ai/service';
 import { InteractionMode, parseScore, type ParsedMarkers } from '@/lib/ai/prompts';
-import { hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
 import { extractAndStoreContext } from '@/lib/ai/contextExtractor';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
@@ -221,7 +221,8 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         };
     }
 
-    const aiResponse = await generateAIResponse(socio, message);
+    const collectionKey = socio.curriculumCollectionKey ?? DEFAULT_COLLECTION_KEY;
+    const aiResponse = await generateAIResponse(socio, message, collectionKey);
 
     for (const flag of aiResponse.markers.flags) {
         await repo.createFlag({
@@ -273,7 +274,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         const nextLessonNum = completedNum + 1;
 
         let completionSuffix = `\n\n---\n${lm.lessonComplete(completedNum)}\n\n`;
-        completionSuffix += hasLessonData(nextLessonNum)
+        completionSuffix += hasLessonData(collectionKey, nextLessonNum)
             ? lm.nextLesson(nextLessonNum)
             : lm.courseComplete;
 

@@ -1,7 +1,7 @@
 import { repo } from '@/lib/repo';
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
-import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import {
   RETEACH_THRESHOLD,
   MAX_LESSON_NUMBER,
@@ -34,17 +34,18 @@ function repoProgressToPromptProgress(rp: RepoSocioProgress, daysSince: number):
 
 function buildLessonDeliveryState(
   repoProgress: RepoSocioProgress,
+  collectionKey: string,
 ): LessonDeliveryState | null {
-  if (!hasLessonData(repoProgress.currentLessonNumber)) return null;
+  if (!hasLessonData(collectionKey, repoProgress.currentLessonNumber)) return null;
 
-  const lesson = getLessonData(repoProgress.currentLessonNumber);
+  const lesson = getLessonData(collectionKey, repoProgress.currentLessonNumber);
   const msgIndex = repoProgress.currentMessageIndex;
   const message = lesson.messages[msgIndex];
   if (!message) return null;
 
   const prevLessonNum = repoProgress.currentLessonNumber - 1;
-  const prevTitle = prevLessonNum >= 1 && hasLessonData(prevLessonNum)
-    ? getLessonData(prevLessonNum).titleEs
+  const prevTitle = prevLessonNum >= 1 && hasLessonData(collectionKey, prevLessonNum)
+    ? getLessonData(collectionKey, prevLessonNum).titleEs
     : undefined;
 
   return {
@@ -88,6 +89,7 @@ function shouldReteachFromDimensions(dimensionState?: DimensionStateMap): boolea
 export async function determineMode(
   socio: Socio,
   incomingText: string,
+  collectionKey: string = DEFAULT_COLLECTION_KEY,
   dimensionState?: DimensionStateMap,
 ): Promise<DetermineModeResult> {
   const repoProgress = await repo.getSocioProgress(socio.id);
@@ -101,7 +103,7 @@ export async function determineMode(
   const progress = repoProgressToPromptProgress(repoProgress, daysSince);
 
   // Can we load lesson data for the current lesson?
-  const hasLesson = hasLessonData(repoProgress.currentLessonNumber);
+  const hasLesson = hasLessonData(collectionKey, repoProgress.currentLessonNumber);
 
   const trimmed = incomingText.trim();
   const startNextPatterns =
@@ -111,7 +113,7 @@ export async function determineMode(
     repoProgress.currentMessageIndex === 0 &&
     hasLesson
   ) {
-    const lessonState = buildLessonDeliveryState(repoProgress);
+    const lessonState = buildLessonDeliveryState(repoProgress, collectionKey);
     if (lessonState) {
       return {
         routerResult: {
@@ -132,7 +134,7 @@ export async function determineMode(
     daysSince >= 1 &&
     repoProgress.remindersSent < MAX_REMINDERS
   ) {
-    const lesson = getLessonData(repoProgress.currentLessonNumber);
+    const lesson = getLessonData(collectionKey, repoProgress.currentLessonNumber);
     const reminder: ReminderState = {
       lessonNumber: repoProgress.currentLessonNumber,
       lessonTitleEs: lesson.titleEs,
@@ -153,7 +155,7 @@ export async function determineMode(
 
   // ── Priority 1: Mid-lesson (messageIndex > 0) ──
   if (hasLesson && repoProgress.currentMessageIndex > 0) {
-    const lesson = getLessonData(repoProgress.currentLessonNumber);
+    const lesson = getLessonData(collectionKey, repoProgress.currentLessonNumber);
 
     if (repoProgress.currentMessageIndex < lesson.messages.length) {
       // Check if reteach is needed from two signals:
@@ -183,7 +185,7 @@ export async function determineMode(
         }
       }
 
-      const lessonState = buildLessonDeliveryState(repoProgress);
+      const lessonState = buildLessonDeliveryState(repoProgress, collectionKey);
       return {
         routerResult: {
           mode: InteractionMode.LESSON_DELIVERY,
@@ -201,7 +203,7 @@ export async function determineMode(
     repoProgress.currentLessonNumber <= MAX_LESSON_NUMBER &&
     hasLesson
   ) {
-    const lessonState = buildLessonDeliveryState(repoProgress);
+    const lessonState = buildLessonDeliveryState(repoProgress, collectionKey);
     return {
       routerResult: {
         mode: InteractionMode.LESSON_START,

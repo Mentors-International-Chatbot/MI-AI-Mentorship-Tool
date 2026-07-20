@@ -8,7 +8,7 @@ import {
     type RouterResult,
     type SocioProgress,
 } from '@/lib/ai/prompts';
-import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import { Socio } from '@/lib/repo/types';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
@@ -123,12 +123,14 @@ export async function POST(req: NextRequest) {
             const routerResult: RouterResult = { mode: interactionMode };
 
             // Build LessonDeliveryState for lesson modes
+            // Test endpoint uses DEFAULT_COLLECTION_KEY
+            const collectionKey = DEFAULT_COLLECTION_KEY;
             if (
                 (interactionMode === InteractionMode.LESSON_START ||
                  interactionMode === InteractionMode.LESSON_DELIVERY) &&
-                hasLessonData(lessonNum)
+                hasLessonData(collectionKey, lessonNum)
             ) {
-                const lesson = getLessonData(lessonNum);
+                const lesson = getLessonData(collectionKey, lessonNum);
                 const msg = lesson.messages[msgIdx];
                 routerResult.lesson = {
                     lessonNumber: lessonNum,
@@ -144,8 +146,8 @@ export async function POST(req: NextRequest) {
                 };
             }
 
-            if (interactionMode === InteractionMode.RETEACH && hasLessonData(lessonNum)) {
-                const lesson = getLessonData(lessonNum);
+            if (interactionMode === InteractionMode.RETEACH && hasLessonData(collectionKey, lessonNum)) {
+                const lesson = getLessonData(collectionKey, lessonNum);
                 routerResult.reteach = {
                     lessonNumber: lessonNum,
                     lessonTitleEs: lesson.titleEs,
@@ -153,8 +155,8 @@ export async function POST(req: NextRequest) {
                 };
             }
 
-            if (interactionMode === InteractionMode.REMINDER && hasLessonData(lessonNum)) {
-                const lesson = getLessonData(lessonNum);
+            if (interactionMode === InteractionMode.REMINDER && hasLessonData(collectionKey, lessonNum)) {
+                const lesson = getLessonData(collectionKey, lessonNum);
                 routerResult.reminder = {
                     lessonNumber: lessonNum,
                     lessonTitleEs: lesson.titleEs,
@@ -165,7 +167,7 @@ export async function POST(req: NextRequest) {
                 };
             }
 
-            const systemPrompt = await buildSystemPrompt(fakeSocio, routerResult, progress, dimensionState);
+            const systemPrompt = await buildSystemPrompt(fakeSocio, routerResult, progress, collectionKey, dimensionState);
 
             const chat = createOpenRouterChat({
                 temperature: 0.7,
@@ -201,7 +203,7 @@ export async function POST(req: NextRequest) {
         };
 
         const defaultRouter: RouterResult = { mode: InteractionMode.FREEFORM_QUESTION };
-        const systemPrompt = await buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress, dimensionState);
+        const systemPrompt = await buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress, DEFAULT_COLLECTION_KEY, dimensionState);
 
         const chat = createOpenRouterChat({
             temperature: 0.7,

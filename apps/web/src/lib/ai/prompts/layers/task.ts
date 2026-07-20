@@ -9,7 +9,8 @@ import {
   SocioProgress,
   RouterResult,
 } from '../types';
-import { getLessonTitle } from './context';
+import { getLessonTitle } from '@/lib/lessons/db-lesson-service';
+import { DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import { FLAG_RED_THRESHOLD, RETEACH_LEVEL_THRESHOLD, CONFUSION_ESCALATE_THRESHOLD } from '../constants';
 import { loadActivePrompt } from '../loadPrompt';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
@@ -77,6 +78,7 @@ export async function buildTaskPrompt(
   socio: Socio,
   result: RouterResult,
   progress?: SocioProgress,
+  collectionKey: string = DEFAULT_COLLECTION_KEY,
   dimensionState?: DimensionStateMap,
 ): Promise<string> {
   const dimensionContext = buildDimensionContext(dimensionState);
@@ -91,7 +93,7 @@ export async function buildTaskPrompt(
       basePrompt = await buildLessonDeliveryPrompt(socio, result.lesson!);
       break;
     case InteractionMode.FREEFORM_QUESTION:
-      basePrompt = await buildFreeformPrompt(progress);
+      basePrompt = await buildFreeformPrompt(progress, collectionKey);
       break;
     case InteractionMode.CHECKIN:
       basePrompt = await buildCheckinPrompt(socio, result.checkin!);
@@ -188,13 +190,16 @@ INSTRUCCIONES:
 
 // ─── FREEFORM_QUESTION ──────────────────────────────────────────────
 
-async function buildFreeformPrompt(progress?: SocioProgress): Promise<string> {
+async function buildFreeformPrompt(
+  progress?: SocioProgress,
+  collectionKey: string = DEFAULT_COLLECTION_KEY,
+): Promise<string> {
   const completed = progress?.completedLessons ?? [];
   const currentNum = progress?.currentLessonNumber ?? 1;
-  const currentTitle = getLessonTitle(currentNum);
+  const currentTitle = getLessonTitle(collectionKey, currentNum);
 
   const completedList = completed.length > 0
-    ? completed.map((n) => `${n}: ${getLessonTitle(n)}`).join('\n')
+    ? completed.map((n) => `${n}: ${getLessonTitle(collectionKey, n)}`).join('\n')
     : 'Ninguna';
 
   const dynamicContext = `LECCIONES YA COMPLETADAS POR EL SOCIO:

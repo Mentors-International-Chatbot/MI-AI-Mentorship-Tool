@@ -13,10 +13,13 @@ export async function GET() {
   }
 
   let language = 'es';
+  let curriculumCollectionKey: string | null = null;
+
   if (session.role === 'socio') {
     const socio = await repo.getSocio('web', session.userId);
     if (socio) {
       language = socio.language || 'es';
+      curriculumCollectionKey = socio.curriculumCollectionKey ?? null;
     }
   } else {
     const mentor = await prisma.mentor.findUnique({
@@ -32,6 +35,7 @@ export async function GET() {
     name: session.name,
     role: session.role,
     language,
+    curriculumCollectionKey,
   });
 }
 

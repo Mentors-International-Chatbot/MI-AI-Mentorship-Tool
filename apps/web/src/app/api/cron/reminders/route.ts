@@ -13,7 +13,8 @@ import {
     type SocioProgress as PromptProgress,
     type ReminderState,
 } from '@/lib/ai/prompts';
-import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+
+import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 export async function GET(req: NextRequest) {
@@ -37,9 +38,11 @@ export async function GET(req: NextRequest) {
             // Only send reminders to WhatsApp socios (web socios have no push channel)
             if (socio.channelType !== 'whatsapp') continue;
 
-            if (!hasLessonData(progress.currentLessonNumber)) continue;
+            const collectionKey = socio.curriculumCollectionKey ?? DEFAULT_COLLECTION_KEY;
 
-            const lesson = getLessonData(progress.currentLessonNumber);
+            if (!hasLessonData(collectionKey, progress.currentLessonNumber)) continue;
+
+            const lesson = getLessonData(collectionKey, progress.currentLessonNumber);
 
             const reminderState: ReminderState = {
                 lessonNumber: progress.currentLessonNumber,
@@ -65,7 +68,7 @@ export async function GET(req: NextRequest) {
                 ),
             };
 
-            const systemPrompt = await buildSystemPrompt(socio, routerResult, promptProgress);
+            const systemPrompt = await buildSystemPrompt(socio, routerResult, promptProgress, collectionKey);
 
             const chat = createOpenRouterChat({
                 temperature: 0.7,

@@ -54,6 +54,7 @@ function toSocio(p: PrismaSocio): Socio {
         promptOverrides: p.promptOverrides as Record<string, unknown> | null,
         aiPaused: p.aiPaused,
         mentorId: p.mentorId,
+        curriculumCollectionKey: p.curriculumCollectionKey,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
     };
@@ -722,5 +723,13 @@ export const prismaRepo: Repo = {
             include: { socio: true },
         });
         return flag ? { ...toSocioFlag(flag), socio: toSocio(flag.socio) } : null;
+    },
+
+    async setSocioCurriculum(socioId, collectionKey) {
+        const socio = await prisma.socio.update({
+            where: { id: socioId },
+            data: { curriculumCollectionKey: collectionKey },
+        });
+        return toSocio(socio);
     },
 };
