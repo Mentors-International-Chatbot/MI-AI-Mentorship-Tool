@@ -11,32 +11,49 @@ type ClientSession = {
     curriculumCollectionKey: string | null;
 };
 
+type SupportedLanguage = 'es' | 'en' | 'pt';
+
+const LANGUAGES: { code: SupportedLanguage; flag: string; nativeName: string; greeting: string }[] = [
+    { code: 'es', flag: '🇪🇸', nativeName: 'Español', greeting: 'Hola' },
+    { code: 'en', flag: '🇺🇸', nativeName: 'English', greeting: 'Hello' },
+    { code: 'pt', flag: '🇧🇷', nativeName: 'Português', greeting: 'Olá' },
+];
+
 const UI_TEXT = {
     es: {
-        title: 'Unirse a un Curso',
-        subtitle: 'Ingresa tu codigo de curso para comenzar',
+        languageTitle: 'Bienvenido',
+        languageSubtitle: 'Selecciona tu idioma preferido',
+        courseTitle: 'Unirse a un Curso',
+        courseSubtitle: 'Ingresa tu codigo de curso para comenzar',
         placeholder: 'Codigo de curso (ej: MI2024)',
         submit: 'Unirse',
+        back: 'Cambiar idioma',
         error: 'Codigo invalido. Por favor verifica e intenta de nuevo.',
         loading: 'Cargando...',
         alreadyEnrolled: 'Ya estas inscrito en un curso.',
         goToChat: 'Ir al chat',
     },
     en: {
-        title: 'Join a Course',
-        subtitle: 'Enter your course code to get started',
+        languageTitle: 'Welcome',
+        languageSubtitle: 'Select your preferred language',
+        courseTitle: 'Join a Course',
+        courseSubtitle: 'Enter your course code to get started',
         placeholder: 'Course code (e.g., MI2024)',
         submit: 'Join',
+        back: 'Change language',
         error: 'Invalid code. Please check and try again.',
         loading: 'Loading...',
         alreadyEnrolled: 'You are already enrolled in a course.',
         goToChat: 'Go to chat',
     },
     pt: {
-        title: 'Entrar em um Curso',
-        subtitle: 'Digite seu codigo de curso para comecar',
+        languageTitle: 'Bem-vindo',
+        languageSubtitle: 'Selecione seu idioma preferido',
+        courseTitle: 'Entrar em um Curso',
+        courseSubtitle: 'Digite seu codigo de curso para comecar',
         placeholder: 'Codigo do curso (ex: MI2024)',
         submit: 'Entrar',
+        back: 'Mudar idioma',
         error: 'Codigo invalido. Por favor verifique e tente novamente.',
         loading: 'Carregando...',
         alreadyEnrolled: 'Voce ja esta inscrito em um curso.',
@@ -44,16 +61,19 @@ const UI_TEXT = {
     },
 };
 
+type Step = 'language' | 'course';
+
 export default function JoinPage() {
     const router = useRouter();
     const [session, setSession] = useState<ClientSession | null>(null);
+    const [step, setStep] = useState<Step>('language');
+    const [language, setLanguage] = useState<SupportedLanguage>('es');
     const [courseCode, setCourseCode] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [initializing, setInitializing] = useState(true);
 
-    const lang = (session?.language || 'es') as keyof typeof UI_TEXT;
-    const ui = UI_TEXT[lang] || UI_TEXT.es;
+    const ui = UI_TEXT[language];
 
     useEffect(() => {
         async function init() {
@@ -77,12 +97,36 @@ export default function JoinPage() {
                     router.replace('/dashboard');
                     return;
                 }
+
+                // Use existing language preference if set
+                if (data.language && ['es', 'en', 'pt'].includes(data.language)) {
+                    setLanguage(data.language as SupportedLanguage);
+                }
             } finally {
                 setInitializing(false);
             }
         }
         void init();
     }, [router]);
+
+    async function handleLanguageSelect(lang: SupportedLanguage) {
+        setLanguage(lang);
+        setIsLoading(true);
+
+        try {
+            // Save language preference
+            await fetch('/api/auth/me', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ language: lang }),
+            });
+        } catch {
+            // Continue anyway - language will be saved when they complete enrollment
+        } finally {
+            setIsLoading(false);
+            setStep('course');
+        }
+    }
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
@@ -145,6 +189,49 @@ export default function JoinPage() {
         );
     }
 
+    // Step 1: Language Selection
+    if (step === 'language') {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4">
+                <div className="w-full max-w-md">
+                    <div className="text-center mb-8">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-2xl">
+                            MI
+                        </div>
+                        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                            {ui.languageTitle}
+                        </h1>
+                        <p className="text-sm text-zinc-500 mt-2">{ui.languageSubtitle}</p>
+                    </div>
+
+                    <div className="space-y-3">
+                        {LANGUAGES.map((lang) => (
+                            <button
+                                key={lang.code}
+                                onClick={() => handleLanguageSelect(lang.code)}
+                                disabled={isLoading}
+                                className="w-full flex items-center gap-4 px-6 py-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-all disabled:opacity-50"
+                            >
+                                <span className="text-3xl">{lang.flag}</span>
+                                <div className="text-left">
+                                    <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                                        {lang.nativeName}
+                                    </p>
+                                    <p className="text-sm text-zinc-500">{lang.greeting}!</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+
+                    <p className="text-xs text-zinc-400 text-center mt-8">
+                        Mentors International
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    // Step 2: Course Code Input
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4">
             <div className="w-full max-w-md">
@@ -153,9 +240,9 @@ export default function JoinPage() {
                         MI
                     </div>
                     <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                        {ui.title}
+                        {ui.courseTitle}
                     </h1>
-                    <p className="text-sm text-zinc-500 mt-2">{ui.subtitle}</p>
+                    <p className="text-sm text-zinc-500 mt-2">{ui.courseSubtitle}</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -185,6 +272,14 @@ export default function JoinPage() {
                         {isLoading ? ui.loading : ui.submit}
                     </button>
                 </form>
+
+                <button
+                    type="button"
+                    onClick={() => setStep('language')}
+                    className="w-full mt-4 py-2 text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                >
+                    ← {ui.back}
+                </button>
 
                 <p className="text-xs text-zinc-400 text-center mt-8">
                     Mentors International

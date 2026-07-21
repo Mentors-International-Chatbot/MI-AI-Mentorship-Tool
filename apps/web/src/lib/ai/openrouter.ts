@@ -1,7 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_MODEL = "anthropic/claude-3.5-haiku";
+const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
 const DEFAULT_APP_NAME = "MI AI Mentorship Tool";
 
 type OpenRouterChatOptions = {

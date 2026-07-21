@@ -69,7 +69,16 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const body = await req.json();
+        let body: { message?: string; language?: string };
+        try {
+            body = await req.json();
+        } catch {
+            return NextResponse.json(
+                { error: 'Invalid JSON body' },
+                { status: 400 },
+            );
+        }
+
         const { message } = body;
         language = (body.language || 'es') as SupportedLanguage;
 

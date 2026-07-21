@@ -115,6 +115,7 @@ function transformToLessonData(pkg: PackageLesson, orderIndex: number): LessonDa
  * Loads lessons for a specific collection from the database.
  */
 async function loadLessonsFromDb(collectionKey: string): Promise<Map<number, LessonData>> {
+  console.log('[LessonService] loadLessonsFromDb called for collection:', collectionKey);
   const lessons = new Map<number, LessonData>();
 
   // Get active lesson versions for this collection
@@ -143,6 +144,13 @@ async function loadLessonsFromDb(collectionKey: string): Promise<Map<number, Les
     if (!body || !body.key) continue;
 
     const lessonData = transformToLessonData(body, i);
+    console.log('[LessonService] Transformed lesson:', {
+      collectionKey,
+      lessonNumber: lessonData.lessonNumber,
+      title: lessonData.titleEs,
+      messageCount: lessonData.messages.length,
+      firstMessagePreview: lessonData.messages[0]?.contentEs?.substring(0, 80),
+    });
     if (lessonData.lessonNumber > 0) {
       lessons.set(lessonData.lessonNumber, lessonData);
     }
@@ -230,7 +238,10 @@ export function getLessonTitle(collectionKey: string, lessonNumber: number): str
  */
 export function hasLessonData(collectionKey: string, lessonNumber: number): boolean {
   const lessons = collectionsCache.get(collectionKey);
-  if (!lessons) return false;
+  if (!lessons) {
+    console.log('[LessonService] hasLessonData: collection NOT in cache:', collectionKey);
+    return false;
+  }
   return lessons.has(lessonNumber);
 }
 

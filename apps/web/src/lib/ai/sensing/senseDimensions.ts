@@ -18,7 +18,7 @@ import type { SensedDimension, DimensionStateMap, SensingResult } from './types'
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 const SENSING_TIMEOUT_MS = 10000; // 10 seconds max - this should be fast
-const SENSING_MODEL = "anthropic/claude-3.5-haiku"; // Use a fast model for sensing
+const SENSING_MODEL = "anthropic/claude-haiku-4.5"; // Use a fast model for sensing
 
 const SENSING_SYSTEM_PROMPT = `You are a student assessment system. Analyze the student's message and output ONLY a JSON array.
 
