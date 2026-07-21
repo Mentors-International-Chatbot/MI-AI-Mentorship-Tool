@@ -1,6 +1,6 @@
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress } from '../types';
-import { getLessonTitle, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
+import { getLessonTitle, getLessonCount, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import { repo } from '@/lib/repo';
 
 // ─── Layer 2: Socio Context (~150 tokens) — Always Sent ────────────
@@ -23,7 +23,7 @@ export async function buildContextPrompt(
   const context = await repo.getSocioContext(socio.id);
 
   if (!progress || progress.completedLessons.length === 0) {
-    return buildNewSocioContext(socio, context);
+    return buildNewSocioContext(socio, context, collectionKey);
   }
 
   const currentTitle = getLessonTitle(collectionKey, progress.currentLessonNumber);
@@ -52,11 +52,15 @@ export async function buildContextPrompt(
 function buildNewSocioContext(
   socio: Socio,
   context: Awaited<ReturnType<typeof repo.getSocioContext>>,
+  collectionKey: string,
 ): string {
+  const lessonTitle = getLessonTitle(collectionKey, 1);
+  const totalLessons = getLessonCount(collectionKey);
+
   let block = `CONTEXTO DEL SOCIO:
 - Nombre: ${socio.name || 'Amigo'}
 - Negocio: ${socio.businessDescription || 'Aún no conocemos su negocio.'}
-- Lección actual: 1 de 28 — "Registros Financieros"
+- Lección actual: 1${totalLessons > 0 ? ` de ${totalLessons}` : ''} — "${lessonTitle}"
 - Es su primera lección. Sé especialmente cálido y motivador.
 - Banderas activas: Ninguna`;
 

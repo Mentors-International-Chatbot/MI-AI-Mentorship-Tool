@@ -32,6 +32,7 @@ const UI_TEXT = {
         loading: 'Cargando...',
         alreadyEnrolled: 'Ya estas inscrito en un curso.',
         goToChat: 'Ir al chat',
+        availableCourses: 'Cursos Disponibles',
     },
     en: {
         languageTitle: 'Welcome',
@@ -45,6 +46,7 @@ const UI_TEXT = {
         loading: 'Loading...',
         alreadyEnrolled: 'You are already enrolled in a course.',
         goToChat: 'Go to chat',
+        availableCourses: 'Available Courses',
     },
     pt: {
         languageTitle: 'Bem-vindo',
@@ -58,7 +60,15 @@ const UI_TEXT = {
         loading: 'Carregando...',
         alreadyEnrolled: 'Voce ja esta inscrito em um curso.',
         goToChat: 'Ir para o chat',
+        availableCourses: 'Cursos Disponiveis',
     },
+};
+
+type CourseInfo = {
+    code: string;
+    collectionKey: string;
+    name: string;
+    description: string;
 };
 
 type Step = 'language' | 'course';
@@ -72,6 +82,7 @@ export default function JoinPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [initializing, setInitializing] = useState(true);
+    const [courses, setCourses] = useState<CourseInfo[]>([]);
 
     const ui = UI_TEXT[language];
 
@@ -114,12 +125,20 @@ export default function JoinPage() {
         setIsLoading(true);
 
         try {
-            // Save language preference
-            await fetch('/api/auth/me', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ language: lang }),
-            });
+            // Save language preference and fetch available courses in parallel
+            const [, coursesRes] = await Promise.all([
+                fetch('/api/auth/me', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ language: lang }),
+                }),
+                fetch('/api/auth/curriculum'),
+            ]);
+
+            if (coursesRes.ok) {
+                const data = await coursesRes.json();
+                setCourses(data.courses || []);
+            }
         } catch {
             // Continue anyway - language will be saved when they complete enrollment
         } finally {
@@ -272,6 +291,36 @@ export default function JoinPage() {
                         {isLoading ? ui.loading : ui.submit}
                     </button>
                 </form>
+
+                {courses.length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-zinc-200 dark:border-zinc-700">
+                        <h2 className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-3">
+                            {ui.availableCourses}
+                        </h2>
+                        <div className="space-y-2">
+                            {courses.map((course) => (
+                                <button
+                                    key={course.code}
+                                    type="button"
+                                    onClick={() => setCourseCode(course.code)}
+                                    className="w-full text-left px-4 py-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-all"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                                            {course.name}
+                                        </span>
+                                        <span className="font-mono text-sm text-emerald-600 dark:text-emerald-400">
+                                            {course.code}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-zinc-500 mt-1">
+                                        {course.description}
+                                    </p>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <button
                     type="button"

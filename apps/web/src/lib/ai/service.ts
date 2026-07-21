@@ -131,13 +131,6 @@ export async function generateAIResponse(
     const modeResult = await determineMode(socio, incomingText, collectionKey, liveState);
     timings.determineMode = performance.now() - modeStart;
 
-    // DEBUG: Log router result
-    console.log('[DEBUG] Router result:', {
-        mode: modeResult.routerResult.mode,
-        lessonTitle: modeResult.routerResult.lesson?.lessonTitleEs,
-        lessonContent: modeResult.routerResult.lesson?.messageContentEs?.substring(0, 100),
-    });
-
     // 2. Assemble 4-layer system prompt with real progress + dimension state
     const promptStart = performance.now();
     const systemPrompt = await buildSystemPrompt(
@@ -148,9 +141,6 @@ export async function generateAIResponse(
         liveState,
     );
     timings.buildPrompt = performance.now() - promptStart;
-
-    // DEBUG: Log prompt content snippet
-    console.log('[DEBUG] System prompt snippet (last 500 chars):', systemPrompt.slice(-500));
 
     // 3. Fetch conversation history (last 10 messages for context)
     const historyStart = performance.now();

@@ -9,12 +9,38 @@
  */
 
 /**
+ * Course metadata for display purposes.
+ */
+export interface CourseInfo {
+  code: string;
+  collectionKey: string;
+  name: string;
+  description: string;
+}
+
+/**
  * Maps upper-cased course codes to their corresponding collectionKey.
  * The collectionKey matches ContentCollection.slug in the database.
  */
 export const COURSE_CODES: Record<string, string> = {
   MI2024: "mi-colombia-curriculum",
   PBJ: "pbj-basics",
+};
+
+/**
+ * Course metadata for UI display.
+ */
+export const COURSE_INFO: Record<string, Omit<CourseInfo, 'code'>> = {
+  MI2024: {
+    collectionKey: "mi-colombia-curriculum",
+    name: "Mentors International Finance",
+    description: "28-lesson business finance curriculum for micro-entrepreneurs",
+  },
+  PBJ: {
+    collectionKey: "pbj-basics",
+    name: "PB&J Sandwich (Test Course)",
+    description: "A simple test course for development purposes",
+  },
 };
 
 /**
@@ -41,4 +67,14 @@ export function isValidCourseCode(code: string): boolean {
  */
 export function getAvailableCourseCodes(): string[] {
   return Object.keys(COURSE_CODES);
+}
+
+/**
+ * Returns all courses with full metadata for display.
+ */
+export function getAvailableCourses(): CourseInfo[] {
+  return Object.entries(COURSE_INFO).map(([code, info]) => ({
+    code,
+    ...info,
+  }));
 }

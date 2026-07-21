@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth/session';
 import { repo } from '@/lib/repo';
-import { resolveCourseCode, getAvailableCourseCodes } from '@/lib/courses/resolver';
+import { resolveCourseCode, getAvailableCourseCodes, getAvailableCourses } from '@/lib/courses/resolver';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,9 +51,10 @@ export async function POST(req: NextRequest) {
 
 /**
  * GET /api/auth/curriculum
- * Returns available course codes for display.
+ * Returns available courses with metadata for display.
  */
 export async function GET() {
     const codes = getAvailableCourseCodes();
-    return NextResponse.json({ codes });
+    const courses = getAvailableCourses();
+    return NextResponse.json({ codes, courses });
 }

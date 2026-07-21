@@ -222,7 +222,6 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     }
 
     const collectionKey = socio.curriculumCollectionKey ?? DEFAULT_COLLECTION_KEY;
-    console.log('[DEBUG] curriculumKey =', socio.curriculumCollectionKey, '| collectionKey =', collectionKey, '| socioId =', socio.id);
 
     // Ensure collection is loaded before sync accessors are called
     await preloadCollection(collectionKey);
