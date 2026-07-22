@@ -2,12 +2,11 @@ import { repo } from '@/lib/repo';
 import { handleOnboarding } from '@/lib/onboarding/service';
 import { generateAIResponse } from '@/lib/ai/service';
 import { InteractionMode, parseScore, type ParsedMarkers } from '@/lib/ai/prompts';
-import { hasLessonData, DEFAULT_COLLECTION_KEY, preloadCollection } from '@/lib/lessons/db-lesson-service';
+import { hasLessonData, preloadCollection, getLessonCount } from '@/lib/lessons/db-lesson-service';
 import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
 import { extractAndStoreContext } from '@/lib/ai/contextExtractor';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
 import { LESSON_MESSAGES, type SupportedLanguage } from '@/lib/i18n/languages';
-import { MAX_LESSON_NUMBER } from '@/lib/ai/prompts/constants';
 import { getConfigNumber } from '@/lib/config/service';
 
 export interface HandleMessageInput {
@@ -221,7 +220,37 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         };
     }
 
-    const collectionKey = socio.curriculumCollectionKey ?? DEFAULT_COLLECTION_KEY;
+    const collectionKey = socio.curriculumCollectionKey;
+
+    // Require curriculum key - no silent fallback
+    if (!collectionKey) {
+        const socioLang = (socio.language || 'es') as SupportedLanguage;
+        const joinMessage = socioLang === 'en'
+            ? 'Please join a course first to continue. Visit the app to select your course.'
+            : socioLang === 'pt'
+            ? 'Por favor, entre em um curso primeiro para continuar. Visite o app para selecionar seu curso.'
+            : 'Por favor, inscríbete en un curso primero para continuar. Visita la app para seleccionar tu curso.';
+
+        // Log for WhatsApp legacy path (should be unreachable after backfill)
+        console.warn(`[MessageHandler] Socio ${socio.id} has no curriculum key. Prompting to join.`);
+
+        await repo.addMessage({
+            socioId: socio.id,
+            role: 'assistant',
+            content: joinMessage,
+            senderType: 'ai',
+        } as Parameters<typeof repo.addMessage>[0]);
+
+        await channel.sendMessage(externalId, joinMessage);
+
+        return {
+            responseText: joinMessage,
+            mode: InteractionMode.LESSON_START,
+            markers: { cleanText: joinMessage, flags: [], lessonsCompleted: [], escalations: [], financials: [] },
+            socioId: socio.id,
+            isNewSocio,
+        };
+    }
 
     // Ensure collection is loaded before sync accessors are called
     await preloadCollection(collectionKey);
@@ -268,7 +297,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     // Prepend lesson number header when starting a new lesson
     if (aiResponse.mode === InteractionMode.LESSON_START) {
         const currentLesson = aiResponse.determineModeResult.progress?.currentLessonNumber ?? 1;
-        responseText = `${lm.lessonHeader(currentLesson, MAX_LESSON_NUMBER)}\n\n${responseText}`;
+        responseText = `${lm.lessonHeader(currentLesson, getLessonCount(collectionKey))}\n\n${responseText}`;
     }
 
     // Append completion notification when a lesson finishes

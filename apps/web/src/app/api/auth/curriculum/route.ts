@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth/session';
 import { repo } from '@/lib/repo';
 import { resolveCourseCode, getAvailableCourseCodes, getAvailableCourses } from '@/lib/courses/resolver';
+import { preloadCollection } from '@/lib/lessons/db-lesson-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +42,9 @@ export async function POST(req: NextRequest) {
     }
 
     await repo.setSocioCurriculum(socio.id, collectionKey);
+
+    // Preload collection to warm cache for upcoming chat
+    await preloadCollection(collectionKey);
 
     return NextResponse.json({
         success: true,

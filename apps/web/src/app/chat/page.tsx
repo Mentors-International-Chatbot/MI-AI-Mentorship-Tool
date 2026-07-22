@@ -34,6 +34,9 @@ type ClientSession = {
     role: 'socio' | 'mentor' | 'admin';
     language: string;
     curriculumCollectionKey: string | null;
+    courseName: string | null;
+    mentorName: string | null;
+    displayName: string | null;
 };
 
 const LANGUAGES: { code: SupportedLanguage; flag: string; nativeName: string }[] = [
@@ -134,7 +137,8 @@ export default function ChatPage() {
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const formRef = useRef<HTMLFormElement>(null);
     const [historyReady, setHistoryReady] = useState(false);
-    const [chatbotName, setChatbotName] = useState('Mentor Virtual');
+    const [chatbotName, setChatbotName] = useState('Tutor');
+    const [displayName, setDisplayName] = useState<string | null>(null);
 
     useEffect(() => {
         async function init() {
@@ -157,16 +161,12 @@ export default function ChatPage() {
                 const lang = coerceUiLanguage(sessionData.language);
                 setLanguage(lang);
 
-                try {
-                    const configRes = await fetch('/api/config/public');
-                    if (configRes.ok) {
-                        const cfg = (await configRes.json()) as { chatbotName?: string };
-                        if (typeof cfg.chatbotName === 'string' && cfg.chatbotName.trim()) {
-                            setChatbotName(cfg.chatbotName.trim());
-                        }
-                    }
-                } catch {
-                    // keep default
+                // Use course-specific metadata if available
+                if (sessionData.mentorName) {
+                    setChatbotName(sessionData.mentorName);
+                }
+                if (sessionData.displayName) {
+                    setDisplayName(sessionData.displayName);
                 }
 
                 const historyRes = await fetch('/api/chat/history');
@@ -226,7 +226,7 @@ export default function ChatPage() {
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: 'hola', language }),
+                    body: JSON.stringify({ message: '__welcome__', language }),
                 });
                 if (res.status === 401) {
                     window.location.href = '/login';
@@ -244,8 +244,8 @@ export default function ChatPage() {
 
                 if (data.response && data.isNewSocio) {
                     const stamp = new Date().toISOString();
+                    // Only show the assistant greeting, no fake user message
                     setMessages([
-                        { role: 'user', content: 'hola', createdAt: stamp },
                         {
                             role: 'assistant',
                             content: data.response,
@@ -544,7 +544,7 @@ export default function ChatPage() {
         <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white dark:bg-zinc-950">
             <header className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
                 <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg">
-                    MI
+                    {chatbotName.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                     <h1 className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
@@ -552,8 +552,8 @@ export default function ChatPage() {
                     </h1>
                     <p className="text-xs text-zinc-500">
                         {isSocio && currentLesson !== null
-                            ? `${CHAT_SUBTITLE[language].mentor} · ${CHAT_SUBTITLE[language].lesson(currentLesson)} · Mentors International`
-                            : `${CHAT_SUBTITLE[language].mentor} · Mentors International`}
+                            ? `${CHAT_SUBTITLE[language].lesson(currentLesson)}${displayName ? ` · ${displayName}` : ''}`
+                            : displayName || ''}
                     </p>
                 </div>
                 <label className="flex items-center gap-1 text-xs text-zinc-500">

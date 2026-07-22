@@ -6,7 +6,6 @@ import { buildTaskPrompt } from './layers/task';
 import { buildContentPrompt } from './layers/content';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
-import { DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 
 // ─── Prompt Builder ─────────────────────────────────────────────────
 // Assembles the 4-layer system prompt at runtime.
@@ -30,8 +29,8 @@ function stripInternalPromptOverrides(raw: unknown): PromptOverrides | null {
 export async function buildSystemPrompt(
   socio: Socio,
   routerResult: RouterResult,
-  progress?: SocioProgress,
-  collectionKey: string = DEFAULT_COLLECTION_KEY,
+  progress: SocioProgress | undefined,
+  collectionKey: string,
   dimensionState?: DimensionStateMap,
 ): Promise<string> {
   const overrides = stripInternalPromptOverrides(
@@ -39,8 +38,8 @@ export async function buildSystemPrompt(
   );
   const language = (socio.language || 'es') as SupportedLanguage;
 
-  // Layer 1: Core identity + tone override + sliders + language directive (DB-backed)
-  const layer1 = await buildCorePrompt(overrides ?? undefined, language);
+  // Layer 1: Core identity + tone override + sliders + language directive (DB-backed, course-scoped)
+  const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language);
 
   // Layer 2: Socio context (now async — fetches persistent SocioContext from DB)
   const layer2 = await buildContextPrompt(socio, progress, collectionKey);

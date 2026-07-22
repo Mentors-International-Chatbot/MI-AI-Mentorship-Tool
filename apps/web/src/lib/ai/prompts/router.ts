@@ -1,7 +1,7 @@
 import { repo } from '@/lib/repo';
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
-import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 import {
   RETEACH_THRESHOLD,
   MAX_LESSON_NUMBER,
@@ -89,7 +89,7 @@ function shouldReteachFromDimensions(dimensionState?: DimensionStateMap): boolea
 export async function determineMode(
   socio: Socio,
   incomingText: string,
-  collectionKey: string = DEFAULT_COLLECTION_KEY,
+  collectionKey: string,
   dimensionState?: DimensionStateMap,
 ): Promise<DetermineModeResult> {
   const repoProgress = await repo.getSocioProgress(socio.id);

@@ -1,5 +1,5 @@
 import { InteractionMode, LessonDeliveryState, ReteachState, RouterResult } from '../types';
-import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 
 // ─── Layer 4: Lesson Content — Only During Teaching Modes ───────────
 // Provides the actual curriculum material the AI needs to teach from.
@@ -7,7 +7,7 @@ import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/less
 
 export function buildContentPrompt(
   result: RouterResult,
-  collectionKey: string = DEFAULT_COLLECTION_KEY,
+  collectionKey: string,
 ): string | null {
   switch (result.mode) {
     case InteractionMode.LESSON_START:
@@ -99,7 +99,7 @@ Si la pregunta del socio no se puede responder con esta referencia, di honestame
 
 function buildReteachContentBlock(
   reteach: ReteachState,
-  collectionKey: string = DEFAULT_COLLECTION_KEY,
+  collectionKey: string,
 ): string {
   if (hasLessonData(collectionKey, reteach.lessonNumber)) {
     const lesson = getLessonData(collectionKey, reteach.lessonNumber);

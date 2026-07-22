@@ -1,6 +1,6 @@
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress } from '../types';
-import { getLessonTitle, getLessonCount, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
+import { getLessonTitle, getLessonCount } from '@/lib/lessons/db-lesson-service';
 import { repo } from '@/lib/repo';
 
 // ─── Layer 2: Socio Context (~150 tokens) — Always Sent ────────────
@@ -17,8 +17,8 @@ function formatCompletedLessons(completed: number[], collectionKey: string): str
 
 export async function buildContextPrompt(
   socio: Socio,
-  progress?: SocioProgress,
-  collectionKey: string = DEFAULT_COLLECTION_KEY,
+  progress: SocioProgress | undefined,
+  collectionKey: string,
 ): Promise<string> {
   const context = await repo.getSocioContext(socio.id);
 

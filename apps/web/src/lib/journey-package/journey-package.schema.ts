@@ -31,6 +31,17 @@ const key = z
   .regex(/^[a-z0-9][a-z0-9-]*$/, "keys are lowercase, alphanumeric + hyphens");
 
 /**
+ * Localized string: English required, other languages optional.
+ * Resolution: requested language → en (never empty).
+ */
+export const localizedStringSchema = z.object({
+  en: z.string().min(1),
+  es: z.string().optional(),
+  pt: z.string().optional(),
+});
+export type LocalizedString = z.infer<typeof localizedStringSchema>;
+
+/**
  * Source grounding (from the ingestion PDF): keeps AI-taught material traceable
  * back to an approved source. Optional per lesson.
  */
@@ -279,6 +290,77 @@ export const outcomeSchema = z.object({
     .default([]),
 });
 
+// ── Identity & Terminology (Phase A' additions) ──────────────────────────────
+
+/**
+ * AI persona identity for this course.
+ * mentorName: what the AI calls itself (default: 'Tutor')
+ * displayName: org/course label in header (optional, falls back to course title)
+ */
+export const identitySchema = z.object({
+  mentorName: z.string().default('Tutor'),
+  displayName: z.string().optional(),
+});
+export type Identity = z.infer<typeof identitySchema>;
+
+/**
+ * Course-specific terminology. All fields are LocalizedString.
+ * participant: what to call the learner (default: {en:'participant'})
+ */
+export const terminologySchema = z.object({
+  participant: localizedStringSchema.default({ en: 'participant' }),
+});
+export type Terminology = z.infer<typeof terminologySchema>;
+
+/**
+ * Learner context configuration for personalization.
+ * OPTIONAL: if absent, no learner-specific context is collected or used.
+ */
+export const learnerContextFieldSchema = z.object({
+  key: z.string().min(1),
+  extractionHint: z.string().optional(),
+});
+
+export const learnerContextSchema = z.object({
+  label: localizedStringSchema,
+  intakeQuestion: localizedStringSchema,
+  personalizationInstruction: localizedStringSchema,
+  fields: z.array(learnerContextFieldSchema).default([]),
+});
+export type LearnerContext = z.infer<typeof learnerContextSchema>;
+
+/**
+ * Onboarding flow configuration.
+ * welcome: optional greeting message
+ * steps: ordered list of onboarding steps (field intake)
+ */
+export const onboardingStepSchema = z.object({
+  id: key,
+  field: z.string().min(1),
+  prompt: localizedStringSchema,
+  required: z.boolean().default(false),
+});
+
+export const onboardingConfigSchema = z.object({
+  welcome: localizedStringSchema.optional(),
+  steps: z.array(onboardingStepSchema).default([]),
+});
+export type OnboardingConfig = z.infer<typeof onboardingConfigSchema>;
+
+/**
+ * Scheduled check-in configuration.
+ * cadence: how often (daily, weekly, biweekly, monthly)
+ * captureMarker: optional marker to extract from AI response
+ */
+export const scheduledCheckinSchema = z.object({
+  id: key,
+  cadence: z.enum(['daily', 'weekly', 'biweekly', 'monthly']),
+  prompt: localizedStringSchema,
+  captureMarker: z.string().optional(),
+  enabled: z.boolean().default(false),
+});
+export type ScheduledCheckin = z.infer<typeof scheduledCheckinSchema>;
+
 // ── Metadata ─────────────────────────────────────────────────────────────────
 
 export const metadataSchema = z.object({
@@ -291,6 +373,12 @@ export const metadataSchema = z.object({
   author: z
     .object({ name: z.string().optional(), organizationKey: key.optional() })
     .optional(),
+  // Phase A' additions - all optional for backward compatibility
+  identity: identitySchema.optional(),
+  terminology: terminologySchema.optional(),
+  learnerContext: learnerContextSchema.optional(),
+  onboarding: onboardingConfigSchema.optional(),
+  scheduledCheckins: z.array(scheduledCheckinSchema).optional(),
 });
 
 // ── Top-level package + cross-reference validation ───────────────────────────
@@ -405,3 +493,4 @@ export type LessonBlock = z.infer<typeof lessonBlockSchema>;
 export type TrackedDimension = z.infer<typeof trackedDimensionSchema>;
 export type PackageConfig = z.infer<typeof configSchema>;
 export type PackageOutcome = z.infer<typeof outcomeSchema>;
+export type PackageMetadata = z.infer<typeof metadataSchema>;

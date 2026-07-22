@@ -19,7 +19,7 @@ import {
     type DimensionStateMap,
 } from './sensing';
 
-import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 
@@ -86,8 +86,8 @@ export interface AIResponse {
 export async function generateAIResponse(
     socio: Socio,
     incomingText: string,
-    /** Curriculum collection key (falls back to DEFAULT_COLLECTION_KEY) */
-    collectionKey: string = DEFAULT_COLLECTION_KEY,
+    /** Curriculum collection key (required) */
+    collectionKey: string,
     /** Optional pre-computed dimension state for testing */
     overrideDimensionState?: DimensionStateMap,
 ): Promise<AIResponse> {

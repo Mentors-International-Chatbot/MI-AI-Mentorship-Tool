@@ -14,7 +14,7 @@ import {
     type ReminderState,
 } from '@/lib/ai/prompts';
 
-import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData, preloadCollection } from '@/lib/lessons/db-lesson-service';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
 
 export async function GET(req: NextRequest) {
@@ -38,7 +38,14 @@ export async function GET(req: NextRequest) {
             // Only send reminders to WhatsApp socios (web socios have no push channel)
             if (socio.channelType !== 'whatsapp') continue;
 
-            const collectionKey = socio.curriculumCollectionKey ?? DEFAULT_COLLECTION_KEY;
+            // Skip socios without curriculum key (should not happen after backfill)
+            if (!socio.curriculumCollectionKey) {
+                console.warn(`[Reminders] Skipping socio ${socio.id}: no curriculum key`);
+                continue;
+            }
+
+            const collectionKey = socio.curriculumCollectionKey;
+            await preloadCollection(collectionKey);
 
             if (!hasLessonData(collectionKey, progress.currentLessonNumber)) continue;
 

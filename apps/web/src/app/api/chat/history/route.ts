@@ -30,6 +30,10 @@ export async function GET() {
       if (displayRole !== 'user' && displayRole !== 'assistant') {
         return null;
       }
+      // Filter out the welcome trigger message (not meant to be displayed)
+      if (m.role === 'user' && m.content === '__welcome__') {
+        return null;
+      }
       return {
         id: m.id,
         role: displayRole as 'user' | 'assistant',

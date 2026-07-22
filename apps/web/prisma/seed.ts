@@ -170,6 +170,31 @@ async function main() {
     console.log(`Created name_extraction prompt v1.0 (id: ${prompt.id})`);
   }
 
+  // ── Seed MI-specific core prompt (course-scoped) ──
+  // This allows the core identity to be course-specific while keeping safety rules generic
+  const miCoreExisting = await prisma.systemPrompt.findFirst({
+    where: { version: '1.0', category: 'core:mi-colombia-curriculum' },
+  });
+
+  if (miCoreExisting) {
+    await prisma.systemPrompt.update({
+      where: { id: miCoreExisting.id },
+      data: { content: CORE_SYSTEM_PROMPT, active: true },
+    });
+    console.log(`Updated core:mi-colombia-curriculum prompt v1.0 content (id: ${miCoreExisting.id}).`);
+  } else {
+    const prompt = await prisma.systemPrompt.create({
+      data: {
+        version: '1.0',
+        category: 'core:mi-colombia-curriculum',
+        content: CORE_SYSTEM_PROMPT,
+        active: true,
+        authorId: 'seed',
+      },
+    });
+    console.log(`Created core:mi-colombia-curriculum prompt v1.0 (id: ${prompt.id})`);
+  }
+
   // ── Seed program config ──
   let created = 0;
   let skipped = 0;

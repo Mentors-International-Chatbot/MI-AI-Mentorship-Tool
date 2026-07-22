@@ -8,7 +8,7 @@ import {
     type RouterResult,
     type SocioProgress,
 } from '@/lib/ai/prompts';
-import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY, preloadCollection } from '@/lib/lessons/db-lesson-service';
 import { Socio } from '@/lib/repo/types';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
@@ -58,7 +58,12 @@ export async function POST(req: NextRequest) {
             socioName,
             businessDescription,
             dimensionState: rawDimensionState,
+            collectionKey: requestedCollectionKey,
         } = body;
+
+        // Use requested collection key or default for testing
+        const collectionKey = requestedCollectionKey || DEFAULT_COLLECTION_KEY;
+        await preloadCollection(collectionKey);
 
         // Build dimension state map from simplified input
         let dimensionState: DimensionStateMap | undefined;
@@ -123,8 +128,6 @@ export async function POST(req: NextRequest) {
             const routerResult: RouterResult = { mode: interactionMode };
 
             // Build LessonDeliveryState for lesson modes
-            // Test endpoint uses DEFAULT_COLLECTION_KEY
-            const collectionKey = DEFAULT_COLLECTION_KEY;
             if (
                 (interactionMode === InteractionMode.LESSON_START ||
                  interactionMode === InteractionMode.LESSON_DELIVERY) &&
@@ -203,7 +206,7 @@ export async function POST(req: NextRequest) {
         };
 
         const defaultRouter: RouterResult = { mode: InteractionMode.FREEFORM_QUESTION };
-        const systemPrompt = await buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress, DEFAULT_COLLECTION_KEY, dimensionState);
+        const systemPrompt = await buildSystemPrompt(fakeSocio, defaultRouter, defaultProgress, collectionKey, dimensionState);
 
         const chat = createOpenRouterChat({
             temperature: 0.7,

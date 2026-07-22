@@ -3,6 +3,7 @@ import { verifySession } from '@/lib/auth/session';
 import { prisma } from '@/lib/db';
 import { repo } from '@/lib/repo';
 import { isSupportedLanguage } from '@/lib/i18n/languages';
+import { getCourseMeta } from '@/lib/courses/course-meta';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,12 +15,23 @@ export async function GET() {
 
   let language = 'es';
   let curriculumCollectionKey: string | null = null;
+  let courseName: string | null = null;
+  let mentorName: string | null = null;
+  let displayName: string | null = null;
 
   if (session.role === 'socio') {
     const socio = await repo.getSocio('web', session.userId);
     if (socio) {
       language = socio.language || 'es';
       curriculumCollectionKey = socio.curriculumCollectionKey ?? null;
+
+      // Fetch course metadata if socio has a curriculum
+      if (curriculumCollectionKey) {
+        const meta = await getCourseMeta(curriculumCollectionKey);
+        courseName = meta.courseName;
+        mentorName = meta.mentorName;
+        displayName = meta.displayName;
+      }
     }
   } else {
     const mentor = await prisma.mentor.findUnique({
@@ -36,6 +48,9 @@ export async function GET() {
     role: session.role,
     language,
     curriculumCollectionKey,
+    courseName,
+    mentorName,
+    displayName,
   });
 }
 

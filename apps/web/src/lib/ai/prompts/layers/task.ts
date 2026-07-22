@@ -10,10 +10,10 @@ import {
   RouterResult,
 } from '../types';
 import { getLessonTitle } from '@/lib/lessons/db-lesson-service';
-import { DEFAULT_COLLECTION_KEY } from '@/lib/lessons/db-lesson-service';
 import { FLAG_RED_THRESHOLD, RETEACH_LEVEL_THRESHOLD, CONFUSION_ESCALATE_THRESHOLD } from '../constants';
 import { loadActivePrompt } from '../loadPrompt';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
+import { getCourseMeta } from '@/lib/courses/course-meta';
 
 // ─── Layer 3: Task Context — One Per Interaction Mode ───────────────
 // The router determines the mode; this function returns the right prompt.
@@ -77,8 +77,8 @@ function buildDimensionContext(dimensionState?: DimensionStateMap): string {
 export async function buildTaskPrompt(
   socio: Socio,
   result: RouterResult,
-  progress?: SocioProgress,
-  collectionKey: string = DEFAULT_COLLECTION_KEY,
+  progress: SocioProgress | undefined,
+  collectionKey: string,
   dimensionState?: DimensionStateMap,
 ): Promise<string> {
   const dimensionContext = buildDimensionContext(dimensionState);
@@ -191,8 +191,8 @@ INSTRUCCIONES:
 // ─── FREEFORM_QUESTION ──────────────────────────────────────────────
 
 async function buildFreeformPrompt(
-  progress?: SocioProgress,
-  collectionKey: string = DEFAULT_COLLECTION_KEY,
+  progress: SocioProgress | undefined,
+  collectionKey: string,
 ): Promise<string> {
   const completed = progress?.completedLessons ?? [];
   const currentNum = progress?.currentLessonNumber ?? 1;
@@ -202,22 +202,25 @@ async function buildFreeformPrompt(
     ? completed.map((n) => `${n}: ${getLessonTitle(collectionKey, n)}`).join('\n')
     : 'Ninguna';
 
-  const dynamicContext = `LECCIONES YA COMPLETADAS POR EL SOCIO:
+  // Get course name for instructions
+  const meta = await getCourseMeta(collectionKey);
+
+  const dynamicContext = `LECCIONES YA COMPLETADAS POR EL ESTUDIANTE:
 ${completedList}
 
 LECCIÓN ACTUAL:
 ${currentNum}: ${currentTitle}`;
 
-  const defaultInstructions = `TAREA ACTUAL: Responder pregunta del socio
+  const defaultInstructions = `TAREA ACTUAL: Responder pregunta del estudiante
 
-El socio hizo una pregunta por su cuenta, fuera de una lección o check-in.
+El estudiante hizo una pregunta por su cuenta, fuera de una lección o check-in.
 
 INSTRUCCIONES:
-- Responde usando SOLO información del currículo de Mentors International.
+- Responde usando SOLO información del currículo de ${meta.courseName}.
 - Usa la referencia curricular proporcionada abajo para fundamentar tu respuesta.
-- Si la pregunta se relaciona con una lección que el socio YA completó, refiérela: "¿Recuerdas cuando hablamos sobre [tema] en la Lección [X]? Esto se conecta con eso..."
+- Si la pregunta se relaciona con una lección que el estudiante YA completó, refiérela: "¿Recuerdas cuando hablamos sobre [tema] en la Lección [X]? Esto se conecta con eso..."
 - Si la pregunta se relaciona con una lección FUTURA, da una respuesta breve y menciona que profundizarán después: "¡Buena pregunta! Vamos a ver eso más a fondo pronto, pero por ahora te cuento lo básico..."
-- Si la pregunta NO está cubierta por ninguna lección del currículo, sé honesto: "Eso es algo que no cubre nuestro programa, pero tu mentor humano podría orientarte."
+- Si la pregunta NO está cubierta por ninguna lección del currículo, sé honesto: "Eso es algo que no cubre nuestro programa."
 - NO inventes información. Si no está en el currículo, no lo digas.
 - Mantén la respuesta en máximo 2-3 mensajes cortos.`;
 
