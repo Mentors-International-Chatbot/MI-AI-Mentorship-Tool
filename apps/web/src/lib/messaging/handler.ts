@@ -8,6 +8,7 @@ import { extractAndStoreContext } from '@/lib/ai/contextExtractor';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
 import { LESSON_MESSAGES, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getConfigNumber } from '@/lib/config/service';
+import { getCourseMeta, buildWelcomeMessage } from '@/lib/courses/course-meta';
 
 export interface HandleMessageInput {
     externalId: string;
@@ -40,20 +41,28 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
         if (channelType === 'web' && userName !== undefined) {
             const displayName = userName?.trim() ? userName.trim() : null;
-            const lang = language || 'es';
+            const socioLang = (language || 'es') as SupportedLanguage;
 
             await repo.updateSocio(socio.id, {
-                language: lang,
+                language: socioLang,
                 name: displayName,
                 status: 'ACTIVE',
             });
             await repo.initProgress(socio.id);
-            socio = { ...socio, language: lang, name: displayName, status: 'ACTIVE' };
+            socio = { ...socio, language: socioLang, name: displayName, status: 'ACTIVE' };
 
-            const langStrings = LESSON_MESSAGES[(lang as SupportedLanguage) ?? 'es'] ?? LESSON_MESSAGES['es'];
-            const welcomeMsg = displayName
-                ? langStrings.welcomeWithName(displayName)
-                : langStrings.welcomeAnonymous;
+            // Get course-specific welcome message
+            let welcomeMsg: string;
+            if (socio.curriculumCollectionKey) {
+                const meta = await getCourseMeta(socio.curriculumCollectionKey);
+                welcomeMsg = buildWelcomeMessage(meta, socioLang, displayName);
+            } else {
+                // Fallback for socios without curriculum (shouldn't happen on web)
+                const langStrings = LESSON_MESSAGES[socioLang] ?? LESSON_MESSAGES['es'];
+                welcomeMsg = displayName
+                    ? langStrings.welcomeWithName(displayName)
+                    : langStrings.welcomeAnonymous;
+            }
 
             await repo.addMessage({
                 socioId: socio.id,
@@ -194,7 +203,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         }
 
         const nudge =
-            'Por favor responde con un número del 1 al 10 (qué tan útil ha sido el programa para tu negocio). Puedes añadir un comentario si quieres.';
+            'Por favor responde con un número del 1 al 10 (qué tan útil ha sido el programa para ti). Puedes añadir un comentario si quieres.';
 
         await repo.addMessage({
             socioId: socio.id,

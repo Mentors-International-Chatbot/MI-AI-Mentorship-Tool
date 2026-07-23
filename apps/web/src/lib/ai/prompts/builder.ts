@@ -42,13 +42,13 @@ export async function buildSystemPrompt(
   const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language);
 
   // Layer 2: Socio context (now async — fetches persistent SocioContext from DB)
-  const layer2 = await buildContextPrompt(socio, progress, collectionKey);
+  const layer2 = await buildContextPrompt(socio, progress, collectionKey, language);
 
   // Layer 3: Task context (mode-specific instructions + dimension state)
-  const layer3 = await buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState);
+  const layer3 = await buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState, language);
 
   // Layer 4: Lesson content (only for teaching modes)
-  const layer4 = buildContentPrompt(routerResult, collectionKey);
+  const layer4 = await buildContentPrompt(routerResult, collectionKey, language);
 
   const parts = [layer1, layer2, layer3];
   if (layer4) parts.push(layer4);

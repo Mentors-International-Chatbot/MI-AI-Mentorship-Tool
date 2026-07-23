@@ -26,6 +26,7 @@ import {
   DEFAULT_COURSE_NAME,
   DEFAULT_DESCRIPTION,
   DEFAULT_LANGUAGE,
+  DEFAULT_WELCOME_TEMPLATE,
 } from './defaults';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 
@@ -114,13 +115,31 @@ const COURSE_CONFIGS: Record<string, CourseConfig> = {
       ],
     },
     onboarding: {
+      welcome: {
+        en: `Great{participantName}! 👋 We can start your mentorship now.
+
+I'm here to help you strengthen your business with practical lessons on finances, sales, and more.
+
+📚 When you're ready, type "start" to begin your first lesson.`,
+        es: `¡Perfecto{participantName}! 👋 Ya podemos empezar con tu mentoría.
+
+Estoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.
+
+📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
+        pt: `Perfeito{participantName}! 👋 Já podemos começar sua mentoria.
+
+Estou aqui para ajudá-lo a fortalecer seu negócio com lições práticas sobre finanças, vendas e mais.
+
+📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
+      },
       steps: [
         {
           id: 'name',
           field: 'name',
           prompt: {
-            en: 'What is your name?',
-            es: '¿Cómo te llamas?',
+            en: "Hi! I'm Martín, your virtual mentor 🤖. I'm here to help you grow your business. To get started, what's your name?",
+            es: '¡Hola! Soy Martín, tu mentor virtual 🤖. Estoy aquí para ayudarte a crecer tu negocio. Para empezar, ¿cómo te llamas?',
+            pt: 'Olá! Sou Martín, seu mentor virtual 🤖. Estou aqui para ajudá-lo a crescer seu negócio. Para começar, qual é o seu nome?',
           },
           required: true,
         },
@@ -128,8 +147,9 @@ const COURSE_CONFIGS: Record<string, CourseConfig> = {
           id: 'business',
           field: 'businessDescription',
           prompt: {
-            en: 'Tell me about your business - what do you sell or what service do you offer?',
-            es: 'Cuéntame sobre tu negocio - ¿qué vendes o qué servicio ofreces?',
+            en: 'Thanks! Now tell me, what kind of business do you have? For example: clothing store, food sales, cleaning services, etc.',
+            es: '¡Gracias! Ahora cuéntame, ¿qué tipo de negocio tienes? Por ejemplo: tienda de ropa, venta de comida, servicios de limpieza, etc.',
+            pt: 'Obrigado! Agora me conte, que tipo de negócio você tem? Por exemplo: loja de roupas, venda de comida, serviços de limpeza, etc.',
           },
           required: false,
         },
@@ -140,8 +160,9 @@ const COURSE_CONFIGS: Record<string, CourseConfig> = {
         id: 'financial-weekly',
         cadence: 'weekly',
         prompt: {
-          en: 'How did your business do this week? What were your sales and expenses?',
-          es: '¿Cómo le fue a tu negocio esta semana? ¿Cuáles fueron tus ventas y gastos?',
+          en: 'Hi! It\'s time for your weekly business report. Please tell me: this week, what was your total income (everything that came in) and what was your net profit (what you had left after paying expenses)? You can say something like "I sold 500 and kept 200".',
+          es: 'Hola! Es momento de tu reporte semanal de negocio. Por favor cuéntame: esta semana, cuánto fue tu ingreso total (todo lo que entró) y cuánto fue tu ganancia neta (lo que te quedó después de pagar gastos)? Puedes decirme algo como "vendí 500000 y me quedaron 200000".',
+          pt: 'Olá! É hora do seu relatório semanal de negócios. Por favor me conte: esta semana, qual foi sua receita total (tudo que entrou) e qual foi seu lucro líquido (o que sobrou depois de pagar as despesas)? Você pode dizer algo como "vendi 500 e sobrou 200".',
         },
         captureMarker: 'FINANCIAL',
         enabled: true,
@@ -258,6 +279,33 @@ export async function getCourseMeta(collectionKey: string): Promise<CourseMeta> 
 export function clearCourseMetaCache(): void {
   metaCache.clear();
   loadPromises.clear();
+}
+
+// ── Welcome Message Builder ──────────────────────────────────────────────────
+
+/**
+ * Builds the welcome message for a participant.
+ * Uses course config welcome or falls back to generic template.
+ * Substitutes placeholders: {mentorName}, {courseName}, {participantName}
+ */
+export function buildWelcomeMessage(
+  meta: CourseMeta,
+  language: SupportedLanguage | string,
+  participantName?: string | null,
+): string {
+  // Get welcome template from config or default
+  const welcomeTemplate = meta.onboarding.welcome ?? DEFAULT_WELCOME_TEMPLATE;
+  let message = resolveLocalized(welcomeTemplate, language);
+
+  // Substitute placeholders
+  message = message.replace(/{mentorName}/g, meta.mentorName);
+  message = message.replace(/{courseName}/g, meta.courseName);
+
+  // Participant name: ", Name" or "" if not provided
+  const nameStr = participantName?.trim() ? `, ${participantName.trim()}` : '';
+  message = message.replace(/{participantName}/g, nameStr);
+
+  return message;
 }
 
 // Re-export types for consumers

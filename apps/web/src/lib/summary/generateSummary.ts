@@ -6,6 +6,7 @@ import {
   type SupportedLanguage,
   isSupportedLanguage,
 } from '@/lib/i18n/languages';
+import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 
 export type SummaryFlags = {
   risks: string[];
@@ -38,7 +39,8 @@ function normalizeSummaryLanguage(raw: string | undefined): SupportedLanguage {
 
 type PromptCtx = {
   name: string;
-  business: string;
+  contextInfo: string; // Was "business" - now generic context info
+  participantLabel: string; // e.g., "socio", "participant"
   currentLesson: number;
   messageCount: number;
   lessonsCompleted: number;
@@ -49,10 +51,13 @@ type PromptCtx = {
 };
 
 function buildHumanPrompt(lang: SupportedLanguage, ctx: PromptCtx): string {
-  if (lang === 'en') {
-    return `Generate a weekly summary for the human mentor about this socio.
+  // Use participant label from config
+  const pLabel = ctx.participantLabel.toUpperCase();
 
-SOCIO: ${ctx.name} (${ctx.business})
+  if (lang === 'en') {
+    return `Generate a weekly summary for the human mentor about this ${ctx.participantLabel}.
+
+${pLabel}: ${ctx.name}${ctx.contextInfo ? ` (${ctx.contextInfo})` : ''}
 CURRENT LESSON: ${ctx.currentLesson}
 MESSAGES THIS WEEK: ${ctx.messageCount}
 LESSONS COMPLETED THIS WEEK: ${ctx.lessonsCompleted}
@@ -60,7 +65,7 @@ ACTIVE FLAGS: ${ctx.activeFlagsLine}
 AVERAGE CONFUSION: ${ctx.avgConfusion}/10
 AVERAGE FRUSTRATION: ${ctx.avgFrustration}/10
 
-RECENT CONVERSATION (in Spanish — the socio speaks Spanish):
+RECENT CONVERSATION:
 ${ctx.recentConvo}
 
 Respond ONLY with valid JSON, no backticks:
@@ -74,9 +79,9 @@ Respond ONLY with valid JSON, no backticks:
   }
 
   if (lang === 'pt') {
-    return `Gere um resumo semanal para o mentor humano sobre este socio.
+    return `Gere um resumo semanal para o mentor humano sobre este ${ctx.participantLabel}.
 
-SOCIO: ${ctx.name} (${ctx.business})
+${pLabel}: ${ctx.name}${ctx.contextInfo ? ` (${ctx.contextInfo})` : ''}
 LIÇÃO ATUAL: ${ctx.currentLesson}
 MENSAGENS ESTA SEMANA: ${ctx.messageCount}
 LIÇÕES CONCLUÍDAS ESTA SEMANA: ${ctx.lessonsCompleted}
@@ -84,7 +89,7 @@ BANDEIRAS ATIVAS: ${ctx.activeFlagsLine}
 CONFUSÃO MÉDIA: ${ctx.avgConfusion}/10
 FRUSTRAÇÃO MÉDIA: ${ctx.avgFrustration}/10
 
-CONVERSA RECENTE (em espanhol — o sócio fala espanhol):
+CONVERSA RECENTE:
 ${ctx.recentConvo}
 
 Responda APENAS com JSON válido, sem backticks:
@@ -98,9 +103,9 @@ Responda APENAS com JSON válido, sem backticks:
   }
 
   // es (default)
-  return `Genera un resumen semanal para el mentor humano sobre este socio.
+  return `Genera un resumen semanal para el mentor humano sobre este ${ctx.participantLabel}.
 
-SOCIO: ${ctx.name} (${ctx.business})
+${pLabel}: ${ctx.name}${ctx.contextInfo ? ` (${ctx.contextInfo})` : ''}
 LECCIÓN ACTUAL: ${ctx.currentLesson}
 MENSAJES ESTA SEMANA: ${ctx.messageCount}
 LECCIONES COMPLETADAS ESTA SEMANA: ${ctx.lessonsCompleted}
@@ -108,7 +113,7 @@ BANDERAS ACTIVAS: ${ctx.activeFlagsLine}
 CONFUSIÓN PROMEDIO: ${ctx.avgConfusion}/10
 FRUSTRACIÓN PROMEDIO: ${ctx.avgFrustration}/10
 
-CONVERSACIÓN RECIENTE (el socio escribe en español):
+CONVERSACIÓN RECIENTE:
 ${ctx.recentConvo}
 
 Responde ÚNICAMENTE con JSON válido, sin backticks:
@@ -133,7 +138,7 @@ function systemMessageForLang(lang: SupportedLanguage): string {
 
 /**
  * @param language Output language for the mentor-facing summary (es | en | pt).
- *        Default `es`. Cron/dashboard pass the mentor’s preference explicitly.
+ *        Default `es`. Cron/dashboard pass the mentor's preference explicitly.
  */
 export async function generateSummary(
   socioId: string,
@@ -146,10 +151,26 @@ export async function generateSummary(
 
   const socio = await prisma.socio.findUnique({
     where: { id: socioId },
-    select: { id: true, name: true, businessName: true },
+    select: { id: true, name: true, businessName: true, businessDescription: true, curriculumCollectionKey: true },
   });
   if (!socio) {
     throw new Error(`Socio not found: ${socioId}`);
+  }
+
+  // Get course-specific terminology
+  let participantLabel = 'participant';
+  let contextInfo = '';
+  let contextLabel = '';
+
+  if (socio.curriculumCollectionKey) {
+    const meta = await getCourseMeta(socio.curriculumCollectionKey);
+    participantLabel = resolveLocalized(meta.terminology.participant, lang);
+
+    if (meta.learnerContext) {
+      contextLabel = resolveLocalized(meta.learnerContext.label, lang);
+      // Use business info if learnerContext exists
+      contextInfo = socio.businessName || socio.businessDescription || '';
+    }
   }
 
   const [messages, sentiments, progress, activeFlags, lessonsThisWeek] = await Promise.all([
@@ -181,23 +202,23 @@ export async function generateSummary(
     ? Math.round((sentiments.reduce((s, r) => s + r.frustration, 0) / sentiments.length) * 10) / 10
     : 0;
 
+  // Use participant label in conversation transcript
+  const pLabelUpper = participantLabel.toUpperCase();
   const recentConvo = messages
     .slice(-20)
-    .map((m) => `${m.role === 'user' ? 'SOCIO' : m.role === 'mentor' ? 'MENTOR' : 'IA'}: ${m.content}`)
+    .map((m) => `${m.role === 'user' ? pLabelUpper : m.role === 'mentor' ? 'MENTOR' : 'AI'}: ${m.content}`)
     .join('\n');
 
   const noneLabel =
     lang === 'en' ? 'none' : lang === 'pt' ? 'nenhuma' : 'ninguna';
 
+  const noNameLabel =
+    lang === 'en' ? 'No name' : lang === 'pt' ? 'Sem nome' : 'Sin nombre';
+
   const ctx: PromptCtx = {
-    name: socio.name ?? (lang === 'en' ? 'No name' : lang === 'pt' ? 'Sem nome' : 'Sin nombre'),
-    business:
-      socio.businessName ??
-      (lang === 'en'
-        ? 'business not specified'
-        : lang === 'pt'
-          ? 'negócio não especificado'
-          : 'negocio no especificado'),
+    name: socio.name ?? noNameLabel,
+    contextInfo, // Empty if no learnerContext, otherwise business info
+    participantLabel,
     currentLesson: progress?.currentLessonNumber ?? 1,
     messageCount: messages.length,
     lessonsCompleted: lessonsThisWeek.length,

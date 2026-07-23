@@ -3,7 +3,7 @@ import { MAX_SENTENCES_PER_MESSAGE, MAX_EMOJIS_PER_MESSAGE } from '../constants'
 import { getLanguageDirective, type SupportedLanguage } from '@/lib/i18n/languages';
 import { repo } from '@/lib/repo';
 // getChatbotDisplayName removed - mentor name now comes from course metadata only
-import { getCourseMeta, type CourseMeta } from '@/lib/courses/course-meta';
+import { getCourseMeta, resolveLocalized, type CourseMeta } from '@/lib/courses/course-meta';
 
 // ─── Conciseness Mapping ────────────────────────────────────────────
 
@@ -169,60 +169,187 @@ Não escale — simplesmente redirecione.`,
 }
 
 // ─── Tone Override Snippets ─────────────────────────────────────────
-// Appended to Layer 1 when a mentor sets a tone for a specific socio.
+// Appended to Layer 1 when a mentor sets a tone for a specific learner.
+// Dynamically generated based on language and course config.
 
-const TONE_SNIPPETS: Record<ToneOverride, string> = {
-  more_encouraging: `
+interface ToneContext {
+  language: SupportedLanguage;
+  participantNoun: string;
+  contextLabel?: string; // e.g., "Business" for MI, undefined for PBJ
+}
 
-AJUSTE DE TONO: Este socio necesita más motivación. Sé extra alentador. Celebra cada pequeño paso. Usa frases como "¡Vas muy bien!", "Eso es un gran avance", "Me alegra que estés aquí". Si reporta dificultades, enfatiza lo que SÍ ha logrado antes de hablar de lo que falta.`,
+function buildToneSnippet(tone: ToneOverride, ctx: ToneContext): string {
+  const { language, participantNoun, contextLabel } = ctx;
 
-  more_direct: `
+  const snippets: Record<SupportedLanguage, Record<ToneOverride, string>> = {
+    es: {
+      more_encouraging: `
 
-AJUSTE DE TONO: Este socio prefiere ir al grano. Sé más conciso y directo. Menos rodeos, menos emojis. Da el consejo o la información de forma clara y rápida. Aún sé respetuoso, pero no adornes.`,
+AJUSTE DE TONO: Este ${participantNoun} necesita más motivación. Sé extra alentador. Celebra cada pequeño paso. Usa frases como "¡Vas muy bien!", "Eso es un gran avance", "Me alegra que estés aquí". Si reporta dificultades, enfatiza lo que SÍ ha logrado antes de hablar de lo que falta.`,
 
-  simpler_language: `
+      more_direct: `
 
-AJUSTE DE TONO: Este socio necesita lenguaje más sencillo. Usa palabras de uso diario. Evita cualquier término que no usarías con un vecino en la tienda. Si explicas un concepto, usa una comparación de la vida real antes de dar la definición.`,
+AJUSTE DE TONO: Este ${participantNoun} prefiere ir al grano. Sé más conciso y directo. Menos rodeos, menos emojis. Da el consejo o la información de forma clara y rápida. Aún sé respetuoso, pero no adornes.`,
 
-  family_focused: `
+      simpler_language: `
 
-AJUSTE DE TONO: Este socio valora mucho a su familia. Conecta los conceptos de negocio con el bienestar familiar cuando sea natural. "Separar la plata del negocio también protege a tu familia" o "Un fondo de emergencia le da tranquilidad a toda tu casa."`,
+AJUSTE DE TONO: Este ${participantNoun} necesita lenguaje más sencillo. Usa palabras de uso diario. Evita cualquier término que no usarías con un vecino en la tienda. Si explicas un concepto, usa una comparación de la vida real antes de dar la definición.`,
 
-  struggling_business: `
+      family_focused: contextLabel
+        ? `
 
-AJUSTE DE TONO: Este socio está pasando por un momento difícil con su negocio. Sé especialmente empático. No presiones para avanzar rápido. Valida que los momentos difíciles son normales. Enfócate en pasos pequeños y alcanzables. Si reporta pérdidas, NO intentes arreglarlo todo de una vez.`,
-};
+AJUSTE DE TONO: Este ${participantNoun} valora mucho a su familia. Conecta los conceptos de ${contextLabel.toLowerCase()} con el bienestar familiar cuando sea natural. "Separar la plata del ${contextLabel.toLowerCase()} también protege a tu familia" o "Un fondo de emergencia le da tranquilidad a toda tu casa."`
+        : `
 
-export function buildSliderSnippet(overrides?: PromptOverrides): string {
+AJUSTE DE TONO: Este ${participantNoun} valora mucho a su familia. Conecta los conceptos del programa con el bienestar familiar cuando sea natural. "Aprender esto también beneficia a tu familia" o "Un buen plan le da tranquilidad a toda tu casa."`,
+
+      struggling_business: contextLabel
+        ? `
+
+AJUSTE DE TONO: Este ${participantNoun} está pasando por un momento difícil con su ${contextLabel.toLowerCase()}. Sé especialmente empático. No presiones para avanzar rápido. Valida que los momentos difíciles son normales. Enfócate en pasos pequeños y alcanzables. Si reporta pérdidas, NO intentes arreglarlo todo de una vez.`
+        : `
+
+AJUSTE DE TONO: Este ${participantNoun} está pasando por un momento difícil y se siente desanimado. Sé especialmente empático. No presiones para avanzar rápido. Valida que los momentos difíciles son normales. Enfócate en pasos pequeños y alcanzables.`,
+    },
+
+    en: {
+      more_encouraging: `
+
+TONE ADJUSTMENT: This ${participantNoun} needs more motivation. Be extra encouraging. Celebrate every small step. Use phrases like "You're doing great!", "That's a big step forward", "I'm glad you're here". If they report difficulties, emphasize what they HAVE achieved before discussing what's missing.`,
+
+      more_direct: `
+
+TONE ADJUSTMENT: This ${participantNoun} prefers to get to the point. Be more concise and direct. Less small talk, fewer emojis. Give advice or information clearly and quickly. Still be respectful, but don't embellish.`,
+
+      simpler_language: `
+
+TONE ADJUSTMENT: This ${participantNoun} needs simpler language. Use everyday words. Avoid any term you wouldn't use with a neighbor at the store. When explaining a concept, use a real-life comparison before giving the definition.`,
+
+      family_focused: contextLabel
+        ? `
+
+TONE ADJUSTMENT: This ${participantNoun} values their family highly. Connect ${contextLabel.toLowerCase()} concepts to family wellbeing when natural. "Separating ${contextLabel.toLowerCase()} money also protects your family" or "An emergency fund gives peace of mind to your whole household."`
+        : `
+
+TONE ADJUSTMENT: This ${participantNoun} values their family highly. Connect program concepts to family wellbeing when natural. "Learning this also benefits your family" or "A good plan gives peace of mind to your whole household."`,
+
+      struggling_business: contextLabel
+        ? `
+
+TONE ADJUSTMENT: This ${participantNoun} is going through a difficult time with their ${contextLabel.toLowerCase()}. Be especially empathetic. Don't pressure to move fast. Validate that hard times are normal. Focus on small, achievable steps. If they report losses, DON'T try to fix everything at once.`
+        : `
+
+TONE ADJUSTMENT: This ${participantNoun} is going through a difficult time and feeling discouraged. Be especially empathetic. Don't pressure to move fast. Validate that hard times are normal. Focus on small, achievable steps.`,
+    },
+
+    pt: {
+      more_encouraging: `
+
+AJUSTE DE TOM: Este ${participantNoun} precisa de mais motivação. Seja extra encorajador. Celebre cada pequeno passo. Use frases como "Você está indo muito bem!", "Isso é um grande avanço", "Fico feliz que você esteja aqui". Se relatar dificuldades, enfatize o que JÁ conseguiu antes de falar do que falta.`,
+
+      more_direct: `
+
+AJUSTE DE TOM: Este ${participantNoun} prefere ir direto ao ponto. Seja mais conciso e direto. Menos rodeios, menos emojis. Dê o conselho ou informação de forma clara e rápida. Ainda seja respeitoso, mas não enfeite.`,
+
+      simpler_language: `
+
+AJUSTE DE TOM: Este ${participantNoun} precisa de linguagem mais simples. Use palavras do dia a dia. Evite qualquer termo que não usaria com um vizinho na loja. Ao explicar um conceito, use uma comparação da vida real antes de dar a definição.`,
+
+      family_focused: contextLabel
+        ? `
+
+AJUSTE DE TOM: Este ${participantNoun} valoriza muito sua família. Conecte os conceitos de ${contextLabel.toLowerCase()} com o bem-estar familiar quando natural. "Separar o dinheiro do ${contextLabel.toLowerCase()} também protege sua família" ou "Uma reserva de emergência dá tranquilidade para toda sua casa."`
+        : `
+
+AJUSTE DE TOM: Este ${participantNoun} valoriza muito sua família. Conecte os conceitos do programa com o bem-estar familiar quando natural. "Aprender isso também beneficia sua família" ou "Um bom plano dá tranquilidade para toda sua casa."`,
+
+      struggling_business: contextLabel
+        ? `
+
+AJUSTE DE TOM: Este ${participantNoun} está passando por um momento difícil com seu ${contextLabel.toLowerCase()}. Seja especialmente empático. Não pressione para avançar rápido. Valide que momentos difíceis são normais. Foque em passos pequenos e alcançáveis. Se relatar perdas, NÃO tente resolver tudo de uma vez.`
+        : `
+
+AJUSTE DE TOM: Este ${participantNoun} está passando por um momento difícil e se sente desanimado. Seja especialmente empático. Não pressione para avançar rápido. Valide que momentos difíciles são normais. Foque em passos pequenos e alcançáveis.`,
+    },
+  };
+
+  return snippets[language]?.[tone] ?? snippets['en'][tone];
+}
+
+export function buildSliderSnippet(
+  overrides: PromptOverrides | undefined,
+  language: SupportedLanguage,
+  participantNoun: string,
+): string {
   if (!overrides) return '';
   const parts: string[] = [];
 
+  const sliderStrings: Record<SupportedLanguage, {
+    complexityLow: string;
+    complexityHigh: (pn: string) => string;
+    warmthLow: string;
+    warmthHigh: string;
+    positivityLow: (pn: string) => string;
+    positivityHigh: string;
+    header: string;
+  }> = {
+    es: {
+      complexityLow: 'Usa lenguaje muy sencillo. Evita cualquier término técnico. Explica todo con comparaciones de la vida cotidiana.',
+      complexityHigh: (pn) => `Puedes usar un lenguaje más detallado y técnico cuando sea relevante. El ${pn} está listo para conceptos más avanzados.`,
+      warmthLow: 'Sé más directo y conciso. Menos rodeos y menos expresiones de ánimo. Ve al punto rápido.',
+      warmthHigh: 'Sé extra cálido y cercano. Usa más palabras de ánimo, celebra cada paso, y muestra empatía adicional.',
+      positivityLow: (pn) => `Sé más realista y directo sobre los retos. No minimices los problemas — ayuda al ${pn} a enfrentarlos de frente.`,
+      positivityHigh: 'Enfócate en lo positivo. Resalta oportunidades, celebra logros, y enmarca los retos como oportunidades de crecimiento.',
+      header: 'AJUSTES DEL MENTOR:',
+    },
+    en: {
+      complexityLow: 'Use very simple language. Avoid any technical terms. Explain everything with everyday comparisons.',
+      complexityHigh: (pn) => `You can use more detailed and technical language when relevant. The ${pn} is ready for more advanced concepts.`,
+      warmthLow: 'Be more direct and concise. Less small talk and fewer encouraging expressions. Get to the point quickly.',
+      warmthHigh: 'Be extra warm and friendly. Use more encouraging words, celebrate every step, and show additional empathy.',
+      positivityLow: (pn) => `Be more realistic and direct about challenges. Don't minimize problems — help the ${pn} face them head-on.`,
+      positivityHigh: 'Focus on the positive. Highlight opportunities, celebrate achievements, and frame challenges as growth opportunities.',
+      header: 'MENTOR ADJUSTMENTS:',
+    },
+    pt: {
+      complexityLow: 'Use linguagem muito simples. Evite qualquer termo técnico. Explique tudo com comparações do dia a dia.',
+      complexityHigh: (pn) => `Você pode usar linguagem mais detalhada e técnica quando relevante. O ${pn} está pronto para conceitos mais avançados.`,
+      warmthLow: 'Seja mais direto e conciso. Menos rodeios e menos expressões de ânimo. Vá direto ao ponto.',
+      warmthHigh: 'Seja extra caloroso e próximo. Use mais palavras de ânimo, celebre cada passo, e mostre empatia adicional.',
+      positivityLow: (pn) => `Seja mais realista e direto sobre os desafios. Não minimize os problemas — ajude o ${pn} a enfrentá-los de frente.`,
+      positivityHigh: 'Foque no positivo. Destaque oportunidades, celebre conquistas, e enquadre desafios como oportunidades de crescimento.',
+      header: 'AJUSTES DO MENTOR:',
+    },
+  };
+
+  const s = sliderStrings[language] ?? sliderStrings['en'];
+
   if (overrides.complexity !== undefined) {
     if (overrides.complexity < 0.33) {
-      parts.push('Usa lenguaje muy sencillo. Evita cualquier término técnico. Explica todo con comparaciones de la vida cotidiana.');
+      parts.push(s.complexityLow);
     } else if (overrides.complexity > 0.66) {
-      parts.push('Puedes usar un lenguaje más detallado y técnico cuando sea relevante. El socio está listo para conceptos más avanzados.');
+      parts.push(s.complexityHigh(participantNoun));
     }
   }
 
   if (overrides.warmth !== undefined) {
     if (overrides.warmth < 0.33) {
-      parts.push('Sé más directo y conciso. Menos rodeos y menos expresiones de ánimo. Ve al punto rápido.');
+      parts.push(s.warmthLow);
     } else if (overrides.warmth > 0.66) {
-      parts.push('Sé extra cálido y cercano. Usa más palabras de ánimo, celebra cada paso, y muestra empatía adicional.');
+      parts.push(s.warmthHigh);
     }
   }
 
   if (overrides.positivity !== undefined) {
     if (overrides.positivity < 0.33) {
-      parts.push('Sé más realista y directo sobre los retos. No minimices los problemas — ayuda al socio a enfrentarlos de frente.');
+      parts.push(s.positivityLow(participantNoun));
     } else if (overrides.positivity > 0.66) {
-      parts.push('Enfócate en lo positivo. Resalta oportunidades, celebra logros, y enmarca los retos como oportunidades de crecimiento.');
+      parts.push(s.positivityHigh);
     }
   }
 
   if (parts.length === 0) return '';
-  return '\n\nAJUSTES DEL MENTOR:\n- ' + parts.join('\n- ');
+  return `\n\n${s.header}\n- ` + parts.join('\n- ');
 }
 
 export async function buildCorePrompt(
@@ -234,6 +361,12 @@ export async function buildCorePrompt(
 
   // ALWAYS get course metadata - it's the single source of truth for mentor name
   const meta = await getCourseMeta(collectionKey);
+
+  // Get terminology and context for tone snippets
+  const participantNoun = resolveLocalized(meta.terminology.participant, lang);
+  const contextLabel = meta.learnerContext
+    ? resolveLocalized(meta.learnerContext.label, lang)
+    : undefined;
 
   // Resolution: DB scoped prompt → generic template
   const dbPrompt = await loadScopedPrompt(collectionKey);
@@ -265,14 +398,19 @@ export async function buildCorePrompt(
     prompt = prompt.replace(defaultLine, getConcisivenessInstruction(overrides.conciseness));
   }
 
+  // Apply tone override with dynamic snippets
   const toneOverride = overrides?.toneOverride;
-  if (toneOverride && TONE_SNIPPETS[toneOverride]) {
-    prompt += TONE_SNIPPETS[toneOverride];
+  if (toneOverride) {
+    const toneCtx: ToneContext = { language: lang, participantNoun, contextLabel };
+    prompt += buildToneSnippet(toneOverride, toneCtx);
   }
-  const sliderSnippet = buildSliderSnippet(overrides);
+
+  // Apply slider adjustments
+  const sliderSnippet = buildSliderSnippet(overrides, lang, participantNoun);
   if (sliderSnippet) {
     prompt += sliderSnippet;
   }
+
   const directive = getLanguageDirective(language ?? 'es');
   if (directive) {
     prompt += '\n\n' + directive;

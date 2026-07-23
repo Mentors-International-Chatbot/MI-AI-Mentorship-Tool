@@ -49,6 +49,23 @@ export const DEFAULT_ONBOARDING: OnboardingConfig = {
   steps: [],
 };
 
+/**
+ * Generic welcome message template.
+ * Uses {mentorName}, {courseName}, {participantName} placeholders.
+ * Course-neutral: no business/negocio framing.
+ */
+export const DEFAULT_WELCOME_TEMPLATE: LocalizedString = {
+  en: `Hi{participantName}! 👋 I'm {mentorName}, your guide for {courseName}.
+
+I'm here to help you learn through practical lessons. When you're ready, type "start" to begin your first lesson.`,
+  es: `¡Hola{participantName}! 👋 Soy {mentorName}, tu guía para {courseName}.
+
+Estoy aquí para ayudarte a aprender con lecciones prácticas. Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
+  pt: `Olá{participantName}! 👋 Sou {mentorName}, seu guia para {courseName}.
+
+Estou aqui para ajudá-lo a aprender com lições práticas. Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
+};
+
 // ── Scheduled Check-ins Defaults ─────────────────────────────────────────────
 
 export const DEFAULT_SCHEDULED_CHECKINS: ScheduledCheckin[] = [];

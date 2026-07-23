@@ -17,86 +17,6 @@ export const LANGUAGE_META: Record<SupportedLanguage, LanguageMeta> = {
     pt: { code: 'pt', name: 'Portuguese', nativeName: 'Português', flag: '🇧🇷' },
 };
 
-// ─── Onboarding Strings ─────────────────────────────────────────────
-// These are sent before the AI is involved, so they must be pre-translated.
-
-interface OnboardingStrings {
-    languagePicker: string;
-    languageConfirmed: string;
-    consentPrompt: string;
-    consentAcceptKeyword: string;
-    consentRetry: string;
-    namePrompt: string;
-    nameRetry: string;
-    businessPrompt: string;
-    businessRetry: string;
-    /** Sent after business description is saved (onboarding complete). */
-    welcome: (name: string) => string;
-}
-
-export const ONBOARDING: Record<SupportedLanguage, OnboardingStrings> = {
-    es: {
-        languagePicker:
-            '¡Hola! Soy tu mentor virtual de Mentors International.\n\nElige tu idioma / Choose your language / Escolha seu idioma:\n\n1. Español\n2. English\n3. Português',
-        languageConfirmed: '¡Perfecto! Continuamos en español.',
-        consentPrompt:
-            "Para continuar, por favor lee y acepta nuestros términos de uso. Responde 'ACEPTO' para iniciar.",
-        consentAcceptKeyword: 'ACEPTO',
-        consentRetry:
-            "Por favor responde 'ACEPTO' para confirmar que estás de acuerdo con los términos.",
-        namePrompt:
-            '¡Hola! Soy tu mentor virtual de Mentors International 🤖. Estoy aquí para ayudarte a crecer tu negocio. Para empezar, ¿cómo te llamas?',
-        nameRetry:
-            'No pude entender tu nombre. ¿Podrías escribir solo tu nombre, por favor?',
-        businessPrompt:
-            '¡Gracias! Ahora cuéntame, ¿qué tipo de negocio tienes? Por ejemplo: tienda de ropa, venta de comida, servicios de limpieza, etc.',
-        businessRetry:
-            'No pude entender bien. ¿Podrías describir tu negocio en pocas palabras? Por ejemplo: "Vendo empanadas en el mercado" o "Tengo una peluquería".',
-        welcome: (name: string) =>
-            `¡Perfecto, ${name}! 👋 Ya podemos empezar con tu mentoría. Cuando quieras, escribe "comenzar" para iniciar tu primera lección.`,
-    },
-    en: {
-        languagePicker:
-            'Hello! I\'m your virtual mentor from Mentors International.\n\nChoose your language / Elige tu idioma / Escolha seu idioma:\n\n1. Español\n2. English\n3. Português',
-        languageConfirmed: 'Great! We\'ll continue in English.',
-        consentPrompt:
-            "To continue, please read and accept our terms of use. Reply 'ACCEPT' to start.",
-        consentAcceptKeyword: 'ACCEPT',
-        consentRetry:
-            "Please reply 'ACCEPT' to confirm that you agree with the terms.",
-        namePrompt:
-            "Hi! I'm your virtual mentor from Mentors International 🤖. I'm here to help you grow your business. To get started, what's your name?",
-        nameRetry:
-            "I couldn't catch your name. Could you please type just your name?",
-        businessPrompt:
-            'Thanks! Now tell me, what kind of business do you have? For example: clothing store, food sales, cleaning services, etc.',
-        businessRetry:
-            'I didn\'t quite understand. Could you describe your business in a few words? For example: "I sell empanadas at the market" or "I have a hair salon".',
-        welcome: (name: string) =>
-            `Great, ${name}! 👋 We can start your mentorship now. When you\'re ready, type "comenzar" or "start" to begin your first lesson.`,
-    },
-    pt: {
-        languagePicker:
-            'Olá! Sou seu mentor virtual da Mentors International.\n\nEscolha seu idioma / Elige tu idioma / Choose your language:\n\n1. Español\n2. English\n3. Português',
-        languageConfirmed: 'Perfeito! Vamos continuar em português.',
-        consentPrompt:
-            "Para continuar, por favor leia e aceite nossos termos de uso. Responda 'ACEITO' para começar.",
-        consentAcceptKeyword: 'ACEITO',
-        consentRetry:
-            "Por favor responda 'ACEITO' para confirmar que você concorda com os termos.",
-        namePrompt:
-            'Olá! Sou seu mentor virtual da Mentors International 🤖. Estou aqui para ajudar você a crescer seu negócio. Para começar, qual é o seu nome?',
-        nameRetry:
-            'Não consegui entender seu nome. Poderia digitar apenas o seu nome, por favor?',
-        businessPrompt:
-            'Obrigado! Agora me conte, que tipo de negócio você tem? Por exemplo: loja de roupas, venda de comida, serviços de limpeza, etc.',
-        businessRetry:
-            'Não entendi bem. Poderia descrever seu negócio em poucas palavras? Por exemplo: "Vendo empanadas no mercado" ou "Tenho um salão de beleza".',
-        welcome: (name: string) =>
-            `Perfeito, ${name}! 👋 Já podemos começar sua mentoria. Quando quiser, digite "comenzar" para iniciar sua primeira lição.`,
-    },
-};
-
 // ─── UI Strings (for the web chat frontend) ─────────────────────────
 
 interface UIStrings {
@@ -168,16 +88,20 @@ export const AI_ERROR_FALLBACK: Record<SupportedLanguage, string> = {
 };
 
 // ─── Lesson Notification Messages ────────────────────────────────────
+// Platform chrome for lesson flow. Course-specific welcomes come from config.
 
 interface LessonMessageStrings {
     lessonHeader: (num: number, total: number) => string;
     lessonComplete: (num: number) => string;
     nextLesson: (num: number) => string;
     courseComplete: string;
+    /** Fallback welcome for web socios without course config. */
     welcomeWithName: (name: string) => string;
+    /** Fallback welcome for web socios without course config. */
     welcomeAnonymous: string;
     welcomeStart: string;
     escalationConfirmation: string;
+    /** Feedback prompt - course-neutral, no business framing. */
     feedbackPrompt: (completedNum: number) => string;
 }
 
@@ -187,33 +111,33 @@ export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = 
         lessonComplete: (num) => `✅ ¡Lección ${num} completada!`,
         nextLesson: (num) => `Cuando estés listo(a), escribe "siguiente" para comenzar la Lección ${num}.`,
         courseComplete: '¡Felicitaciones por completar todas las lecciones!',
-        welcomeWithName: (name) => `¡Hola ${name}! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
-        welcomeAnonymous: `¡Hola! 👋 Soy tu Mentor Virtual de Mentors International.\n\nEstoy aquí para ayudarte a fortalecer tu negocio con lecciones prácticas sobre finanzas, ventas y más.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
+        welcomeWithName: (name) => `¡Hola ${name}! 👋 Estoy aquí para ayudarte a aprender con lecciones prácticas.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
+        welcomeAnonymous: `¡Hola! 👋 Estoy aquí para ayudarte a aprender con lecciones prácticas.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
         welcomeStart: 'comenzar',
         escalationConfirmation: '📋 He notificado a tu mentor humano. Te contactará lo más pronto posible. Mientras tanto, puedo seguir ayudándote con cualquier pregunta.',
-        feedbackPrompt: (n) => `💬 ¡Has completado ${n} lecciones! Me encantaría saber tu opinión. Del 1 al 10, ¿qué tan útil ha sido este programa para tu negocio? Puedes agregar cualquier comentario.`,
+        feedbackPrompt: (n) => `💬 ¡Has completado ${n} lecciones! Me encantaría saber tu opinión. Del 1 al 10, ¿qué tan útil ha sido este programa para ti? Puedes agregar cualquier comentario.`,
     },
     en: {
         lessonHeader: (num, total) => `📚 Lesson ${num} of ${total}`,
         lessonComplete: (num) => `✅ Lesson ${num} complete!`,
         nextLesson: (num) => `When you're ready, type "next" to start Lesson ${num}.`,
         courseComplete: 'Congratulations on completing all the lessons!',
-        welcomeWithName: (name) => `Hi ${name}! 👋 I'm your Virtual Mentor from Mentors International.\n\nI'm here to help you strengthen your business with practical lessons on finances, sales, and more.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
-        welcomeAnonymous: `Hi! 👋 I'm your Virtual Mentor from Mentors International.\n\nI'm here to help you strengthen your business with practical lessons on finances, sales, and more.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
+        welcomeWithName: (name) => `Hi ${name}! 👋 I'm here to help you learn with practical lessons.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
+        welcomeAnonymous: `Hi! 👋 I'm here to help you learn with practical lessons.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
         welcomeStart: 'start',
         escalationConfirmation: "📋 I've notified your human mentor. They will contact you as soon as possible. In the meantime, I'm here if you have any questions.",
-        feedbackPrompt: (n) => `💬 You've completed ${n} lessons! I'd love to hear your thoughts. On a scale of 1 to 10, how useful has this program been for your business? Feel free to add any comments.`,
+        feedbackPrompt: (n) => `💬 You've completed ${n} lessons! I'd love to hear your thoughts. On a scale of 1 to 10, how useful has this program been for you? Feel free to add any comments.`,
     },
     pt: {
         lessonHeader: (num, total) => `📚 Lição ${num} de ${total}`,
         lessonComplete: (num) => `✅ Lição ${num} concluída!`,
         nextLesson: (num) => `Quando estiver pronto(a), digite "próximo" para começar a Lição ${num}.`,
         courseComplete: 'Parabéns por completar todas as lições!',
-        welcomeWithName: (name) => `Olá ${name}! 👋 Sou seu Mentor Virtual da Mentors International.\n\nEstou aqui para ajudar você a fortalecer seu negócio com lições práticas sobre finanças, vendas e mais.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
-        welcomeAnonymous: `Olá! 👋 Sou seu Mentor Virtual da Mentors International.\n\nEstou aqui para ajudar você a fortalecer seu negócio com lições práticas sobre finanças, vendas e mais.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
+        welcomeWithName: (name) => `Olá ${name}! 👋 Estou aqui para ajudá-lo a aprender com lições práticas.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
+        welcomeAnonymous: `Olá! 👋 Estou aqui para ajudá-lo a aprender com lições práticas.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
         welcomeStart: 'começar',
         escalationConfirmation: '📋 Notifiquei seu mentor humano. Ele entrará em contato o mais breve possível. Enquanto isso, estou aqui se você tiver dúvidas.',
-        feedbackPrompt: (n) => `💬 Você completou ${n} lições! Adoraria saber sua opinião. De 1 a 10, o quanto este programa tem sido útil para o seu negócio? Pode adicionar qualquer comentário.`,
+        feedbackPrompt: (n) => `💬 Você completou ${n} lições! Adoraria saber sua opinião. De 1 a 10, o quanto este programa tem sido útil para você? Pode adicionar qualquer comentário.`,
     },
 };
 

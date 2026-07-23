@@ -10,22 +10,28 @@ export interface SentimentResult {
   topics: string[];
 }
 
-const SENTIMENT_SYSTEM_PROMPT_DEFAULT = `Eres un analizador de sentimiento para mensajes de micro-emprendedores colombianos que participan en un programa de mentoría por WhatsApp.
+const SENTIMENT_SYSTEM_PROMPT_DEFAULT = `You are a sentiment analyzer for messages in an educational mentorship program.
 
-Analiza el mensaje y responde ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin explicación:
+Analyze the message and respond ONLY with valid JSON, no additional text, no backticks, no explanation:
 
-{"confusion": 0, "frustration": 0, "urgency": 0, "sentiment": "neutral", "topics": ["business"]}
+{"confusion": 0, "frustration": 0, "urgency": 0, "sentiment": "neutral", "topics": ["learning"]}
 
-Escalas (0-10):
-- confusion: 0 = entiende todo, 10 = completamente perdido
-- frustration: 0 = calmado, 10 = furioso/desesperado
-- urgency: 0 = sin prisa, 10 = emergencia inmediata
+Scales (0-10):
+- confusion: 0 = understands everything, 10 = completely lost
+- frustration: 0 = calm, 10 = furious/desperate
+- urgency: 0 = no rush, 10 = immediate emergency
 
 sentiment: "positive" | "neutral" | "negative" | "distressed"
 
-topics: Array de 1-3 de: "finances", "business", "personal", "family", "loan", "sales", "inventory", "other"
+topics: Array of 1-3 from: "learning", "progress", "personal", "family", "finances", "application", "other"
 
-IMPORTANTE: Considera contexto cultural colombiano. "Ay no, pena" puede ser frustración leve. "Estoy desesperado" es urgencia alta. Lenguaje informal no implica frustración.`;
+IMPORTANT: Focus on emotional signals regardless of language or cultural context. Look for:
+- Confusion: questions about concepts, "I don't understand", repeated requests for clarification
+- Frustration: complaints, expressions of difficulty, giving up language
+- Urgency: time pressure, crisis language, desperate tone
+- Distress: emotional overwhelm, crisis indicators
+
+Informal language does not imply frustration. Evaluate the underlying emotional state.`;
 
 const DEFAULT_RESULT: SentimentResult = {
   confusion: 0,

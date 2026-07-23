@@ -1,28 +1,55 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { repo } from '@/lib/repo';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
+import { getCourseMeta } from '@/lib/courses/course-meta';
 
-const EXTRACTION_PROMPT = `Analiza esta conversación reciente y extrae SOLO datos nuevos o actualizados sobre el socio.
-Responde ÚNICAMENTE con JSON válido. Solo incluye campos donde encontraste información nueva o actualizada.
-Si no hay información nueva para un campo, NO lo incluyas.
+/**
+ * Builds extraction prompt based on learnerContext.fields from course config.
+ * If no learnerContext, returns null (no extraction needed).
+ */
+async function buildExtractionPrompt(socioId: string): Promise<string | null> {
+    // Get socio to find their curriculum
+    const socio = await repo.getSocioById(socioId);
+    if (!socio?.curriculumCollectionKey) {
+        return null; // No course = no context extraction
+    }
 
-Campos posibles:
-- businessType: tipo de negocio (ej: "tienda de ropa", "venta de empanadas")
-- products: productos o servicios que vende
-- monthlyRevenue: ingresos mensuales mencionados
-- monthlyExpenses: gastos mensuales mencionados
-- numEmployees: cantidad de empleados
-- location: ubicación del negocio
-- challenges: problemas o desafíos mencionados
-- goals: metas o planes futuros
-- familyContext: contexto familiar relevante
-- customFacts: cualquier otro dato importante
+    const meta = await getCourseMeta(socio.curriculumCollectionKey);
+    if (!meta.learnerContext) {
+        return null; // No learnerContext defined = no extraction
+    }
 
-Ejemplo de respuesta si el socio mencionó que vende zapatos y gana 800,000 COP:
-{"products":"zapatos","monthlyRevenue":"800,000 COP"}
+    // Build field list from config
+    const configFields = meta.learnerContext.fields;
+    if (configFields.length === 0) {
+        return null; // No fields to extract
+    }
 
-Ejemplo si no hay nada nuevo:
+    // Build the fields section dynamically
+    const fieldsDescription = configFields
+        .map(f => `- ${f.key}: ${f.extractionHint || f.key}`)
+        .join('\n');
+
+    // Always include these generic fields that any course might use
+    const genericFields = `- challenges: problems or difficulties mentioned
+- goals: future plans or objectives
+- familyContext: relevant family context
+- customFacts: any other important information`;
+
+    return `Analyze this recent conversation and extract ONLY new or updated information about the participant.
+Respond ONLY with valid JSON. Only include fields where you found new or updated information.
+If there is no new information for a field, do NOT include it.
+
+Fields to extract:
+${fieldsDescription}
+${genericFields}
+
+Example response if the participant mentioned they sell shoes:
+{"businessType":"shoe sales"}
+
+Example if nothing new:
 {}`;
+}
 
 export async function extractAndStoreContext(
     socioId: string,
@@ -30,14 +57,22 @@ export async function extractAndStoreContext(
     aiResponse: string,
 ): Promise<void> {
     try {
+        // Build prompt based on course config
+        const extractionPrompt = await buildExtractionPrompt(socioId);
+
+        // No extraction needed for courses without learnerContext
+        if (!extractionPrompt) {
+            return;
+        }
+
         const chat = createOpenRouterChat({
             temperature: 0,
             maxTokens: 300,
         });
 
         const response = await chat.invoke([
-            new SystemMessage(EXTRACTION_PROMPT),
-            new HumanMessage(`SOCIO: ${userMessage}\nIA: ${aiResponse}`),
+            new SystemMessage(extractionPrompt),
+            new HumanMessage(`PARTICIPANT: ${userMessage}\nMENTOR: ${aiResponse}`),
         ]);
 
         const raw = typeof response.content === 'string'

@@ -1,22 +1,34 @@
 import { InteractionMode, LessonDeliveryState, ReteachState, RouterResult } from '../types';
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
+import { DEFAULT_PERSONALIZATION_INSTRUCTION } from '@/lib/courses/defaults';
+import type { SupportedLanguage } from '@/lib/i18n/languages';
 
 // ─── Layer 4: Lesson Content — Only During Teaching Modes ───────────
 // Provides the actual curriculum material the AI needs to teach from.
 // Only included for LESSON_START, LESSON_DELIVERY, FREEFORM_QUESTION, and RETEACH.
 
-export function buildContentPrompt(
+export async function buildContentPrompt(
   result: RouterResult,
   collectionKey: string,
-): string | null {
+  language: SupportedLanguage = 'es',
+): Promise<string | null> {
+  const meta = await getCourseMeta(collectionKey);
+  const participantNoun = resolveLocalized(meta.terminology.participant, language);
+
+  // Get personalization instruction - use config or generic default
+  const personalizationInstruction = meta.learnerContext
+    ? resolveLocalized(meta.learnerContext.personalizationInstruction, language)
+    : resolveLocalized(DEFAULT_PERSONALIZATION_INSTRUCTION, language);
+
   switch (result.mode) {
     case InteractionMode.LESSON_START:
     case InteractionMode.LESSON_DELIVERY:
-      return buildLessonContentBlock(result.lesson!);
+      return buildLessonContentBlock(result.lesson!, participantNoun, personalizationInstruction);
     case InteractionMode.FREEFORM_QUESTION:
-      return buildFreeformReferenceBlock();
+      return buildFreeformReferenceBlock(participantNoun);
     case InteractionMode.RETEACH:
-      return buildReteachContentBlock(result.reteach!, collectionKey);
+      return buildReteachContentBlock(result.reteach!, collectionKey, participantNoun, personalizationInstruction);
     default:
       return null;
   }
@@ -25,7 +37,11 @@ export function buildContentPrompt(
 // ─── Lesson Content Block ───────────────────────────────────────────
 // Injected when delivering or starting a lesson.
 
-function buildLessonContentBlock(lesson: LessonDeliveryState): string {
+function buildLessonContentBlock(
+  lesson: LessonDeliveryState,
+  participantNoun: string,
+  personalizationInstruction: string,
+): string {
   return `CONTENIDO DE LA LECCIÓN ${lesson.lessonNumber}: "${lesson.lessonTitleEs}"
 Categoría: ${lesson.lessonCategory}
 
@@ -43,7 +59,7 @@ ${lesson.exercise}
 COMPROMISO ESPERADO:
 ${lesson.commitment}
 
-NOTA: Puedes adaptar los ejemplos al negocio del socio, pero los conceptos clave y la fórmula/estructura deben permanecer exactos.`;
+NOTA: ${personalizationInstruction} Los conceptos clave y la fórmula/estructura deben permanecer exactos.`;
 }
 
 // ─── Freeform Reference Block ───────────────────────────────────────
@@ -82,7 +98,7 @@ export const LESSON_SUMMARY_INDEX = `ÍNDICE DE LECCIONES:
 27. Ley de la Gratitud — Agradecer lo que tienes mientras trabajas por más.
 28. Mi Propósito — Conectar tu negocio con tu propósito de vida.`;
 
-function buildFreeformReferenceBlock(): string {
+function buildFreeformReferenceBlock(participantNoun: string): string {
   // Future: use keyword search (findRelevantLessons) to return only
   // the 1-3 most relevant lessons instead of the full index.
   // For now, the full index is ~300 tokens — acceptable for the pilot.
@@ -90,7 +106,7 @@ function buildFreeformReferenceBlock(): string {
 
 ${LESSON_SUMMARY_INDEX}
 
-Si la pregunta del socio no se puede responder con esta referencia, di honestamente que no tienes esa información.`;
+Si la pregunta del ${participantNoun} no se puede responder con esta referencia, di honestamente que no tienes esa información.`;
 }
 
 // ─── Reteach Content Block ──────────────────────────────────────────
@@ -100,6 +116,8 @@ Si la pregunta del socio no se puede responder con esta referencia, di honestame
 function buildReteachContentBlock(
   reteach: ReteachState,
   collectionKey: string,
+  participantNoun: string,
+  personalizationInstruction: string,
 ): string {
   if (hasLessonData(collectionKey, reteach.lessonNumber)) {
     const lesson = getLessonData(collectionKey, reteach.lessonNumber);
@@ -120,12 +138,12 @@ ${lesson.exercise}
 COMPROMISO:
 ${lesson.commitment}
 
-Usa este material para explicar de una forma diferente a como se presentó la primera vez. Busca analogías nuevas y ejemplos del negocio del socio.`;
+Usa este material para explicar de una forma diferente a como se presentó la primera vez. ${personalizationInstruction}`;
   }
 
   return `MATERIAL DE REFERENCIA PARA RE-ENSEÑANZA — Lección ${reteach.lessonNumber}: "${reteach.lessonTitleEs}"
 
-Usa este material para explicar de una forma diferente a como se presentó la primera vez. Busca analogías nuevas y ejemplos del negocio del socio.
+Usa este material para explicar de una forma diferente a como se presentó la primera vez. ${personalizationInstruction}
 
 ${LESSON_SUMMARY_INDEX}`;
 }
