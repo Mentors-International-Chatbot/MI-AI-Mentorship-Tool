@@ -6,30 +6,622 @@ datasource db {
   provider = "postgresql"
 }
 
-model SystemPrompt {
-  id        String   @id @default(uuid())
-  version   String   // e.g., "1.0", "1.1-beta"
-  content   String
-  category  String   // e.g., "onboarding", "mentor_support"
-  active    Boolean  @default(false)
-  authorId  String   @map("author_id")
-  createdAt DateTime @default(now()) @map("created_at")
+model alert_reviews {
+  id              String          @id
+  alert_id        String
+  reviewer_id     String
+  action          String
+  notes           String?
+  created_at      DateTime        @default(now())
+  alerts          alerts          @relation(fields: [alert_id], references: [id], onDelete: Cascade)
+  mentor_profiles mentor_profiles @relation(fields: [reviewer_id], references: [id])
 
-  @@index([category, active])
-  @@map("system_prompts")
+  @@index([alert_id])
+  @@index([reviewer_id])
 }
 
-model SystemLog {
-  id        String   @id @default(uuid())
-  level     String // "info", "warn", "error"
-  category  String // "ai", "webhook", "auth", "cron", "system"
-  message   String
-  metadata  String? // JSON string
-  createdAt DateTime @default(now()) @map("created_at")
+model alert_rules {
+  id                 String             @id
+  organization_id    String
+  metric_id          String
+  name               String
+  operator           String
+  threshold          Float
+  severity           String
+  cooldown_hours     Int                @default(24)
+  active             Boolean            @default(true)
+  created_at         DateTime           @default(now())
+  updated_at         DateTime
+  metric_definitions metric_definitions @relation(fields: [metric_id], references: [id], onDelete: Cascade)
+  organizations      organizations      @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  alerts             alerts[]
 
-  @@index([category, createdAt])
-  @@index([level, createdAt])
-  @@map("system_logs")
+  @@index([metric_id])
+  @@index([organization_id, active])
+}
+
+model alerts {
+  id            String          @id
+  rule_id       String
+  enrollment_id String
+  severity      String
+  trigger_value Float
+  message       String?
+  resolved_at   DateTime?
+  created_at    DateTime        @default(now())
+  alert_reviews alert_reviews[]
+  enrollments   enrollments     @relation(fields: [enrollment_id], references: [id], onDelete: Cascade)
+  alert_rules   alert_rules     @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+
+  @@index([enrollment_id, resolved_at])
+  @@index([rule_id, created_at])
+}
+
+model assessment_sessions {
+  id              String                  @id
+  organization_id String
+  socio_id        String
+  lesson_key      String
+  block_id        String?
+  kind            String                  @default("teach_back")
+  status          AssessmentSessionStatus @default(pending)
+  attempt_number  Int                     @default(1)
+  turn_count      Int                     @default(0)
+  live_state      Json?
+  scores          Json?
+  passed_at       DateTime?
+  completed_at    DateTime?
+  config_snapshot Json?
+  created_at      DateTime                @default(now())
+  updated_at      DateTime
+  channel         String                  @default("web")
+  socios          socios                  @relation(fields: [socio_id], references: [id])
+  messages        messages[]
+
+  @@unique([socio_id, lesson_key, attempt_number])
+  @@index([organization_id])
+  @@index([socio_id, status])
+}
+
+model audit_log {
+  id          String   @id
+  actor_id    String
+  action      String
+  target_type String
+  target_id   String?
+  metadata    Json?
+  created_at  DateTime @default(now())
+
+  @@index([actor_id, created_at])
+  @@index([target_type, target_id])
+}
+
+model cohorts {
+  id                     String                   @id
+  program_id             String
+  program_version_id     String?
+  slug                   String
+  name                   String
+  starts_at              DateTime?
+  ends_at                DateTime?
+  created_at             DateTime                 @default(now())
+  programs               programs                 @relation(fields: [program_id], references: [id], onDelete: Cascade)
+  program_versions       program_versions?        @relation(fields: [program_version_id], references: [id])
+  enrollment_invitations enrollment_invitations[]
+  enrollments            enrollments[]
+
+  @@unique([program_id, slug])
+  @@index([program_id])
+}
+
+model content_collections {
+  id               String             @id
+  organization_id  String
+  slug             String
+  name             String
+  description      String?
+  created_at       DateTime           @default(now())
+  updated_at       DateTime
+  organizations    organizations      @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  content_lessons  content_lessons[]
+  program_versions program_versions[]
+
+  @@unique([organization_id, slug])
+  @@index([organization_id])
+}
+
+model content_lessons {
+  id                  String              @id
+  collection_id       String
+  slug                String
+  order_index         Int
+  created_at          DateTime            @default(now())
+  updated_at          DateTime
+  content_collections content_collections @relation(fields: [collection_id], references: [id], onDelete: Cascade)
+  lesson_versions     lesson_versions[]
+
+  @@unique([collection_id, slug])
+  @@index([collection_id, order_index])
+}
+
+model enrollment_invitations {
+  id         String    @id
+  cohort_id  String
+  channel    String
+  target     String
+  token      String    @unique
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+  cohorts    cohorts   @relation(fields: [cohort_id], references: [id], onDelete: Cascade)
+
+  @@index([cohort_id])
+  @@index([token])
+}
+
+model enrollments {
+  id                   String                @id
+  participant_id       String
+  cohort_id            String
+  program_version_id   String?
+  status               String                @default("active")
+  enrolled_at          DateTime              @default(now())
+  completed_at         DateTime?
+  metadata             Json?
+  alerts               alerts[]
+  cohorts              cohorts               @relation(fields: [cohort_id], references: [id], onDelete: Cascade)
+  participant_profiles participant_profiles  @relation(fields: [participant_id], references: [id], onDelete: Cascade)
+  program_versions     program_versions?     @relation(fields: [program_version_id], references: [id])
+  metric_observations  metric_observations[]
+
+  @@unique([participant_id, cohort_id])
+  @@index([cohort_id])
+  @@index([participant_id])
+}
+
+model feedback {
+  id         String   @id
+  page       String
+  subject    String
+  body       String
+  created_at DateTime @default(now())
+}
+
+model financial_snapshots {
+  id              String   @id
+  socio_id        String
+  week_start_date DateTime
+  revenue         Float
+  net_profit      Float
+  source          String   @default("ai_marker")
+  created_at      DateTime @default(now())
+  socios          socios   @relation(fields: [socio_id], references: [id])
+
+  @@unique([socio_id, week_start_date], map: "financial_snapshot_socio_week_key")
+  @@index([socio_id, week_start_date])
+}
+
+model lesson_progress {
+  id            String    @id
+  socio_id      String
+  lesson_number Int
+  understanding Int?
+  completed_at  DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime
+  socios        socios    @relation(fields: [socio_id], references: [id])
+
+  @@unique([socio_id, lesson_number], map: "lesson_progress_socio_lesson_key")
+  @@index([socio_id, completed_at])
+}
+
+model lesson_versions {
+  id              String          @id
+  lesson_id       String
+  version         String
+  lang            String          @default("es")
+  title           String
+  body            Json
+  active          Boolean         @default(false)
+  published_at    DateTime?
+  created_at      DateTime        @default(now())
+  content_lessons content_lessons @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+
+  @@unique([lesson_id, version, lang])
+  @@index([lesson_id, active])
+}
+
+model mentor_profiles {
+  id                      String                    @id
+  organization_id         String
+  mentor_id               String?                   @unique
+  display_name            String?
+  specialties             String[]                  @default([])
+  metadata                Json?
+  created_at              DateTime                  @default(now())
+  updated_at              DateTime
+  alert_reviews           alert_reviews[]
+  mentors                 mentors?                  @relation(fields: [mentor_id], references: [id])
+  organizations           organizations             @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  mentoring_relationships mentoring_relationships[]
+
+  @@index([organization_id])
+}
+
+model mentoring_relationships {
+  id                   String               @id
+  mentor_profile_id    String
+  participant_id       String
+  role                 String               @default("primary")
+  active_from          DateTime             @default(now())
+  active_until         DateTime?
+  created_at           DateTime             @default(now())
+  mentor_profiles      mentor_profiles      @relation(fields: [mentor_profile_id], references: [id], onDelete: Cascade)
+  participant_profiles participant_profiles @relation(fields: [participant_id], references: [id], onDelete: Cascade)
+
+  @@unique([mentor_profile_id, participant_id, role])
+  @@index([mentor_profile_id])
+  @@index([participant_id])
+}
+
+model mentors {
+  id                 String           @id
+  name               String
+  email              String           @unique
+  role               String
+  created_at         DateTime         @default(now())
+  password_hash      String?
+  preferred_language String           @default("en")
+  mentor_profiles    mentor_profiles?
+  socios             socios[]
+}
+
+model message_sentiments {
+  id          String   @id
+  message_id  String   @unique
+  socio_id    String
+  confusion   Int
+  frustration Int
+  urgency     Int
+  sentiment   String
+  topics      String[]
+  created_at  DateTime @default(now())
+  messages    messages @relation(fields: [message_id], references: [id])
+  socios      socios   @relation(fields: [socio_id], references: [id])
+
+  @@index([sentiment, created_at])
+  @@index([socio_id, created_at])
+}
+
+model messages {
+  id                    String               @id
+  socio_id              String
+  role                  String
+  content               String
+  created_at            DateTime             @default(now())
+  sender_type           String?
+  assessment_session_id String?
+  metadata              Json?
+  message_sentiments    message_sentiments?
+  assessment_sessions   assessment_sessions? @relation(fields: [assessment_session_id], references: [id], onDelete: Cascade)
+  socios                socios               @relation(fields: [socio_id], references: [id])
+
+  @@index([assessment_session_id, created_at])
+  @@index([socio_id, created_at])
+}
+
+model metric_definitions {
+  id                  String                @id
+  organization_id     String
+  key                 String
+  name                String
+  description         String?
+  category            String
+  data_type           String
+  scale               Json?
+  created_at          DateTime              @default(now())
+  updated_at          DateTime
+  alert_rules         alert_rules[]
+  organizations       organizations         @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  metric_observations metric_observations[]
+
+  @@unique([organization_id, key])
+  @@index([organization_id])
+}
+
+model metric_observations {
+  id                  String             @id
+  metric_id           String
+  enrollment_id       String?
+  signal_type         String
+  value               Float
+  confidence          Float?
+  evidence_refs       Json?
+  model_version       String?
+  prompt_version      String?
+  verification_status String?
+  source              ObservationSource
+  observed_at         DateTime
+  created_at          DateTime           @default(now())
+  enrollments         enrollments?       @relation(fields: [enrollment_id], references: [id])
+  metric_definitions  metric_definitions @relation(fields: [metric_id], references: [id], onDelete: Cascade)
+
+  @@index([enrollment_id, observed_at])
+  @@index([metric_id, observed_at])
+}
+
+model organization_memberships {
+  id              String        @id
+  organization_id String
+  user_id         String
+  role            String
+  created_at      DateTime      @default(now())
+  organizations   organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([organization_id, user_id])
+  @@index([organization_id])
+  @@index([user_id])
+}
+
+model organizations {
+  id                       String                     @id
+  slug                     String                     @unique
+  name                     String
+  settings                 Json?
+  created_at               DateTime                   @default(now())
+  updated_at               DateTime
+  alert_rules              alert_rules[]
+  content_collections      content_collections[]
+  mentor_profiles          mentor_profiles[]
+  metric_definitions       metric_definitions[]
+  organization_memberships organization_memberships[]
+  participant_profiles     participant_profiles[]
+  programs                 programs[]
+}
+
+model participant_profiles {
+  id                      String                    @id
+  organization_id         String
+  socio_id                String?                   @unique
+  display_name            String?
+  preferred_lang          String                    @default("es")
+  metadata                Json?
+  created_at              DateTime                  @default(now())
+  updated_at              DateTime
+  enrollments             enrollments[]
+  mentoring_relationships mentoring_relationships[]
+  organizations           organizations             @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  socios                  socios?                   @relation(fields: [socio_id], references: [id])
+
+  @@index([organization_id])
+}
+
+model password_reset_tokens {
+  id         String    @id
+  email      String
+  token      String    @unique
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+
+  @@index([email, expires_at])
+}
+
+model program_config {
+  id          String   @id
+  key         String   @unique
+  value       String
+  type        String
+  label       String
+  description String?
+  category    String
+  updated_by  String?
+  updated_at  DateTime
+}
+
+model program_versions {
+  id                  String               @id
+  program_id          String
+  version             String
+  config              Json
+  active              Boolean              @default(false)
+  published_at        DateTime?
+  created_at          DateTime             @default(now())
+  collection_id       String?
+  primary_lang        String               @default("es")
+  published_by        String?
+  status              ProgramVersionStatus @default(draft)
+  cohorts             cohorts[]
+  enrollments         enrollments[]
+  content_collections content_collections? @relation(fields: [collection_id], references: [id])
+  programs            programs             @relation(fields: [program_id], references: [id], onDelete: Cascade)
+
+  @@unique([program_id, version])
+  @@index([program_id, active])
+  @@index([program_id, status])
+}
+
+model programs {
+  id               String             @id
+  organization_id  String
+  slug             String
+  name             String
+  description      String?
+  created_at       DateTime           @default(now())
+  updated_at       DateTime
+  cohorts          cohorts[]
+  program_versions program_versions[]
+  organizations    organizations      @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([organization_id, slug])
+  @@index([organization_id])
+}
+
+model socio_contexts {
+  id               String   @id
+  socio_id         String   @unique
+  business_type    String?
+  products         String?
+  monthly_revenue  String?
+  monthly_expenses String?
+  num_employees    String?
+  location         String?
+  challenges       String?
+  goals            String?
+  family_context   String?
+  custom_facts     String?
+  updated_at       DateTime
+  created_at       DateTime @default(now())
+  socios           socios   @relation(fields: [socio_id], references: [id])
+}
+
+model socio_dimension_states {
+  id            String   @id
+  socio_id      String
+  dimension_key String
+  level         Float
+  trend         String
+  confidence    Float
+  evidence      String?
+  updated_at    DateTime
+  created_at    DateTime @default(now())
+  socios        socios   @relation(fields: [socio_id], references: [id], onDelete: Cascade)
+
+  @@unique([socio_id, dimension_key], map: "socio_dimension_state_unique")
+  @@index([socio_id])
+}
+
+model socio_feedback {
+  id         String   @id
+  socio_id   String
+  lesson_num Int
+  rating     Int?
+  comment    String?
+  created_at DateTime @default(now())
+  socios     socios   @relation(fields: [socio_id], references: [id], onDelete: Cascade)
+
+  @@index([socio_id, lesson_num])
+}
+
+model socio_flags {
+  id          String    @id
+  socio_id    String
+  level       String
+  reason      String
+  resolved    Boolean   @default(false)
+  resolved_at DateTime?
+  created_at  DateTime  @default(now())
+  source      String    @default("ai_marker")
+  resolved_by String?
+  message_id  String?
+  socios      socios    @relation(fields: [socio_id], references: [id])
+
+  @@index([resolved, level, created_at])
+  @@index([socio_id, resolved])
+}
+
+model socio_progress {
+  id                       String    @id
+  socio_id                 String    @unique
+  current_lesson_number    Int       @default(1)
+  current_message_index    Int       @default(0)
+  completed_lessons        Int[]     @default([])
+  weekly_understanding     Int?
+  weekly_implementation    Int?
+  last_lesson_completed_at DateTime?
+  created_at               DateTime  @default(now())
+  updated_at               DateTime
+  last_interaction_at      DateTime?
+  reminders_sent           Int       @default(0)
+  socios                   socios    @relation(fields: [socio_id], references: [id])
+}
+
+model socios {
+  id                        String                   @id
+  whatsapp_phone_number     String?                  @unique
+  name                      String?
+  business_name             String?
+  business_description      String?
+  status                    OnboardingStatus         @default(NEW)
+  prompt_overrides          Json?
+  metadata                  Json?
+  created_at                DateTime                 @default(now())
+  updated_at                DateTime
+  channel_type              String                   @default("whatsapp")
+  external_id               String                   @default("")
+  language                  String                   @default("es")
+  mentor_id                 String?
+  password_hash             String?
+  ai_paused                 Boolean                  @default(false)
+  curriculum_collection_key String?
+  assessment_sessions       assessment_sessions[]
+  financial_snapshots       financial_snapshots[]
+  lesson_progress           lesson_progress[]
+  message_sentiments        message_sentiments[]
+  messages                  messages[]
+  participant_profiles      participant_profiles?
+  socio_contexts            socio_contexts?
+  socio_dimension_states    socio_dimension_states[]
+  socio_feedback            socio_feedback[]
+  socio_flags               socio_flags[]
+  socio_progress            socio_progress?
+  mentors                   mentors?                 @relation(fields: [mentor_id], references: [id])
+  summaries                 summaries[]
+
+  @@unique([channel_type, external_id], map: "socios_channel_external_id_key")
+  @@index([mentor_id, status])
+  @@index([status, updated_at])
+}
+
+model summaries {
+  id              String   @id
+  socio_id        String
+  week_start_date DateTime
+  content         String
+  flags           Json?
+  metrics         Json?
+  created_at      DateTime @default(now())
+  socios          socios   @relation(fields: [socio_id], references: [id])
+
+  @@index([socio_id, week_start_date])
+}
+
+model system_logs {
+  id         String   @id
+  level      String
+  category   String
+  message    String
+  metadata   String?
+  created_at DateTime @default(now())
+
+  @@index([category, created_at])
+  @@index([level, created_at])
+}
+
+model system_prompts {
+  id         String   @id
+  version    String
+  content    String
+  category   String
+  active     Boolean  @default(false)
+  author_id  String
+  created_at DateTime @default(now())
+
+  @@index([category, active])
+}
+
+enum AssessmentSessionStatus {
+  pending
+  in_progress
+  completed
+}
+
+enum ObservationSource {
+  self_reported
+  human_recorded
+  system_observed
+  calculated
+  ai_inferred
 }
 
 enum OnboardingStatus {
@@ -41,649 +633,8 @@ enum OnboardingStatus {
   ACTIVE
 }
 
-model Socio {
-  id                  String           @id @default(uuid())
-  whatsappPhoneNumber String?          @unique @map("whatsapp_phone_number")
-  channelType         String           @default("whatsapp") @map("channel_type")
-  externalId          String           @default("") @map("external_id")
-  language            String           @default("es") @map("language")
-  passwordHash        String?          @map("password_hash")
-  name                String?
-  businessName        String?          @map("business_name")
-  businessDescription String?          @map("business_description")
-  status              OnboardingStatus @default(NEW)
-  promptOverrides     Json?            @map("prompt_overrides")
-  aiPaused            Boolean          @default(false) @map("ai_paused")
-  metadata            Json?
-  mentorId            String?          @map("mentor_id")
-  curriculumCollectionKey String?      @map("curriculum_collection_key")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
-
-  mentor     Mentor?   @relation(fields: [mentorId], references: [id])
-  messages   Message[]
-  summaries  Summary[]
-  progress   SocioProgress?
-  flags      SocioFlag[]
-  lessonProgress LessonProgress[]
-  sentiments MessageSentiment[]
-  financialSnapshots FinancialSnapshot[]
-  context            SocioContext?
-  feedback           SocioFeedback[]
-  dimensionStates    SocioDimensionState[]
-  participantProfile ParticipantProfile?
-
-  @@unique([channelType, externalId], map: "socios_channel_external_id_key")
-  @@index([mentorId, status])
-  @@index([status, updatedAt])
-  @@map("socios")
-}
-
-model SocioFeedback {
-  id        String   @id @default(uuid())
-  socioId   String   @map("socio_id")
-  lessonNum Int      @map("lesson_num")
-  rating    Int?
-  comment   String?
-  createdAt DateTime @default(now()) @map("created_at")
-
-  socio Socio @relation(fields: [socioId], references: [id], onDelete: Cascade)
-
-  @@index([socioId, lessonNum])
-  @@map("socio_feedback")
-}
-
-model Mentor {
-  id                 String   @id @default(uuid())
-  name               String
-  email              String   @unique
-  passwordHash       String?  @map("password_hash")
-  role               String   // "mentor", "admin"
-  preferredLanguage  String   @default("en") @map("preferred_language")
-  createdAt          DateTime @default(now()) @map("created_at")
-
-  socios        Socio[]
-  mentorProfile MentorProfile?
-
-  @@map("mentors")
-}
-
-model PasswordResetToken {
-  id        String    @id @default(uuid())
-  email     String
-  token     String    @unique
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  @@index([email, expiresAt])
-  @@map("password_reset_tokens")
-}
-
-model ProgramConfig {
-  id          String   @id @default(uuid())
-  key         String   @unique
-  value       String   // JSON-encoded
-  type        String   // "number", "boolean", "string", "json"
-  label       String   // Human-readable label for the UI
-  description String?
-  category    String   // "lesson_pacing", "ai_behavior", "flagging", "reminders", "onboarding"
-  updatedBy   String?  @map("updated_by")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  @@map("program_config")
-}
-
-model AuditLog {
-  id         String   @id @default(uuid())
-  actorId    String   @map("actor_id")
-  action     String   // "changed_config", "updated_prompt", "activated_prompt", "resolved_flag", "assigned_mentor"
-  targetType String   @map("target_type") // "program_config", "system_prompt", "socio", "mentor"
-  targetId   String?  @map("target_id")
-  metadata   Json?
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  @@index([actorId, createdAt])
-  @@index([targetType, targetId])
-  @@map("audit_log")
-}
-
-model Feedback {
-  id        String   @id @default(uuid())
-  page      String   // which page the feedback is about
-  subject   String   // short subject line
-  body      String   // full feedback text
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("feedback")
-}
-
-model Message {
-  id         String   @id @default(uuid())
-  socioId    String   @map("socio_id")
-  role       String   // "user", "assistant", "system"
-  content    String
-  senderType String?  @map("sender_type") // "ai", "mentor", null (legacy)
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  socio     Socio              @relation(fields: [socioId], references: [id])
-  sentiment MessageSentiment?
-
-  @@index([socioId, createdAt])
-  @@map("messages")
-}
-
-model SocioProgress {
-  id                    String    @id @default(uuid())
-  socioId               String    @unique @map("socio_id")
-  currentLessonNumber   Int       @default(1) @map("current_lesson_number")
-  currentMessageIndex   Int       @default(0) @map("current_message_index")
-  completedLessons      Int[]     @default([]) @map("completed_lessons")
-  weeklyUnderstanding   Int?      @map("weekly_understanding")
-  weeklyImplementation  Int?      @map("weekly_implementation")
-  lastLessonCompletedAt DateTime? @map("last_lesson_completed_at")
-  remindersSent         Int       @default(0) @map("reminders_sent")
-  lastInteractionAt     DateTime? @map("last_interaction_at")
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
-
-  socio Socio @relation(fields: [socioId], references: [id])
-
-  @@map("socio_progress")
-}
-
-model Summary {
-  id            String   @id @default(uuid())
-  socioId       String   @map("socio_id")
-  weekStartDate DateTime @map("week_start_date")
-  content       String
-  flags         Json?
-  metrics       Json?
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  socio Socio @relation(fields: [socioId], references: [id])
-
-  @@index([socioId, weekStartDate])
-  @@map("summaries")
-}
-
-model SocioFlag {
-  id         String    @id @default(uuid())
-  socioId    String    @map("socio_id")
-  level      String    // "RED" | "YELLOW"
-  reason     String
-  source     String    @default("ai_marker") // "ai_marker", "sentiment_auto", "mentor_manual"
-  resolved   Boolean   @default(false)
-  resolvedBy String?   @map("resolved_by")
-  resolvedAt DateTime? @map("resolved_at")
-  messageId  String?   @map("message_id")
-  createdAt  DateTime  @default(now()) @map("created_at")
-
-  socio Socio @relation(fields: [socioId], references: [id])
-
-  @@index([socioId, resolved])
-  @@index([resolved, level, createdAt])
-  @@map("socio_flags")
-}
-
-model LessonProgress {
-  id                  String    @id @default(uuid())
-  socioId             String    @map("socio_id")
-  lessonNumber        Int       @map("lesson_number")
-  understanding       Int?
-  completedAt         DateTime? @map("completed_at")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
-
-  socio Socio @relation(fields: [socioId], references: [id])
-
-  @@unique([socioId, lessonNumber], map: "lesson_progress_socio_lesson_key")
-  @@index([socioId, completedAt])
-  @@map("lesson_progress")
-}
-
-model MessageSentiment {
-  id          String   @id @default(uuid())
-  messageId   String   @unique @map("message_id")
-  socioId     String   @map("socio_id")
-  confusion   Int      // 0-10
-  frustration Int      // 0-10
-  urgency     Int      // 0-10
-  sentiment   String   // "positive", "neutral", "negative", "distressed"
-  topics      String[] // e.g. ["finances", "business", "personal"]
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  message Message @relation(fields: [messageId], references: [id])
-  socio   Socio   @relation(fields: [socioId], references: [id])
-
-  @@index([socioId, createdAt])
-  @@index([sentiment, createdAt])
-  @@map("message_sentiments")
-}
-
-model SocioContext {
-  id               String   @id @default(uuid())
-  socioId          String   @unique @map("socio_id")
-  businessType     String?  @map("business_type")
-  products         String?  @map("products")
-  monthlyRevenue   String?  @map("monthly_revenue")
-  monthlyExpenses  String?  @map("monthly_expenses")
-  numEmployees     String?  @map("num_employees")
-  location         String?  @map("location")
-  challenges       String?  @map("challenges")
-  goals            String?  @map("goals")
-  familyContext    String?  @map("family_context")
-  customFacts      String?  @map("custom_facts")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-  createdAt        DateTime @default(now()) @map("created_at")
-
-  socio Socio @relation(fields: [socioId], references: [id])
-
-  @@map("socio_contexts")
-}
-
-model FinancialSnapshot {
-  id            String   @id @default(uuid())
-  socioId       String   @map("socio_id")
-  weekStartDate DateTime @map("week_start_date")
-  revenue       Float
-  netProfit     Float    @map("net_profit")
-  source        String   @default("ai_marker") // "ai_marker", "manual", "cron"
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  socio Socio @relation(fields: [socioId], references: [id])
-
-  @@unique([socioId, weekStartDate], map: "financial_snapshot_socio_week_key")
-  @@index([socioId, weekStartDate])
-  @@map("financial_snapshots")
-}
-
-model SocioDimensionState {
-  id            String   @id @default(cuid())
-  socioId       String   @map("socio_id")
-  dimensionKey  String   @map("dimension_key") // "comprehension" | "confusion" (matches DIMENSION_DEFINITIONS)
-  level         Float    // 0-10, continuous
-  trend         String   // "improving" | "flat" | "declining"
-  confidence    Float    // 0-1, sensing model's certainty
-  evidence      String?  // short excerpt/summary backing this update
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  socio Socio @relation(fields: [socioId], references: [id], onDelete: Cascade)
-
-  @@unique([socioId, dimensionKey], map: "socio_dimension_state_unique")
-  @@index([socioId])
-  @@map("socio_dimension_states")
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// Phase 1: Generalized Domain Model
-// ════════════════════════════════════════════════════════════════════════════
-
-// ── Tenancy ─────────────────────────────────────────────────────────────────
-
-model Organization {
-  id          String   @id @default(uuid())
-  slug        String   @unique // "mentors-international", "byu-sandbox"
-  name        String
-  settings    Json?    // org-level defaults (terminology, branding, etc.)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  memberships  OrganizationMembership[]
-  programs     Program[]
-  participants ParticipantProfile[]
-  mentors      MentorProfile[]
-  metrics      MetricDefinition[]
-  alertRules   AlertRule[]
-  collections  ContentCollection[]
-
-  @@map("organizations")
-}
-
-model OrganizationMembership {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  userId         String   @map("user_id") // references Mentor.id for now
-  role           String   // "owner", "admin", "member"
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, userId])
-  @@index([organizationId])
-  @@index([userId])
-  @@map("organization_memberships")
-}
-
-// ── Programs ────────────────────────────────────────────────────────────────
-
 enum ProgramVersionStatus {
   draft
   published
   archived
-}
-
-model Program {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  slug           String   // "colombia-pilot-2026"
-  name           String
-  description    String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  versions     ProgramVersion[]
-  cohorts      Cohort[]
-
-  @@unique([organizationId, slug])
-  @@index([organizationId])
-  @@map("programs")
-}
-
-model ProgramVersion {
-  id           String               @id @default(uuid())
-  programId    String               @map("program_id")
-  version      String               // "1.0", "1.1-beta"
-  config       Json                 // JourneyPackage.config validated by zod, not Prisma
-  status       ProgramVersionStatus @default(draft)
-  primaryLang  String               @default("es") @map("primary_lang") // from metadata.languages[0]
-  collectionId String?              @map("collection_id") // FK to ContentCollection
-  active       Boolean              @default(false) // deprecated: use status == published
-  publishedAt  DateTime?            @map("published_at")
-  publishedBy  String?              @map("published_by") // user ID who published
-  createdAt    DateTime             @default(now()) @map("created_at")
-
-  program    Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
-  collection ContentCollection? @relation(fields: [collectionId], references: [id])
-  cohorts    Cohort[]
-  enrollments Enrollment[]
-
-  @@unique([programId, version])
-  @@index([programId, status])
-  @@index([programId, active])
-  @@map("program_versions")
-}
-
-model Cohort {
-  id               String    @id @default(uuid())
-  programId        String    @map("program_id")
-  programVersionId String?   @map("program_version_id")
-  slug             String    // "2026-q1"
-  name             String
-  startsAt         DateTime? @map("starts_at")
-  endsAt           DateTime? @map("ends_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-
-  program        Program         @relation(fields: [programId], references: [id], onDelete: Cascade)
-  programVersion ProgramVersion? @relation(fields: [programVersionId], references: [id])
-  enrollments    Enrollment[]
-  invitations    EnrollmentInvitation[]
-
-  @@unique([programId, slug])
-  @@index([programId])
-  @@map("cohorts")
-}
-
-model Enrollment {
-  id               String    @id @default(uuid())
-  participantId    String    @map("participant_id")
-  cohortId         String    @map("cohort_id")
-  programVersionId String?   @map("program_version_id")
-  status           String    @default("active") // "active", "paused", "completed", "dropped"
-  enrolledAt       DateTime  @default(now()) @map("enrolled_at")
-  completedAt      DateTime? @map("completed_at")
-  metadata         Json?
-
-  participant    ParticipantProfile @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  cohort         Cohort             @relation(fields: [cohortId], references: [id], onDelete: Cascade)
-  programVersion ProgramVersion?    @relation(fields: [programVersionId], references: [id])
-  observations   MetricObservation[]
-  alerts         Alert[]
-
-  @@unique([participantId, cohortId])
-  @@index([cohortId])
-  @@index([participantId])
-  @@map("enrollments")
-}
-
-model EnrollmentInvitation {
-  id        String    @id @default(uuid())
-  cohortId  String    @map("cohort_id")
-  channel   String    // "whatsapp", "email", "sms"
-  target    String    // phone number or email
-  token     String    @unique
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  cohort Cohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
-
-  @@index([cohortId])
-  @@index([token])
-  @@map("enrollment_invitations")
-}
-
-// ── People ──────────────────────────────────────────────────────────────────
-
-model ParticipantProfile {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  socioId        String?  @unique @map("socio_id") // FK to legacy Socio for migration
-  displayName    String?  @map("display_name")
-  preferredLang  String   @default("es") @map("preferred_lang")
-  metadata       Json?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization  Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  socio         Socio?                  @relation(fields: [socioId], references: [id])
-  enrollments   Enrollment[]
-  mentorships   MentoringRelationship[] @relation("ParticipantMentorships")
-
-  @@index([organizationId])
-  @@map("participant_profiles")
-}
-
-model MentorProfile {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  mentorId       String?  @unique @map("mentor_id") // FK to legacy Mentor for migration
-  displayName    String?  @map("display_name")
-  specialties    String[] @default([])
-  metadata       Json?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  mentor       Mentor?                 @relation(fields: [mentorId], references: [id])
-  mentorships  MentoringRelationship[]
-  alertReviews AlertReview[]
-
-  @@index([organizationId])
-  @@map("mentor_profiles")
-}
-
-model MentoringRelationship {
-  id            String    @id @default(uuid())
-  mentorId      String    @map("mentor_profile_id")
-  participantId String    @map("participant_id")
-  role          String    @default("primary") // "primary", "backup", "observer"
-  activeFrom    DateTime  @default(now()) @map("active_from")
-  activeUntil   DateTime? @map("active_until")
-  createdAt     DateTime  @default(now()) @map("created_at")
-
-  mentorProfile MentorProfile      @relation(fields: [mentorId], references: [id], onDelete: Cascade)
-  participant   ParticipantProfile @relation("ParticipantMentorships", fields: [participantId], references: [id], onDelete: Cascade)
-
-  @@unique([mentorId, participantId, role])
-  @@index([mentorId])
-  @@index([participantId])
-  @@map("mentoring_relationships")
-}
-
-// ── Content ─────────────────────────────────────────────────────────────────
-
-model ContentCollection {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  slug           String   // "mi-colombia-curriculum"
-  name           String
-  description    String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  lessons         ContentLesson[]
-  programVersions ProgramVersion[]
-
-  @@unique([organizationId, slug])
-  @@index([organizationId])
-  @@map("content_collections")
-}
-
-model ContentLesson {
-  id           String   @id @default(uuid())
-  collectionId String   @map("collection_id")
-  slug         String   // "lesson-01-costs"
-  orderIndex   Int      @map("order_index")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  collection ContentCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  versions   LessonVersion[]
-
-  @@unique([collectionId, slug])
-  @@index([collectionId, orderIndex])
-  @@map("content_lessons")
-}
-
-model LessonVersion {
-  id          String    @id @default(uuid())
-  lessonId    String    @map("lesson_id")
-  version     String    // "1.0"
-  lang        String    @default("es")
-  title       String
-  body        Json      // JourneyPackage lesson block, validated by zod
-  active      Boolean   @default(false)
-  publishedAt DateTime? @map("published_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-
-  lesson ContentLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-
-  @@unique([lessonId, version, lang])
-  @@index([lessonId, active])
-  @@map("lesson_versions")
-}
-
-// ── Measurement ─────────────────────────────────────────────────────────────
-
-enum ObservationSource {
-  self_reported
-  human_recorded
-  system_observed
-  calculated
-  ai_inferred
-}
-
-model MetricDefinition {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  key            String   // "comprehension", "loan_repayment_pct"
-  name           String
-  description    String?
-  category       String   // "learning", "financial", "behavioral", "emotional"
-  dataType       String   @map("data_type") // "continuous", "ordinal", "categorical", "boolean"
-  scale          Json?    // { min: 0, max: 10 } or { levels: ["low","medium","high"] }
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  observations MetricObservation[]
-  alertRules   AlertRule[]
-
-  @@unique([organizationId, key])
-  @@index([organizationId])
-  @@map("metric_definitions")
-}
-
-model MetricObservation {
-  id                 String            @id @default(uuid())
-  metricId           String            @map("metric_id")
-  enrollmentId       String?           @map("enrollment_id")
-  signalType         String            @map("signal_type") // "point", "delta", "event"
-  value              Float
-  confidence         Float?            // 0-1
-  evidenceRefs       Json?             @map("evidence_refs") // { messageIds: [...], lessonKey: "..." }
-  modelVersion       String?           @map("model_version")
-  promptVersion      String?           @map("prompt_version")
-  verificationStatus String?           @map("verification_status") // "unverified", "mentor_confirmed", "disputed"
-  source             ObservationSource
-  observedAt         DateTime          @map("observed_at")
-  createdAt          DateTime          @default(now()) @map("created_at")
-
-  metric     MetricDefinition @relation(fields: [metricId], references: [id], onDelete: Cascade)
-  enrollment Enrollment?      @relation(fields: [enrollmentId], references: [id])
-
-  @@index([metricId, observedAt])
-  @@index([enrollmentId, observedAt])
-  @@map("metric_observations")
-}
-
-model AlertRule {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  metricId       String   @map("metric_id")
-  name           String
-  operator       String   // "lt", "gt", "eq", "delta_lt", "delta_gt"
-  threshold      Float
-  severity       String   // "low", "medium", "high", "critical"
-  cooldownHours  Int      @default(24) @map("cooldown_hours")
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  metric       MetricDefinition @relation(fields: [metricId], references: [id], onDelete: Cascade)
-  alerts       Alert[]
-
-  @@index([organizationId, active])
-  @@index([metricId])
-  @@map("alert_rules")
-}
-
-model Alert {
-  id           String    @id @default(uuid())
-  ruleId       String    @map("rule_id")
-  enrollmentId String    @map("enrollment_id")
-  severity     String    // copied from rule at trigger time
-  triggerValue Float     @map("trigger_value")
-  message      String?
-  resolvedAt   DateTime? @map("resolved_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-
-  rule       AlertRule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  enrollment Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  reviews    AlertReview[]
-
-  @@index([ruleId, createdAt])
-  @@index([enrollmentId, resolvedAt])
-  @@map("alerts")
-}
-
-model AlertReview {
-  id         String   @id @default(uuid())
-  alertId    String   @map("alert_id")
-  reviewerId String   @map("reviewer_id")
-  action     String   // "acknowledged", "escalated", "resolved", "dismissed"
-  notes      String?
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  alert    Alert         @relation(fields: [alertId], references: [id], onDelete: Cascade)
-  reviewer MentorProfile @relation(fields: [reviewerId], references: [id])
-
-  @@index([alertId])
-  @@index([reviewerId])
-  @@map("alert_reviews")
 }

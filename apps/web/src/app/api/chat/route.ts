@@ -3,6 +3,7 @@ import { handleIncomingMessage } from '@/lib/messaging/handler';
 import { WebChannel } from '@/lib/delivery';
 import { verifySession } from '@/lib/auth/session';
 import { type SupportedLanguage } from '@/lib/i18n/languages';
+import { toClientMessage } from './toClientMessage';
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 30; // max messages per window
@@ -110,6 +111,11 @@ export async function POST(req: NextRequest) {
         const response = result.responseText
             || webChannel.getMessages().join('\n');
 
+        // Convert handler messages to client format (with id, metadata)
+        const clientMessages = (result.messages ?? [])
+            .map(toClientMessage)
+            .filter((m): m is NonNullable<typeof m> => m !== null);
+
         const responseData = {
             response,
             mode: result.mode,
@@ -117,6 +123,7 @@ export async function POST(req: NextRequest) {
             socioId: result.socioId,
             isNewSocio: result.isNewSocio,
             isError: result.isError ?? false,
+            messages: clientMessages,
         };
 
         // Cache response to prevent duplicate processing

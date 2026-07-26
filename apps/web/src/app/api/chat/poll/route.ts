@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth/session';
 import { repo } from '@/lib/repo';
+import { toClientMessage } from '../toClientMessage';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,16 +30,12 @@ export async function GET(req: NextRequest) {
 
   const newMessages = await repo.getMessagesWithSentiment(socio.id, { since: sinceDate });
 
+  const mapped = newMessages
+    .map(toClientMessage)
+    .filter((m): m is NonNullable<typeof m> => m !== null);
+
   return NextResponse.json({
-    messages: newMessages
-      .filter((m) => m.role === 'user' || m.role === 'assistant' || m.role === 'mentor')
-      .map((m) => ({
-        id: m.id,
-        role: m.role === 'mentor' ? 'assistant' : m.role,
-        content: m.content,
-        senderType: m.senderType,
-        createdAt: m.createdAt.toISOString(),
-      })),
+    messages: mapped,
     currentLesson: progress.currentLessonNumber,
   });
 }

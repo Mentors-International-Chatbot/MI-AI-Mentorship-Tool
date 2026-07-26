@@ -21,7 +21,12 @@ import type { SensedDimension, DimensionState, DimensionStateMap } from './types
 
 type TrendValue = 'improving' | 'flat' | 'declining';
 
-function calculateTrend(
+/**
+ * Calculates the trend based on level change.
+ * For "confusion", lower is better (inverted interpretation).
+ * Exported for use in session-scoped assessment sensing.
+ */
+export function calculateTrend(
   dimensionKey: string,
   newLevel: number,
   priorLevel: number | null
@@ -43,7 +48,12 @@ function calculateTrend(
   return 'flat';
 }
 
-function calculateNewLevel(
+/**
+ * Calculates new level using exponential moving average.
+ * Higher confidence = trust the new observation more.
+ * Exported for use in session-scoped assessment sensing.
+ */
+export function calculateNewLevel(
   observedLevel: number,
   observedConfidence: number,
   priorLevel: number | null
@@ -62,28 +72,73 @@ function calculateNewLevel(
   return Math.max(0, Math.min(10, newLevel));
 }
 
+/**
+ * Pure function: applies sensed dimensions to a prior state map.
+ * Returns a NEW map with updated levels/trends/confidence.
+ * Does NOT touch the database - used by both global and session-scoped sensing.
+ */
+export function applySensedToState(
+  prior: DimensionStateMap,
+  sensed: SensedDimension[],
+): DimensionStateMap {
+  const updated: DimensionStateMap = { ...prior };
+  const now = new Date();
+
+  for (const s of sensed) {
+    const priorState = prior[s.dimensionKey];
+    const priorLevel = priorState?.level ?? null;
+
+    const newLevel = calculateNewLevel(s.level, s.confidence, priorLevel);
+    const trend = calculateTrend(s.dimensionKey, newLevel, priorLevel);
+
+    updated[s.dimensionKey] = {
+      dimensionKey: s.dimensionKey,
+      level: newLevel,
+      trend,
+      confidence: s.confidence,
+      evidence: s.evidence,
+      updatedAt: now,
+    };
+  }
+
+  return updated;
+}
+
+/**
+ * Persists dimension state to the database for a socio.
+ * Uses applySensedToState for the math, then writes to SocioDimensionState.
+ */
 export async function updateDimensionState(
   socioId: string,
   sensed: SensedDimension[]
 ): Promise<DimensionStateMap> {
-  const updatedStates: DimensionStateMap = {};
+  // Fetch prior state from DB
+  const priorStates = await prisma.socioDimensionState.findMany({
+    where: { socioId },
+  });
+
+  const priorMap: DimensionStateMap = {};
+  for (const state of priorStates) {
+    priorMap[state.dimensionKey] = {
+      dimensionKey: state.dimensionKey,
+      level: state.level,
+      trend: state.trend as TrendValue,
+      confidence: state.confidence,
+      evidence: state.evidence,
+      updatedAt: state.updatedAt,
+    };
+  }
+
+  // Apply sensing using the pure function
+  const updatedMap = applySensedToState(priorMap, sensed);
+
+  // Persist each updated dimension
+  const finalStates: DimensionStateMap = {};
 
   for (const s of sensed) {
-    // Fetch prior state
-    const prior = await prisma.socioDimensionState.findUnique({
-      where: {
-        socioId_dimensionKey: {
-          socioId,
-          dimensionKey: s.dimensionKey,
-        },
-      },
-    });
+    const computed = updatedMap[s.dimensionKey];
+    if (!computed) continue;
 
-    const priorLevel = prior?.level ?? null;
-    const newLevel = calculateNewLevel(s.level, s.confidence, priorLevel);
-    const trend = calculateTrend(s.dimensionKey, newLevel, priorLevel);
-
-    // Upsert - must update every turn for continuous tracking
     const updated = await prisma.socioDimensionState.upsert({
       where: {
         socioId_dimensionKey: {
@@ -94,20 +149,20 @@ export async function updateDimensionState(
       create: {
         socioId,
         dimensionKey: s.dimensionKey,
-        level: newLevel,
-        trend,
-        confidence: s.confidence,
-        evidence: s.evidence,
+        level: computed.level,
+        trend: computed.trend,
+        confidence: computed.confidence,
+        evidence: computed.evidence,
       },
       update: {
-        level: newLevel,
-        trend,
-        confidence: s.confidence,
-        evidence: s.evidence,
+        level: computed.level,
+        trend: computed.trend,
+        confidence: computed.confidence,
+        evidence: computed.evidence,
       },
     });
 
-    updatedStates[s.dimensionKey] = {
+    finalStates[s.dimensionKey] = {
       dimensionKey: updated.dimensionKey,
       level: updated.level,
       trend: updated.trend as TrendValue,
@@ -117,7 +172,7 @@ export async function updateDimensionState(
     };
   }
 
-  return updatedStates;
+  return finalStates;
 }
 
 /**

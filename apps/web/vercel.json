@@ -9,8 +9,8 @@
       "schedule": "0 6 * * 1"
     },
     {
-      "path": "/api/cron/financial-checkin",
-      "schedule": "0 15 * * 0"
+      "path": "/api/cron/check-in",
+      "schedule": "0 14 * * *"
     },
     {
       "path": "/api/cron/cleanup-logs",

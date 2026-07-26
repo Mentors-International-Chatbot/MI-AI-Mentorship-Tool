@@ -87,6 +87,18 @@ const blockBase = {
   order: z.number().int().positive(),
 };
 
+/**
+ * Assessment passing criteria. Used by config.assessment.passing and
+ * per-block passingOverride in gated teach_back blocks.
+ */
+export const passingSchema = z.object({
+  dimensionKey: key, // dimension that gates completion (the "understanding" score)
+  threshold: z.number(), // on that dimension's own scale
+  confidenceFloor: z.number().min(0).max(1).optional().default(0.5),
+  minTurns: z.number().int().positive().optional().default(2), // no one-sentence pass
+  maxTurns: z.number().int().positive().optional().default(12), // safety valve
+});
+
 export const lessonBlockSchema = z.discriminatedUnion("blockType", [
   /**
    * "AI explains a concept + follow-up." Direct generalization of the old
@@ -108,13 +120,18 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
    * segment: the AI evaluates the student's explanation against keyConcepts
    * rather than just prompting reflection, and can optionally feed a
    * dimension (e.g. comprehension) from how well the explanation lands.
+   *
+   * delivery: "inline" = current behavior (evaluate in main conversation).
+   *           "gated_session" = drives a separate-chat gate before lesson progression.
    */
   z.object({
     ...blockBase,
     blockType: z.literal("teach_back"),
     prompt: z.string().min(1),
     evaluatesConcepts: z.array(z.string()).default([]),
-    dimensionKey: key.optional(),
+    dimensionKey: key, // Required: specifies which dimension this teach_back assesses
+    delivery: z.enum(["inline", "gated_session"]).default("inline").optional(),
+    passingOverride: passingSchema.partial().optional(), // per-block tweak of config.assessment.passing
   }),
 
   /**
@@ -254,6 +271,25 @@ export const configSchema = z.object({
     .object({
       requiredLessonKeys: z.array(key).default([]),
       requiredDimensionKeys: z.array(key).default([]),
+    })
+    .optional(),
+  /**
+   * Assessment configuration for gated teach-back sessions.
+   * Optional: packages without gated assessments don't need this.
+   */
+  assessment: z
+    .object({
+      passing: passingSchema,
+      /** What the STUDENT sees. Default: just the gating dimension (their understanding score). */
+      studentVisibleDimensionKeys: z.array(key).optional(),
+      /** What becomes MetricObservations for mentor/flywheel. Default: all tracked dimensions. */
+      recordedDimensionKeys: z.array(key).optional(),
+      onMaxTurnsWithoutPass: z
+        .enum(["complete_with_scores", "return_for_reteach", "flag_mentor"])
+        .default("complete_with_scores"),
+      allowRetake: z.boolean().default(true),
+      blocking: z.boolean().default(true), // gate lesson progression while open
+      autoAppendTeachBack: z.boolean().default(false), // synthesize a gated teach_back per lesson (importer, Phase C)
     })
     .optional(),
 });
@@ -464,6 +500,62 @@ export const journeyPackageSchema = z
       }
     }
 
+    // ── Assessment config validation ──────────────────────────────────────────
+    if (pkg.config.assessment) {
+      const { passing, studentVisibleDimensionKeys, recordedDimensionKeys } = pkg.config.assessment;
+
+      // passing.dimensionKey must exist in trackedDimensions
+      if (!dimKeys.has(passing.dimensionKey)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `assessment.passing.dimensionKey "${passing.dimensionKey}" not found in trackedDimensions`,
+        });
+      }
+
+      // studentVisibleDimensionKeys must all exist
+      for (const dk of studentVisibleDimensionKeys ?? []) {
+        if (!dimKeys.has(dk)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `assessment.studentVisibleDimensionKeys contains unknown dimension "${dk}"`,
+          });
+        }
+      }
+
+      // recordedDimensionKeys must all exist
+      for (const dk of recordedDimensionKeys ?? []) {
+        if (!dimKeys.has(dk)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `assessment.recordedDimensionKeys contains unknown dimension "${dk}"`,
+          });
+        }
+      }
+    }
+
+    // ── Gated teach_back validation ───────────────────────────────────────────
+    for (const l of pkg.curriculum.lessons) {
+      for (const b of l.blocks) {
+        if (b.blockType === "teach_back" && b.delivery === "gated_session") {
+          // gated_session requires config.assessment to be present
+          if (!pkg.config.assessment) {
+            ctx.addIssue({
+              code: "custom",
+              message: `teach_back block "${b.id}" (lesson "${l.key}") has delivery="gated_session" but config.assessment is missing`,
+            });
+          }
+
+          // passingOverride.dimensionKey must exist if specified
+          if (b.passingOverride?.dimensionKey && !dimKeys.has(b.passingOverride.dimensionKey)) {
+            ctx.addIssue({
+              code: "custom",
+              message: `teach_back block "${b.id}" (lesson "${l.key}") passingOverride.dimensionKey "${b.passingOverride.dimensionKey}" not found in trackedDimensions`,
+            });
+          }
+        }
+      }
+    }
+
     if (pkg.outcome) {
       const milestoneKeys = new Set(pkg.outcome.milestones.map((m) => m.key));
       for (const m of pkg.outcome.milestones) {
@@ -488,6 +580,9 @@ export const journeyPackageSchema = z
 // ── Inferred types (replace the hand-written LessonData interface) ───────────
 
 export type JourneyPackage = z.infer<typeof journeyPackageSchema>;
+/** Input type allows optional fields with defaults to be omitted */
+export type JourneyPackageInput = z.input<typeof journeyPackageSchema>;
+export type PassingConfig = z.infer<typeof passingSchema>;
 export type PackageLesson = z.infer<typeof lessonSchema>;
 export type LessonBlock = z.infer<typeof lessonBlockSchema>;
 export type TrackedDimension = z.infer<typeof trackedDimensionSchema>;

@@ -23,6 +23,7 @@
 import { z } from "zod";
 import {
   trackedDimensionSchema,
+  passingSchema,
   configSchema as journeyPackageConfigSchema,
 } from "./journey-package.schema";
 
@@ -142,6 +143,18 @@ export const programVersionConfigSchema = z.object({
     .object({
       requiredLessonKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).default([]),
       requiredDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).default([]),
+    })
+    .optional(),
+
+  /** Assessment configuration for gated teach-back sessions. */
+  assessment: z
+    .object({
+      passing: passingSchema,
+      studentVisibleDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).optional(),
+      recordedDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).optional(),
+      onMaxTurnsWithoutPass: z.enum(["complete_with_scores", "return_for_reteach", "flag_mentor"]).default("complete_with_scores"),
+      allowRetake: z.boolean().default(true),
+      blocking: z.boolean().default(true),
     })
     .optional(),
 

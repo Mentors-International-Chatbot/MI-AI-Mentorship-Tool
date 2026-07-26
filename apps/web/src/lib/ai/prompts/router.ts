@@ -1,7 +1,7 @@
 import { repo } from '@/lib/repo';
 import { Socio } from '@/lib/repo/types';
 import { SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
-import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData, getGateAtPosition } from '@/lib/lessons/db-lesson-service';
 import {
   RETEACH_THRESHOLD,
   MAX_LESSON_NUMBER,
@@ -15,6 +15,7 @@ import {
   RouterResult,
   LessonDeliveryState,
   ReminderState,
+  GatedAssessmentState,
 } from './types';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 
@@ -62,6 +63,77 @@ function buildLessonDeliveryState(
     previousLessonTitleEs: prevTitle,
     lastUnderstanding: repoProgress.weeklyUnderstanding ?? undefined,
   };
+}
+
+/**
+ * Checks if student is at a gated position and builds state for assessment.
+ * Returns null if:
+ *   - No gate at this position
+ *   - Gate has been passed (completed session with passedAt)
+ *   - Gate's configSnapshot.blocking === false (non-blocking gate)
+ */
+async function checkGatePosition(
+  socioId: string,
+  repoProgress: RepoSocioProgress,
+  collectionKey: string,
+): Promise<GatedAssessmentState | null> {
+  if (!hasLessonData(collectionKey, repoProgress.currentLessonNumber)) return null;
+
+  const lesson = getLessonData(collectionKey, repoProgress.currentLessonNumber);
+  const msgIndex = repoProgress.currentMessageIndex;
+
+  // Check each gate to see if we've passed all teach messages before it
+  for (const gate of lesson.gates) {
+    // Gate activates when currentMessageIndex > afterMessageIndex
+    // This means student has completed all messages up to and including afterMessageIndex
+    if (msgIndex > gate.afterMessageIndex) {
+      // Check if there's an existing assessment session for this gate
+      const sessions = await repo.getAssessmentSessionsForSocioLesson?.(
+        socioId,
+        lesson.lessonKey,
+        gate.blockId
+      );
+
+      // If there's a completed session (regardless of passedAt), gate is cleared.
+      // Blocking is about open sessions (pending/in_progress), not pass/fail status.
+      const completedSession = sessions?.find((s) => s.status === 'completed');
+      if (completedSession) {
+        continue; // Gate already cleared by completion, check next gate
+      }
+
+      // Check if there's an existing incomplete session
+      const existingSession = sessions?.find((s) => s.status !== 'completed');
+
+      // If session exists, check configSnapshot.blocking
+      // If blocking === false, allow progression (don't return gate state)
+      // Note: createAssessmentSession guarantees configSnapshot is always present
+      // (throws AssessmentConfigError if config is missing). The fallback to true
+      // is a fail-safe that should never be reached in normal operation.
+      if (existingSession) {
+        const configSnapshot = existingSession.configSnapshot as Record<string, unknown> | null;
+        const isBlocking = configSnapshot?.blocking !== false;
+        if (!isBlocking) {
+          console.log(`[Router] Gate ${gate.blockId} is non-blocking, allowing progression`);
+          continue;
+        }
+      }
+
+      // Gate is blocking - need assessment
+      return {
+        lessonNumber: lesson.lessonNumber,
+        lessonKey: lesson.lessonKey,
+        lessonTitleEs: lesson.titleEs,
+        blockId: gate.blockId,
+        prompt: gate.prompt,
+        evaluatesConcepts: gate.evaluatesConcepts,
+        dimensionKey: gate.dimensionKey,
+        sessionId: existingSession?.id,
+        passed: false,
+      };
+    }
+  }
+
+  return null;
 }
 
 export interface DetermineModeResult {
@@ -156,6 +228,20 @@ export async function determineMode(
   // ── Priority 1: Mid-lesson (messageIndex > 0) ──
   if (hasLesson && repoProgress.currentMessageIndex > 0) {
     const lesson = getLessonData(collectionKey, repoProgress.currentLessonNumber);
+
+    // ── Check for gated assessment first ──
+    // If student has passed all teach messages before a gate, route to assessment
+    const gateState = await checkGatePosition(socio.id, repoProgress, collectionKey);
+    if (gateState) {
+      return {
+        routerResult: {
+          mode: InteractionMode.GATED_ASSESSMENT,
+          gatedAssessment: gateState,
+        },
+        progress,
+        repoProgress,
+      };
+    }
 
     if (repoProgress.currentMessageIndex < lesson.messages.length) {
       // Check if reteach is needed from two signals:

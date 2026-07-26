@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(npm run:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(source:*)",
+      "Bash(neonctl branch:*)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_raZk4hDFHum1@ep-calm-cherry-adur1zpo.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require\" npx prisma migrate deploy:*)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_raZk4hDFHum1@ep-calm-cherry-adur1zpo.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require\" npx prisma migrate reset:*)",
+      "Bash(claude update:*)",
+      "Bash(claude:*)",
+      "Bash(pkill -f \"next dev\")"
     ]
   }
 }

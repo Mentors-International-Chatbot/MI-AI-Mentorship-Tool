@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth/session';
 import { repo } from '@/lib/repo';
+import { toClientMessage } from '../toClientMessage';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,24 +25,7 @@ export async function GET() {
   const messages = await repo.getMessages(socio.id, 50);
 
   const mapped = messages
-    .map((m) => {
-      const displayRole =
-        m.role === 'mentor' ? 'assistant' : m.role;
-      if (displayRole !== 'user' && displayRole !== 'assistant') {
-        return null;
-      }
-      // Filter out the welcome trigger message (not meant to be displayed)
-      if (m.role === 'user' && m.content === '__welcome__') {
-        return null;
-      }
-      return {
-        id: m.id,
-        role: displayRole as 'user' | 'assistant',
-        content: m.content,
-        senderType: m.senderType ?? null,
-        createdAt: m.createdAt.toISOString(),
-      };
-    })
+    .map(toClientMessage)
     .filter((m): m is NonNullable<typeof m> => m !== null);
 
   return NextResponse.json({

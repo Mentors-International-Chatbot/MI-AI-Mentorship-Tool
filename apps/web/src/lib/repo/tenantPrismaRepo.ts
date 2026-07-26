@@ -22,6 +22,9 @@ import type {
   Alert,
   AlertReview,
   ObservationSource,
+  AssessmentSession,
+  AssessmentSessionStatus,
+  AssessmentMessage,
 } from './tenantRepo.types';
 import type {
   Organization as PrismaOrganization,
@@ -42,6 +45,8 @@ import type {
   AlertRule as PrismaAlertRule,
   Alert as PrismaAlert,
   AlertReview as PrismaAlertReview,
+  AssessmentSession as PrismaAssessmentSession,
+  Message as PrismaMessage,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
@@ -277,6 +282,40 @@ function toAlertReview(p: PrismaAlertReview): AlertReview {
     reviewerId: p.reviewerId,
     action: p.action,
     notes: p.notes,
+    createdAt: p.createdAt,
+  };
+}
+
+function toAssessmentSession(p: PrismaAssessmentSession): AssessmentSession {
+  return {
+    id: p.id,
+    organizationId: p.organizationId,
+    socioId: p.socioId,
+    lessonKey: p.lessonKey,
+    blockId: p.blockId,
+    kind: p.kind,
+    channel: p.channel,
+    status: p.status as AssessmentSessionStatus,
+    attemptNumber: p.attemptNumber,
+    turnCount: p.turnCount,
+    liveState: p.liveState as Record<string, unknown> | null,
+    scores: p.scores as Record<string, unknown> | null,
+    passedAt: p.passedAt,
+    completedAt: p.completedAt,
+    configSnapshot: p.configSnapshot as Record<string, unknown> | null,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  };
+}
+
+function toAssessmentMessage(p: PrismaMessage): AssessmentMessage {
+  return {
+    id: p.id,
+    socioId: p.socioId,
+    role: p.role,
+    content: p.content,
+    assessmentSessionId: p.assessmentSessionId!,
+    metadata: p.metadata as Record<string, unknown> | null,
     createdAt: p.createdAt,
   };
 }
@@ -537,6 +576,31 @@ async function verifyEnrollmentOwnership(ctx: TenantContext, enrollmentId: strin
 }
 
 /**
+ * Verifies that an assessment session belongs to the tenant's organization.
+ */
+async function verifyAssessmentSessionOwnership(ctx: TenantContext, sessionId: string): Promise<PrismaAssessmentSession> {
+  const session = await prisma.assessmentSession.findUnique({
+    where: { id: sessionId },
+  });
+  if (!session) {
+    throw new TenantIsolationError('AssessmentSession not found', {
+      requestedOrgId: ctx.organizationId,
+      resourceType: 'AssessmentSession',
+      resourceId: sessionId,
+    });
+  }
+  if (session.organizationId !== ctx.organizationId) {
+    throw new TenantIsolationError('Cross-tenant access denied', {
+      requestedOrgId: ctx.organizationId,
+      actualOrgId: session.organizationId,
+      resourceType: 'AssessmentSession',
+      resourceId: sessionId,
+    });
+  }
+  return session;
+}
+
+/**
  * Verifies that a program version belongs to a program in the tenant's organization.
  */
 async function verifyProgramVersionOwnership(ctx: TenantContext, versionId: string): Promise<void> {
@@ -579,6 +643,54 @@ export const tenantPrismaRepo: TenantRepo = {
       where: { slug },
     });
     return org ? toOrganization(org) : null;
+  },
+
+  async getOrganizationIdBySocioId(socioId) {
+    const participant = await prisma.participantProfile.findUnique({
+      where: { socioId },
+      select: { organizationId: true },
+    });
+    return participant?.organizationId ?? null;
+  },
+
+  /**
+   * Resolve organizationId for a socio with fallback chain:
+   * 1. ParticipantProfile path (enrolled socios)
+   * 2. Curriculum collection → organization (course-based resolution)
+   * 3. Default MI organization (platform fallback)
+   *
+   * This ensures org resolution NEVER fails for a socio in a course.
+   */
+  async resolveOrganizationIdForSocio(socioId: string): Promise<string> {
+    const DEFAULT_ORG_ID = '8d1ca50e-b191-4934-ad36-0d9873ce247a'; // MI org
+
+    // 1. Try ParticipantProfile path (works for seeded/enrolled socios)
+    const participant = await prisma.participantProfile.findUnique({
+      where: { socioId },
+      select: { organizationId: true },
+    });
+    if (participant?.organizationId) {
+      return participant.organizationId;
+    }
+
+    // 2. Try curriculum_collection_key → content_collections → organization_id
+    const socio = await prisma.socio.findUnique({
+      where: { id: socioId },
+      select: { curriculumCollectionKey: true },
+    });
+    if (socio?.curriculumCollectionKey) {
+      const collection = await prisma.contentCollection.findFirst({
+        where: { slug: socio.curriculumCollectionKey },
+        select: { organizationId: true },
+      });
+      if (collection?.organizationId) {
+        return collection.organizationId;
+      }
+    }
+
+    // 3. Fall back to default MI organization
+    console.log(`[resolveOrganizationIdForSocio] Using default org for socio ${socioId}`);
+    return DEFAULT_ORG_ID;
   },
 
   // ─── Organization Membership ───────────────────────────────────────────────
@@ -1387,5 +1499,158 @@ export const tenantPrismaRepo: TenantRepo = {
       },
     });
     return toAlertReview(review);
+  },
+
+  // ─── Config Resolution (for assessment sessions) ──────────────────────────
+  async getSocioCurriculumCollectionKey(socioId) {
+    const socio = await prisma.socio.findUnique({
+      where: { id: socioId },
+      select: { curriculumCollectionKey: true },
+    });
+    return socio?.curriculumCollectionKey ?? null;
+  },
+
+  async getActiveProgramVersionByCollection(ctx, collectionSlug) {
+    const programVersion = await prisma.programVersion.findFirst({
+      where: {
+        active: true,
+        program: { organizationId: ctx.organizationId },
+        collection: { slug: collectionSlug },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return programVersion ? toProgramVersion(programVersion) : null;
+  },
+
+  async getActiveLessonVersionBySlug(ctx, collectionSlug, lessonSlug) {
+    const lessonVersion = await prisma.lessonVersion.findFirst({
+      where: {
+        active: true,
+        lesson: {
+          slug: lessonSlug,
+          collection: {
+            slug: collectionSlug,
+            organizationId: ctx.organizationId,
+          },
+        },
+      },
+    });
+    return lessonVersion ? toLessonVersion(lessonVersion) : null;
+  },
+
+  // ─── Assessment Sessions ──────────────────────────────────────────────────
+  async createAssessmentSession(ctx, data) {
+    // Calculate attempt number if not provided
+    let attemptNumber = data.attemptNumber ?? 1;
+    if (!data.attemptNumber) {
+      const existingSessions = await prisma.assessmentSession.findMany({
+        where: {
+          organizationId: ctx.organizationId,
+          socioId: data.socioId,
+          lessonKey: data.lessonKey,
+        },
+        orderBy: { attemptNumber: 'desc' },
+        take: 1,
+      });
+      if (existingSessions.length > 0) {
+        attemptNumber = existingSessions[0].attemptNumber + 1;
+      }
+    }
+
+    const session = await prisma.assessmentSession.create({
+      data: {
+        organizationId: ctx.organizationId,
+        socioId: data.socioId,
+        lessonKey: data.lessonKey,
+        blockId: data.blockId,
+        channel: data.channel,
+        attemptNumber,
+        configSnapshot: data.configSnapshot as object,
+      },
+    });
+    return toAssessmentSession(session);
+  },
+
+  async getAssessmentSessionById(ctx, sessionId) {
+    const session = await prisma.assessmentSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session) return null;
+    if (session.organizationId !== ctx.organizationId) {
+      throw new TenantIsolationError('Cross-tenant access denied', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: session.organizationId,
+        resourceType: 'AssessmentSession',
+        resourceId: sessionId,
+      });
+    }
+    return toAssessmentSession(session);
+  },
+
+  async getAssessmentSessionsForSocio(ctx, socioId) {
+    const sessions = await prisma.assessmentSession.findMany({
+      where: {
+        organizationId: ctx.organizationId,
+        socioId,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return sessions.map(toAssessmentSession);
+  },
+
+  async updateAssessmentSession(ctx, sessionId, data) {
+    await verifyAssessmentSessionOwnership(ctx, sessionId);
+    const session = await prisma.assessmentSession.update({
+      where: { id: sessionId },
+      data: {
+        ...(data.status !== undefined && { status: data.status }),
+        ...(data.turnCount !== undefined && { turnCount: data.turnCount }),
+        ...(data.liveState !== undefined && { liveState: data.liveState as object }),
+        ...(data.scores !== undefined && { scores: data.scores as object }),
+        ...(data.passedAt !== undefined && { passedAt: data.passedAt }),
+        ...(data.completedAt !== undefined && { completedAt: data.completedAt }),
+      },
+    });
+    return toAssessmentSession(session);
+  },
+
+  async getAssessmentMessages(ctx, sessionId) {
+    await verifyAssessmentSessionOwnership(ctx, sessionId);
+    const messages = await prisma.message.findMany({
+      where: { assessmentSessionId: sessionId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return messages.map(toAssessmentMessage);
+  },
+
+  async addAssessmentMessage(ctx, sessionId, data) {
+    // Verify ownership and get session for socioId
+    const session = await prisma.assessmentSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session) {
+      throw new TenantIsolationError('Session not found', {
+        resourceType: 'AssessmentSession',
+        resourceId: sessionId,
+      });
+    }
+    if (session.organizationId !== ctx.organizationId) {
+      throw new TenantIsolationError('Cross-tenant access denied', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: session.organizationId,
+        resourceType: 'AssessmentSession',
+        resourceId: sessionId,
+      });
+    }
+
+    const message = await prisma.message.create({
+      data: {
+        socioId: session.socioId,
+        role: data.role,
+        content: data.content,
+        assessmentSessionId: sessionId,
+      },
+    });
+    return toAssessmentMessage(message);
   },
 };

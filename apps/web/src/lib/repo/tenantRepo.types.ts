@@ -202,6 +202,38 @@ export type AlertReview = {
   createdAt: Date;
 };
 
+export type AssessmentSessionStatus = 'pending' | 'in_progress' | 'completed';
+
+export type AssessmentSession = {
+  id: string;
+  organizationId: string;
+  socioId: string;
+  lessonKey: string;
+  blockId: string | null;
+  kind: string;
+  channel: string; // delivery channel at session creation (whatsapp/web)
+  status: AssessmentSessionStatus;
+  attemptNumber: number;
+  turnCount: number;
+  liveState: Record<string, unknown> | null;
+  scores: Record<string, unknown> | null;
+  passedAt: Date | null;
+  completedAt: Date | null;
+  configSnapshot: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type AssessmentMessage = {
+  id: string;
+  socioId: string;
+  role: string;
+  content: string;
+  assessmentSessionId: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TenantRepo Interface - All methods REQUIRE TenantContext as first param
 // ═══════════════════════════════════════════════════════════════════════════
@@ -222,6 +254,15 @@ export interface TenantRepo {
   // ─── Organization ──────────────────────────────────────────────────────────
   getOrganization(ctx: TenantContext): Promise<Organization | null>;
   getOrganizationBySlug(slug: string): Promise<Organization | null>;
+  /** Bootstrap method: looks up org ID from socioId (for auth, before tenant context exists) */
+  getOrganizationIdBySocioId(socioId: string): Promise<string | null>;
+  /**
+   * Resolve organizationId for a socio with fallback chain (never returns null):
+   * 1. ParticipantProfile path (enrolled socios)
+   * 2. Curriculum collection → organization (course-based resolution)
+   * 3. Default MI organization (platform fallback)
+   */
+  resolveOrganizationIdForSocio(socioId: string): Promise<string>;
 
   // ─── Organization Membership ───────────────────────────────────────────────
   getMemberships(ctx: TenantContext): Promise<OrganizationMembership[]>;
@@ -320,4 +361,45 @@ export interface TenantRepo {
   // ─── Alert Reviews ─────────────────────────────────────────────────────────
   getAlertReviews(ctx: TenantContext, alertId: string): Promise<AlertReview[]>;
   createAlertReview(ctx: TenantContext, data: Omit<AlertReview, 'id' | 'createdAt'>): Promise<AlertReview>;
+
+  // ─── Config Resolution (for assessment sessions) ──────────────────────────
+  /** Get the curriculumCollectionKey for a socio */
+  getSocioCurriculumCollectionKey(socioId: string): Promise<string | null>;
+  /** Find active program version for an org that references a specific collection */
+  getActiveProgramVersionByCollection(ctx: TenantContext, collectionSlug: string): Promise<ProgramVersion | null>;
+  /** Find active lesson version by lesson slug and collection slug */
+  getActiveLessonVersionBySlug(ctx: TenantContext, collectionSlug: string, lessonSlug: string): Promise<LessonVersion | null>;
+
+  // ─── Assessment Sessions ──────────────────────────────────────────────────
+  createAssessmentSession(
+    ctx: TenantContext,
+    data: {
+      socioId: string;
+      lessonKey: string;
+      blockId?: string;
+      channel: string; // delivery channel (whatsapp/web)
+      configSnapshot: Record<string, unknown>;
+      attemptNumber?: number;
+    }
+  ): Promise<AssessmentSession>;
+  getAssessmentSessionById(ctx: TenantContext, sessionId: string): Promise<AssessmentSession | null>;
+  getAssessmentSessionsForSocio(ctx: TenantContext, socioId: string): Promise<AssessmentSession[]>;
+  updateAssessmentSession(
+    ctx: TenantContext,
+    sessionId: string,
+    data: {
+      status?: AssessmentSessionStatus;
+      turnCount?: number;
+      liveState?: Record<string, unknown>;
+      scores?: Record<string, unknown>;
+      passedAt?: Date;
+      completedAt?: Date;
+    }
+  ): Promise<AssessmentSession>;
+  getAssessmentMessages(ctx: TenantContext, sessionId: string): Promise<AssessmentMessage[]>;
+  addAssessmentMessage(
+    ctx: TenantContext,
+    sessionId: string,
+    data: { role: string; content: string }
+  ): Promise<AssessmentMessage>;
 }

@@ -4,6 +4,13 @@
  * Reads check-in configurations from CourseMeta.scheduledCheckins.
  * Fires check-ins based on cadence, sends to socios in their language.
  * Replaces the old MI-specific financial-checkin route.
+ *
+ * IDEMPOTENCY: Uses Message.metadata to track {checkinId, checkinDate}.
+ * Re-invocations on the same UTC day are no-ops per socio/checkin pair.
+ *
+ * TIMEZONE: Cadence logic uses UTC. Scheduled at 14:00 UTC (9 AM Bogotá).
+ * Safe for Colombia (UTC-5) - well within the same calendar day.
+ * Avoid scheduling near midnight UTC to prevent date-boundary mismatches.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,7 +20,12 @@ import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import type { ScheduledCheckin } from '@/lib/journey-package/journey-package.schema';
 import { DEFAULT_LANGUAGE, type SupportedLanguage, isSupportedLanguage } from '@/lib/i18n/languages';
 
-// ── Cadence Evaluation ────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Returns today's date as YYYY-MM-DD in UTC */
+function todayUTC(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function shouldFireForCadence(cadence: ScheduledCheckin['cadence']): boolean {
   const now = new Date();
@@ -37,6 +49,29 @@ function shouldFireForCadence(cadence: ScheduledCheckin['cadence']): boolean {
   }
 }
 
+/**
+ * Check if this checkin was already sent to this socio today.
+ * Uses Message.metadata JSON field: { checkinId, checkinDate }
+ */
+async function alreadySentToday(socioId: string, checkinId: string, checkinDate: string): Promise<boolean> {
+  const existing = await prisma.message.findFirst({
+    where: {
+      socioId,
+      metadata: {
+        path: ['checkinId'],
+        equals: checkinId,
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { metadata: true },
+  });
+
+  if (!existing?.metadata) return false;
+
+  const meta = existing.metadata as { checkinId?: string; checkinDate?: string };
+  return meta.checkinDate === checkinDate;
+}
+
 // ── Main Handler ──────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -46,6 +81,7 @@ export async function GET(req: NextRequest) {
   }
 
   const whatsappChannel = new WhatsAppChannel();
+  const checkinDate = todayUTC();
 
   // Get all distinct curriculum collection keys from active socios
   const distinctCurriculums = await prisma.socio.findMany({
@@ -62,6 +98,7 @@ export async function GET(req: NextRequest) {
     checkinId: string;
     course: string;
     sent: number;
+    skipped: number;
     errors: string[];
   }[] = [];
 
@@ -93,11 +130,18 @@ export async function GET(req: NextRequest) {
 
     for (const checkin of activeCheckins) {
       let sent = 0;
+      let skipped = 0;
       const errors: string[] = [];
 
       for (const socio of socios) {
         const phone = socio.whatsappPhoneNumber ?? socio.externalId;
         if (!phone) continue;
+
+        // Idempotency: skip if already sent today
+        if (await alreadySentToday(socio.id, checkin.id, checkinDate)) {
+          skipped++;
+          continue;
+        }
 
         // Resolve language with fallback
         const lang: SupportedLanguage =
@@ -111,13 +155,17 @@ export async function GET(req: NextRequest) {
         try {
           await whatsappChannel.sendMessage(phone, message);
 
-          // Store the check-in message
+          // Store the check-in message with idempotency metadata
           await prisma.message.create({
             data: {
               socioId: socio.id,
               role: 'assistant',
               content: message,
               senderType: 'ai',
+              metadata: {
+                checkinId: checkin.id,
+                checkinDate,
+              },
             },
           });
 
@@ -133,6 +181,7 @@ export async function GET(req: NextRequest) {
         checkinId: checkin.id,
         course: collectionKey,
         sent,
+        skipped,
         errors,
       });
     }
@@ -140,16 +189,20 @@ export async function GET(req: NextRequest) {
 
   // Summary
   const totalSent = results.reduce((sum, r) => sum + r.sent, 0);
+  const totalSkipped = results.reduce((sum, r) => sum + r.skipped, 0);
   const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
+    checkinDate,
     totalSent,
+    totalSkipped,
     totalErrors,
     details: results.map((r) => ({
       checkinId: r.checkinId,
       course: r.course,
       sent: r.sent,
+      skipped: r.skipped > 0 ? r.skipped : undefined,
       errors: r.errors.length > 0 ? r.errors : undefined,
     })),
   });

@@ -116,6 +116,15 @@ const mockPrisma = vi.hoisted(() => ({
     findMany: vi.fn(),
     create: vi.fn(),
   },
+  assessmentSession: {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  message: {
+    findMany: vi.fn(),
+  },
   $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
 }));
 
@@ -150,6 +159,8 @@ const ENROLLMENT_A_ID = 'enrl-a-uuid-0000-0000-000000000001';
 const ENROLLMENT_B_ID = 'enrl-b-uuid-0000-0000-000000000002';
 const LESSON_A_ID = 'less-a-uuid-0000-0000-000000000001';
 const LESSON_B_ID = 'less-b-uuid-0000-0000-000000000002';
+const ASSESSMENT_SESSION_A_ID = 'asss-a-uuid-0000-0000-000000000001';
+const ASSESSMENT_SESSION_B_ID = 'asss-b-uuid-0000-0000-000000000002';
 
 const ctxOrgA: TenantContext = { organizationId: ORG_A_ID };
 const ctxOrgB: TenantContext = { organizationId: ORG_B_ID };
@@ -797,5 +808,193 @@ describe('Export/Read Path Attacks', () => {
     ).rejects.toThrow(TenantIsolationError);
 
     expect(mockPrisma.lessonVersion.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('Assessment Session Tenant Isolation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('Cross-tenant reads', () => {
+    it('BLOCKS: Org A context reading Org B assessment session by ID', async () => {
+      mockPrisma.assessmentSession.findUnique.mockResolvedValue({
+        id: ASSESSMENT_SESSION_B_ID,
+        organizationId: ORG_B_ID,
+        socioId: 'socio-123',
+        lessonKey: 'pbj:lesson-01',
+        blockId: 'block-1',
+        kind: 'teach_back',
+        status: 'in_progress',
+        attemptNumber: 1,
+        turnCount: 3,
+        liveState: {},
+        scores: null,
+        passedAt: null,
+        completedAt: null,
+        configSnapshot: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await expect(
+        tenantPrismaRepo.getAssessmentSessionById(ctxOrgA, ASSESSMENT_SESSION_B_ID)
+      ).rejects.toThrow(TenantIsolationError);
+    });
+
+    it('ALLOWS: Org A context reading own assessment session', async () => {
+      mockPrisma.assessmentSession.findUnique.mockResolvedValue({
+        id: ASSESSMENT_SESSION_A_ID,
+        organizationId: ORG_A_ID,
+        socioId: 'socio-123',
+        lessonKey: 'pbj:lesson-01',
+        blockId: 'block-1',
+        kind: 'teach_back',
+        status: 'in_progress',
+        attemptNumber: 1,
+        turnCount: 3,
+        liveState: {},
+        scores: null,
+        passedAt: null,
+        completedAt: null,
+        configSnapshot: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const result = await tenantPrismaRepo.getAssessmentSessionById(ctxOrgA, ASSESSMENT_SESSION_A_ID);
+      expect(result).not.toBeNull();
+      expect(result?.id).toBe(ASSESSMENT_SESSION_A_ID);
+    });
+  });
+
+  describe('Cross-tenant writes', () => {
+    it('BLOCKS: Org A context updating Org B assessment session', async () => {
+      mockPrisma.assessmentSession.findUnique.mockResolvedValue({
+        id: ASSESSMENT_SESSION_B_ID,
+        organizationId: ORG_B_ID,
+      });
+
+      await expect(
+        tenantPrismaRepo.updateAssessmentSession(ctxOrgA, ASSESSMENT_SESSION_B_ID, {
+          status: 'completed',
+          scores: { comprehension: 10 },
+        })
+      ).rejects.toThrow(TenantIsolationError);
+
+      expect(mockPrisma.assessmentSession.update).not.toHaveBeenCalled();
+    });
+
+    it('ALLOWS: Org A context updating own assessment session', async () => {
+      const now = new Date();
+      mockPrisma.assessmentSession.findUnique.mockResolvedValue({
+        id: ASSESSMENT_SESSION_A_ID,
+        organizationId: ORG_A_ID,
+        socioId: 'socio-123',
+        lessonKey: 'pbj:lesson-01',
+        blockId: 'block-1',
+        kind: 'teach_back',
+        status: 'in_progress',
+        attemptNumber: 1,
+        turnCount: 3,
+        liveState: {},
+        scores: null,
+        passedAt: null,
+        completedAt: null,
+        configSnapshot: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      mockPrisma.assessmentSession.update.mockResolvedValue({
+        id: ASSESSMENT_SESSION_A_ID,
+        organizationId: ORG_A_ID,
+        socioId: 'socio-123',
+        lessonKey: 'pbj:lesson-01',
+        blockId: 'block-1',
+        kind: 'teach_back',
+        status: 'completed',
+        attemptNumber: 1,
+        turnCount: 5,
+        liveState: {},
+        scores: { comprehension: 8 },
+        passedAt: now,
+        completedAt: now,
+        configSnapshot: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const result = await tenantPrismaRepo.updateAssessmentSession(ctxOrgA, ASSESSMENT_SESSION_A_ID, {
+        status: 'completed',
+        turnCount: 5,
+        scores: { comprehension: 8 },
+        passedAt: now,
+        completedAt: now,
+      });
+
+      expect(result.status).toBe('completed');
+      expect(mockPrisma.assessmentSession.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('Assessment messages isolation', () => {
+    it('BLOCKS: Org A context reading Org B assessment session messages', async () => {
+      // Session belongs to Org B
+      mockPrisma.assessmentSession.findUnique.mockResolvedValue({
+        id: ASSESSMENT_SESSION_B_ID,
+        organizationId: ORG_B_ID,
+      });
+
+      await expect(
+        tenantPrismaRepo.getAssessmentMessages(ctxOrgA, ASSESSMENT_SESSION_B_ID)
+      ).rejects.toThrow(TenantIsolationError);
+
+      expect(mockPrisma.message.findMany).not.toHaveBeenCalled();
+    });
+
+    it('ALLOWS: Org A context reading own assessment session messages', async () => {
+      mockPrisma.assessmentSession.findUnique.mockResolvedValue({
+        id: ASSESSMENT_SESSION_A_ID,
+        organizationId: ORG_A_ID,
+      });
+
+      mockPrisma.message.findMany.mockResolvedValue([
+        {
+          id: 'msg-1',
+          socioId: 'socio-123',
+          role: 'user',
+          content: 'My explanation',
+          assessmentSessionId: ASSESSMENT_SESSION_A_ID,
+          metadata: null,
+          createdAt: new Date(),
+        },
+      ]);
+
+      const result = await tenantPrismaRepo.getAssessmentMessages(ctxOrgA, ASSESSMENT_SESSION_A_ID);
+      expect(result).toHaveLength(1);
+      expect(mockPrisma.message.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { assessmentSessionId: ASSESSMENT_SESSION_A_ID },
+        })
+      );
+    });
+  });
+
+  describe('List operations filtering', () => {
+    it('List assessment sessions for socio only returns own org sessions', async () => {
+      mockPrisma.assessmentSession.findMany.mockResolvedValue([]);
+
+      await tenantPrismaRepo.getAssessmentSessionsForSocio(ctxOrgA, 'socio-123');
+
+      expect(mockPrisma.assessmentSession.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            organizationId: ORG_A_ID,
+            socioId: 'socio-123',
+          },
+        })
+      );
+    });
   });
 });

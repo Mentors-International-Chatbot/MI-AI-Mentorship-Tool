@@ -81,6 +81,13 @@ export interface AIResponse {
     determineModeResult: DetermineModeResult;
     dimensionState?: DimensionStateMap;
     isError?: boolean;
+    /** Gated assessment info - present when mode is GATED_ASSESSMENT */
+    gatedAssessment?: {
+        sessionId?: string;
+        blockId: string;
+        lessonKey: string;
+        prompt: string;
+    };
 }
 
 export async function generateAIResponse(
@@ -98,16 +105,20 @@ export async function generateAIResponse(
         temperature: 0.7,
     });
 
-    // 0. Run sensing pass to assess student's current state
+    // 0. Kick off the sensing pass. It is NOT awaited here: dimension state is
+    //    a slow-moving EMA, so this turn's reply is generated against the PRIOR
+    //    state while sensing computes the new one concurrently. Turn latency
+    //    drops from sensing + llm (~5s) to roughly max(sensing, llm) (~2.5s).
     const sensingStart = performance.now();
-    let liveState: DimensionStateMap;
+    let priorState: DimensionStateMap = {};
+    let sensingPromise: Promise<DimensionStateMap>;
 
     if (overrideDimensionState) {
-        // Use override state (for testing)
-        liveState = overrideDimensionState;
+        // Use override state (for testing) - no sensing call at all
+        priorState = overrideDimensionState;
+        sensingPromise = Promise.resolve(overrideDimensionState);
     } else {
-        // Run actual sensing pass
-        const priorState = await getDimensionStateMap(socio.id);
+        priorState = await getDimensionStateMap(socio.id);
 
         // Get lesson context for sensing
         const repoProgress = await repo.getSocioProgress(socio.id);
@@ -115,21 +126,64 @@ export async function generateAIResponse(
             ? getLessonData(collectionKey, repoProgress.currentLessonNumber).titleEs
             : 'Conversación general de mentoría';
 
-        const sensed = await senseDimensions({
+        const stateAtDispatch = priorState;
+        sensingPromise = senseDimensions({
             incomingText,
-            priorState,
+            priorState: stateAtDispatch,
             lessonContext,
+        }).then((sensed) => {
+            // Trivial message: no LLM call ran and there is nothing to fold in,
+            // so the prior state carries forward untouched.
+            if (sensed.skipped || sensed.dimensions.length === 0) {
+                return stateAtDispatch;
+            }
+            return updateDimensionState(socio.id, sensed.dimensions);
+        }).catch((error) => {
+            console.error('[AI] Sensing pass failed, keeping prior state:', error);
+            return stateAtDispatch;
         });
-
-        // Update state with new observations
-        liveState = await updateDimensionState(socio.id, sensed.dimensions);
     }
-    timings.sensing = performance.now() - sensingStart;
 
-    // 1. Determine interaction mode from real progress data + dimension state
+    // 1. Determine interaction mode from real progress data + PRIOR dimension
+    //    state. Gate detection does not read dimension state; only the reteach
+    //    heuristic does, and a one-turn lag on an EMA signal is immaterial.
     const modeStart = performance.now();
-    const modeResult = await determineMode(socio, incomingText, collectionKey, liveState);
+    const modeResult = await determineMode(socio, incomingText, collectionKey, priorState);
     timings.determineMode = performance.now() - modeStart;
+
+    // ── Handle gated assessment mode early ──────────────────────────────────
+    // When student reaches a gate, we return the assessment prompt instead of
+    // normal AI generation. The client should switch to assessment mode.
+    if (modeResult.routerResult.mode === InteractionMode.GATED_ASSESSMENT) {
+        const gateState = modeResult.routerResult.gatedAssessment!;
+        const lang = (socio.language || 'es') as SupportedLanguage;
+
+        // Build assessment intro message
+        const introText = lang === 'en'
+            ? `Before moving on, let's check your understanding.\n\n${gateState.prompt}`
+            : lang === 'pt'
+            ? `Antes de continuar, vamos verificar sua compreensão.\n\n${gateState.prompt}`
+            : `Antes de continuar, verifiquemos tu comprensión.\n\n${gateState.prompt}`;
+
+        console.log(`[GatedAssessment] Reached gate ${gateState.blockId} in lesson ${gateState.lessonKey}`);
+
+        // Let the in-flight sensing pass finish and persist before returning.
+        const gateLiveState = await sensingPromise;
+
+        return {
+            text: introText,
+            markers: { cleanText: introText, flags: [], lessonsCompleted: [], escalations: [], financials: [] },
+            mode: InteractionMode.GATED_ASSESSMENT,
+            determineModeResult: modeResult,
+            dimensionState: gateLiveState,
+            gatedAssessment: {
+                sessionId: gateState.sessionId,
+                blockId: gateState.blockId,
+                lessonKey: gateState.lessonKey,
+                prompt: gateState.prompt,
+            },
+        };
+    }
 
     // 2. Assemble 4-layer system prompt with real progress + dimension state
     const promptStart = performance.now();
@@ -138,7 +192,7 @@ export async function generateAIResponse(
         modeResult.routerResult,
         modeResult.progress,
         collectionKey,
-        liveState,
+        priorState,
     );
     timings.buildPrompt = performance.now() - promptStart;
 
@@ -167,6 +221,14 @@ export async function generateAIResponse(
         const rawContent = await invokeWithRetry(chat, messages);
         timings.llmInvoke = performance.now() - invokeStart;
 
+        // 4b. Join the concurrent sensing pass. By now it has usually already
+        //     settled, so sensingJoinWait should be near zero on a normal turn -
+        //     that number is how much sensing still costs after parallelization.
+        const joinStart = performance.now();
+        const liveState = await sensingPromise;
+        timings.sensingJoinWait = performance.now() - joinStart;
+        timings.sensing = performance.now() - sensingStart;
+
         // 5. Parse markers from the response
         const parseStart = performance.now();
         const markers = parseMarkers(rawContent);
@@ -183,6 +245,7 @@ export async function generateAIResponse(
             totalMs: Math.round(totalTime),
             timings: {
                 sensing: Math.round(timings.sensing),
+                sensingJoinWait: Math.round(timings.sensingJoinWait),
                 determineMode: Math.round(timings.determineMode),
                 buildPrompt: Math.round(timings.buildPrompt),
                 fetchHistory: Math.round(timings.fetchHistory),
@@ -202,6 +265,9 @@ export async function generateAIResponse(
         };
     } catch (error) {
         console.error('[AI] All retry attempts failed:', error);
+
+        // Still join sensing so its state write lands before the request ends.
+        await sensingPromise;
 
         void logEvent('error', 'ai', 'AI generation failed after retries', {
             socioId: socio.id,

@@ -67,6 +67,8 @@ function toMessage(p: PrismaMessage): Message {
         role: p.role as Message["role"],
         content: p.content,
         senderType: p.senderType,
+        assessmentSessionId: p.assessmentSessionId,
+        metadata: p.metadata as Record<string, unknown> | null,
         createdAt: p.createdAt,
     };
 }
@@ -276,6 +278,8 @@ export const prismaRepo: Repo = {
                 role: data.role,
                 content: data.content,
                 senderType: (data as { senderType?: string }).senderType ?? null,
+                assessmentSessionId: (data as { assessmentSessionId?: string }).assessmentSessionId ?? null,
+                metadata: ((data as { metadata?: Record<string, unknown> }).metadata as object) ?? undefined,
             },
         });
         return toMessage(msg);
@@ -283,7 +287,7 @@ export const prismaRepo: Repo = {
 
     async getMessages(socioId, limit) {
         const messages = await prisma.message.findMany({
-            where: { socioId },
+            where: { socioId, assessmentSessionId: null },
             orderBy: { createdAt: "desc" },
             ...(limit ? { take: limit } : {}),
         });
@@ -294,6 +298,7 @@ export const prismaRepo: Repo = {
         const messages = await prisma.message.findMany({
             where: {
                 socioId,
+                assessmentSessionId: null,
                 ...(opts?.since ? { createdAt: { gt: opts.since } } : {}),
             },
             orderBy: { createdAt: "desc" },
@@ -330,6 +335,16 @@ export const prismaRepo: Repo = {
             where: { socioId },
             data: {
                 currentMessageIndex: { increment: 1 },
+            },
+        });
+        return toSocioProgress(progress);
+    },
+
+    async resetMessageIndex(socioId) {
+        const progress = await prisma.socioProgress.update({
+            where: { socioId },
+            data: {
+                currentMessageIndex: 0,
             },
         });
         return toSocioProgress(progress);
@@ -731,5 +746,38 @@ export const prismaRepo: Repo = {
             data: { curriculumCollectionKey: collectionKey },
         });
         return toSocio(socio);
+    },
+
+    // ─── Assessment Session Methods ─────────────────────────────────────────────
+
+    async getAssessmentSessionsForSocioLesson(socioId, lessonKey, blockId) {
+        const sessions = await prisma.assessmentSession.findMany({
+            where: {
+                socioId,
+                lessonKey,
+                blockId,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return sessions.map((s) => ({
+            id: s.id,
+            organizationId: s.organizationId,
+            socioId: s.socioId,
+            lessonKey: s.lessonKey,
+            blockId: s.blockId ?? null,
+            kind: s.kind as 'gated_session' | 'inline_formative',
+            channel: s.channel,
+            status: s.status as 'pending' | 'in_progress' | 'completed',
+            attemptNumber: s.attemptNumber,
+            turnCount: s.turnCount,
+            liveState: s.liveState as Record<string, unknown> | null,
+            scores: s.scores as Record<string, number> | null,
+            passedAt: s.passedAt,
+            completedAt: s.completedAt,
+            configSnapshot: s.configSnapshot as Record<string, unknown>,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+        }));
     },
 };

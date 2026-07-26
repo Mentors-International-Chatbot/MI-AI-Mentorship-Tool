@@ -99,7 +99,7 @@ export default async function AdminSocioDetailPage({
       prisma.socioProgress.findUnique({ where: { socioId: id } }),
       prisma.socioFlag.findMany({ where: { socioId: id }, orderBy: { createdAt: 'desc' } }),
       prisma.lessonProgress.findMany({ where: { socioId: id }, orderBy: { lessonNumber: 'asc' } }),
-      prisma.message.findMany({ where: { socioId: id }, orderBy: { createdAt: 'desc' }, take: 50 }),
+      prisma.message.findMany({ where: { socioId: id, assessmentSessionId: null }, orderBy: { createdAt: 'desc' }, take: 50 }),
       prisma.financialSnapshot.findMany({ where: { socioId: id }, orderBy: { weekStartDate: 'asc' }, take: 52 }),
       prisma.socioFeedback.findMany({
         where: { socioId: id },

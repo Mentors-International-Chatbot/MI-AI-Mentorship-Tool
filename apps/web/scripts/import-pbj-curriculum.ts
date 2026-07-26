@@ -7,6 +7,7 @@ import "dotenv/config";
 
 import { prisma } from "../src/lib/db";
 import { pbjPackage } from "../src/lib/journey-package/examples/pbj-journey-package";
+import { journeyPackageSchema } from "../src/lib/journey-package/journey-package.schema";
 import { importJourneyPackage } from "../src/lib/journey-package/import-journey-package";
 import { publishVersion } from "../src/lib/journey-package/publication.service";
 
@@ -48,9 +49,21 @@ async function main() {
     console.log(`Organization ID: ${org.id}`);
     console.log(`Program ID: ${program.id}`);
 
-    // 3. Import the PBJ package
-    console.log("\nStep 1: Importing PBJ JourneyPackage...");
-    const importResult = await importJourneyPackage(pbjPackage, {
+    // 3. Parse and import the PBJ package
+    console.log("\nStep 1: Validating PBJ JourneyPackage...");
+    const parseResult = journeyPackageSchema.safeParse(pbjPackage);
+    if (!parseResult.success) {
+      console.error("❌ PBJ package validation failed:");
+      for (const issue of parseResult.error.issues) {
+        console.error(`  - [${issue.path.join(".") || "(root)"}] ${issue.message}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log("✅ Package validated");
+    console.log("\nStep 2: Importing PBJ JourneyPackage...");
+    const importResult = await importJourneyPackage(parseResult.data, {
       organizationId: org.id,
       programId: program.id,
       importedBy: "import-pbj-script",

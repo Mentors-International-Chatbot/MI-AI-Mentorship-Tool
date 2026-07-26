@@ -35,6 +35,30 @@ export interface LessonMessage {
   contentEs: string;
 }
 
+/**
+ * Gated teach-back block info - represents a gate that blocks progression.
+ */
+export interface LessonGate {
+  /** The block ID from the journey package (e.g., "b8-gated-teach-back") */
+  blockId: string;
+  /** The original block order in the lesson */
+  blockOrder: number;
+  /** Position in the messages array AFTER which this gate appears (0-indexed) */
+  afterMessageIndex: number;
+  /** The teach-back prompt to show the student */
+  prompt: string;
+  /** Concepts being evaluated */
+  evaluatesConcepts: string[];
+  /** The dimension being assessed */
+  dimensionKey: string;
+  /** Optional passing override for this block */
+  passingOverride?: {
+    threshold?: number;
+    minTurns?: number;
+    maxTurns?: number;
+  };
+}
+
 export interface LessonData {
   lessonNumber: number;
   titleEs: string;
@@ -44,6 +68,10 @@ export interface LessonData {
   exercise: string;
   commitment: string;
   messages: LessonMessage[];
+  /** Gated teach-back blocks that appear in this lesson */
+  gates: LessonGate[];
+  /** The lesson key from the journey package (e.g., "assemble-the-sandwich") */
+  lessonKey: string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -87,8 +115,11 @@ function keyToLessonNumber(key: string, fallbackIndex: number): number {
 function transformToLessonData(pkg: PackageLesson, orderIndex: number): LessonData {
   const lessonNumber = keyToLessonNumber(pkg.key, orderIndex);
 
+  // Sort all blocks by order first
+  const sortedBlocks = [...pkg.blocks].sort((a, b) => a.order - b.order);
+
   // Extract teach blocks and transform to messages
-  const messages: LessonMessage[] = pkg.blocks
+  const messages: LessonMessage[] = sortedBlocks
     .filter((b): b is LessonBlock & { blockType: "teach"; role: TeachRole } =>
       b.blockType === "teach" && "role" in b
     )
@@ -96,11 +127,38 @@ function transformToLessonData(pkg: PackageLesson, orderIndex: number): LessonDa
       order: b.order,
       type: ROLE_TO_TYPE[b.role] || "explicación",
       contentEs: b.content,
-    }))
-    .sort((a, b) => a.order - b.order);
+    }));
+
+  // Extract gated teach-back blocks
+  const gates: LessonGate[] = [];
+  for (const block of sortedBlocks) {
+    if (
+      block.blockType === "teach_back" &&
+      "delivery" in block &&
+      block.delivery === "gated_session"
+    ) {
+      // Find how many teach messages appear before this gate
+      const teachBlocksBefore = sortedBlocks.filter(
+        (b) => b.blockType === "teach" && b.order < block.order
+      ).length;
+
+      gates.push({
+        blockId: block.id,
+        blockOrder: block.order,
+        // afterMessageIndex is the 0-indexed position after which gate appears
+        // e.g., if there are 4 teach blocks before gate, afterMessageIndex = 3 (after 4th message)
+        afterMessageIndex: teachBlocksBefore - 1,
+        prompt: block.prompt,
+        evaluatesConcepts: block.evaluatesConcepts || [],
+        dimensionKey: block.dimensionKey, // Required in schema
+        passingOverride: block.passingOverride,
+      });
+    }
+  }
 
   return {
     lessonNumber,
+    lessonKey: pkg.key,
     titleEs: pkg.title,
     category: pkg.category || "",
     keyConcepts: pkg.keyConcepts || [],
@@ -108,6 +166,7 @@ function transformToLessonData(pkg: PackageLesson, orderIndex: number): LessonDa
     exercise: pkg.exercise || "",
     commitment: pkg.commitment || "",
     messages,
+    gates,
   };
 }
 
@@ -172,6 +231,31 @@ async function ensureCollectionLoaded(collectionKey: string): Promise<Map<number
   }
 
   return loadPromise;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Gate Detection
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Checks if there's a gated teach-back at the given message index.
+ * Returns the gate info if one exists at this position.
+ *
+ * @param lesson - The lesson data
+ * @param messageIndex - The current 0-indexed message position
+ * @returns The gate if one should be triggered after this message, or null
+ */
+export function getGateAtPosition(lesson: LessonData, messageIndex: number): LessonGate | null {
+  // A gate triggers AFTER its afterMessageIndex
+  // So if messageIndex == gate.afterMessageIndex, the gate should fire
+  return lesson.gates.find((g) => g.afterMessageIndex === messageIndex) ?? null;
+}
+
+/**
+ * Checks if the lesson has any gated teach-backs.
+ */
+export function hasGates(lesson: LessonData): boolean {
+  return lesson.gates.length > 0;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

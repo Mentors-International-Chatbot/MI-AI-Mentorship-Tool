@@ -10,9 +10,9 @@
  * `teach` block + config path.
  * ----------------------------------------------------------------------------
  */
-import { journeyPackageSchema, type JourneyPackage } from "../journey-package.schema";
+import { journeyPackageSchema, type JourneyPackageInput } from "../journey-package.schema";
 
-const pbjPackage: JourneyPackage = {
+const pbjPackage: JourneyPackageInput = {
   schemaVersion: "1.0",
 
   metadata: {
@@ -68,6 +68,14 @@ const pbjPackage: JourneyPackage = {
     graduation: {
       requiredLessonKeys: ["assemble-the-sandwich"], // must exist in curriculum.lessons below
       requiredDimensionKeys: ["sequencing"],
+    },
+    assessment: {
+      passing: { dimensionKey: "sequencing", threshold: 7, minTurns: 2, maxTurns: 10 },
+      // studentVisibleDimensionKeys omitted → defaults to ["sequencing"]
+      // recordedDimensionKeys omitted → defaults to all tracked
+      onMaxTurnsWithoutPass: "complete_with_scores",
+      blocking: true,
+      allowRetake: true,
     },
   },
 
@@ -162,6 +170,20 @@ const pbjPackage: JourneyPackage = {
               label: "Knife safety basics",
               description: "Optional: a quick refresher before the cutting step.",
             },
+          },
+          {
+            id: "b8-gated-teach-back",
+            order: 8,
+            blockType: "teach_back",
+            prompt:
+              "Explain, in your own order, how you'd make a PB&J from scratch — walk me " +
+              "through each step.",
+            evaluatesConcepts: [
+              "Steps must happen in a working order: bread out, spread, combine, cut.",
+              "Spreading peanut butter and jelly on separate slices keeps the bread from tearing.",
+            ],
+            dimensionKey: "sequencing",
+            delivery: "gated_session",
           },
         ],
         exercise: "Make one PB&J sandwich, narrating each step out loud as you go.",

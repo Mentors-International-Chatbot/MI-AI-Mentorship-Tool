@@ -1,4 +1,5 @@
 import type { ChannelType } from '@/lib/delivery/types';
+import type { AssessmentSession } from './tenantRepo.types';
 
 export type Role = "user" | "assistant" | "system" | "mentor";
 export type SocioStatus =
@@ -33,6 +34,8 @@ export type Message = {
     role: Role;
     content: string;
     senderType?: string | null;
+    assessmentSessionId?: string | null;
+    metadata?: Record<string, unknown> | null;
     createdAt: Date;
 };
 
@@ -176,6 +179,8 @@ export interface Repo {
     initProgress(socioId: string): Promise<SocioProgress>;
     getSocioProgress(socioId: string): Promise<SocioProgress>;
     advanceMessage(socioId: string): Promise<SocioProgress>;
+    /** Resets message index to 0, used for return_for_reteach */
+    resetMessageIndex(socioId: string): Promise<SocioProgress>;
     completeLesson(socioId: string, lessonNumber: number, scores: LessonScores): Promise<SocioProgress>;
 
     getStaleLessonSocios(hoursThreshold: number, maxReminders: number): Promise<StaleSocio[]>;
@@ -231,4 +236,11 @@ export interface Repo {
 
     // Curriculum selection
     setSocioCurriculum(socioId: string, collectionKey: string): Promise<Socio>;
+
+    // Assessment session methods (for gated teach-backs)
+    getAssessmentSessionsForSocioLesson(
+        socioId: string,
+        lessonKey: string,
+        blockId: string,
+    ): Promise<AssessmentSession[]>;
 }

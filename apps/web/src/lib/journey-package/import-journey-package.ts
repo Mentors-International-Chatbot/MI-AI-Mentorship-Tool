@@ -42,6 +42,62 @@ export type ImportResult = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Auto-Append Teach-Back
+// ═══════════════════════════════════════════════════════════════════════════
+
+type AppendResult = {
+  lessons: PackageLesson[];
+  synthesizedCount: number;
+};
+
+/**
+ * If autoAppendTeachBack is enabled, synthesize a gated teach_back at the end
+ * of each lesson that doesn't already have one.
+ * Exported for testing.
+ */
+export function maybeAppendTeachBack(
+  lessons: PackageLesson[],
+  assessment: JourneyPackage["config"]["assessment"]
+): AppendResult {
+  if (!assessment?.autoAppendTeachBack) {
+    return { lessons, synthesizedCount: 0 };
+  }
+
+  const dimensionKey = assessment.passing.dimensionKey;
+  let synthesizedCount = 0;
+
+  const transformed = lessons.map((lesson) => {
+    // Check if lesson already has any teach_back block (inline or gated)
+    const hasTeachBack = lesson.blocks.some((b) => b.blockType === "teach_back");
+
+    if (hasTeachBack) {
+      // Skip - lesson already has a teach_back (author's intent preserved)
+      return lesson;
+    }
+
+    // Synthesize a gated teach_back block
+    synthesizedCount++;
+    const maxOrder = Math.max(...lesson.blocks.map((b) => b.order), 0);
+    const synthesizedBlock = {
+      id: `${lesson.key}-synth-teachback`,
+      order: maxOrder + 1,
+      blockType: "teach_back" as const,
+      prompt: `In your own words, explain what you learned about: ${lesson.title}`,
+      evaluatesConcepts: lesson.keyConcepts,
+      dimensionKey,
+      delivery: "gated_session" as const,
+    };
+
+    return {
+      ...lesson,
+      blocks: [...lesson.blocks, synthesizedBlock],
+    };
+  });
+
+  return { lessons: transformed, synthesizedCount };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Import Function
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -57,6 +113,18 @@ export async function importJourneyPackage(
   opts: ImportOptions
 ): Promise<ImportResult> {
   const warnings: string[] = [];
+
+  // ─── 0. Auto-append teach-back blocks if enabled ───────────────────────────
+  const { lessons, synthesizedCount } = maybeAppendTeachBack(
+    pkg.curriculum.lessons,
+    pkg.config.assessment
+  );
+  if (synthesizedCount > 0) {
+    warnings.push(
+      `autoAppendTeachBack: synthesized ${synthesizedCount} gated teach_back block(s) ` +
+        `using dimension "${pkg.config.assessment?.passing.dimensionKey}".`
+    );
+  }
 
   // ─── 1. Upsert ContentCollection ─────────────────────────────────────────
   const collection = await prisma.contentCollection.upsert({
@@ -81,8 +149,8 @@ export async function importJourneyPackage(
   // ─── 2. Upsert Lessons + LessonVersions ──────────────────────────────────
   let lessonsImported = 0;
 
-  for (let i = 0; i < pkg.curriculum.lessons.length; i++) {
-    const lesson = pkg.curriculum.lessons[i];
+  for (let i = 0; i < lessons.length; i++) {
+    const lesson = lessons[i];
 
     // Upsert the lesson row
     const lessonRow = await prisma.contentLesson.upsert({
@@ -139,6 +207,7 @@ export async function importJourneyPackage(
     trackedDimensions: pkg.config.trackedDimensions,
     alertRules: pkg.config.alertRules,
     graduation: pkg.config.graduation,
+    assessment: pkg.config.assessment,
 
     // Reference to curriculum
     curriculumCollectionKey: pkg.curriculum.collectionKey,

@@ -11,6 +11,8 @@ export enum InteractionMode {
   REMINDER = 'REMINDER',
   MENTOR_HANDOFF = 'MENTOR_HANDOFF',
   POST_MENTOR = 'POST_MENTOR',
+  /** Gated assessment session - student must complete teach-back to proceed */
+  GATED_ASSESSMENT = 'GATED_ASSESSMENT',
 }
 
 // ─── Tone Overrides ─────────────────────────────────────────────────
@@ -85,6 +87,27 @@ export interface ReminderState {
   maxReminders: number;
 }
 
+// ─── Gated Assessment State ─────────────────────────────────────────
+
+export interface GatedAssessmentState {
+  /** The lesson containing the gate */
+  lessonNumber: number;
+  lessonKey: string;
+  lessonTitleEs: string;
+  /** The gated block ID */
+  blockId: string;
+  /** The teach-back prompt */
+  prompt: string;
+  /** Concepts being evaluated */
+  evaluatesConcepts: string[];
+  /** Dimension being assessed */
+  dimensionKey: string;
+  /** Session ID if one already exists (resume) */
+  sessionId?: string;
+  /** Whether student has already passed (can proceed) */
+  passed?: boolean;
+}
+
 // ─── Router Result ──────────────────────────────────────────────────
 
 export interface RouterResult {
@@ -94,6 +117,7 @@ export interface RouterResult {
   reteach?: ReteachState;
   mentor?: MentorSession;
   reminder?: ReminderState;
+  gatedAssessment?: GatedAssessmentState;
 }
 
 // ─── Parsed Markers ─────────────────────────────────────────────────

@@ -6,9 +6,13 @@ import { hasLessonData, preloadCollection, getLessonCount } from '@/lib/lessons/
 import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
 import { extractAndStoreContext } from '@/lib/ai/contextExtractor';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
+import type { Message } from '@/lib/repo/types';
 import { LESSON_MESSAGES, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getConfigNumber } from '@/lib/config/service';
 import { getCourseMeta, buildWelcomeMessage } from '@/lib/courses/course-meta';
+import { createAssessmentSession } from '@/lib/ai/assessment/createAssessmentSession';
+import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
+import { createTenantContext } from '@/lib/repo/tenantContext';
 
 export interface HandleMessageInput {
     externalId: string;
@@ -27,6 +31,8 @@ export interface HandleMessageResult {
     socioId: string;
     isNewSocio: boolean;
     isError?: boolean;
+    /** Created messages with DB ids and metadata for client rendering */
+    messages?: Message[];
 }
 
 export async function handleIncomingMessage(input: HandleMessageInput): Promise<HandleMessageResult> {
@@ -266,6 +272,78 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
     const aiResponse = await generateAIResponse(socio, message, collectionKey);
 
+    // ── Handle gated assessment mode ──────────────────────────────────────────
+    // When student reaches a gated teach-back with blocking=true, we pause lesson
+    // progress. The router already checked configSnapshot.blocking and only routes
+    // to GATED_ASSESSMENT if blocking is true and no completed session exists.
+    if (aiResponse.mode === InteractionMode.GATED_ASSESSMENT && aiResponse.gatedAssessment) {
+        const gate = aiResponse.gatedAssessment;
+
+        // Get or create session
+        let sessionId = gate.sessionId; // Router returns existing open session if any
+        const isReusingSession = !!sessionId;
+
+        if (!sessionId) {
+            // No open session exists - create one
+            // resolveOrganizationIdForSocio never fails: tries ParticipantProfile → curriculum → default org
+            const organizationId = await tenantPrismaRepo.resolveOrganizationIdForSocio(socio.id);
+            const ctx = createTenantContext(organizationId);
+            try {
+                const newSession = await createAssessmentSession({
+                    ctx,
+                    repo: tenantPrismaRepo,
+                    socioId: socio.id,
+                    lessonKey: gate.lessonKey,
+                    blockId: gate.blockId,
+                    channel: socio.channelType,
+                });
+                sessionId = newSession.id;
+                console.log(`[MessageHandler] Created assessment session ${sessionId} for socio ${socio.id}, block ${gate.blockId}, org ${organizationId}`);
+            } catch (err) {
+                console.error(`[MessageHandler] Failed to create assessment session:`, err);
+                // Fall through - will post message without session metadata
+            }
+        } else {
+            console.log(`[MessageHandler] Reusing existing assessment session ${sessionId} for socio ${socio.id}`);
+        }
+
+        // User message was already added at line 129 - don't duplicate
+
+        // Only post the gate message when creating a NEW session.
+        // When reusing an existing session, the gate card is already in the chat - don't duplicate it.
+        const createdMessages: Message[] = [];
+
+        if (!isReusingSession) {
+            const gateMessage = await repo.addMessage({
+                socioId: socio.id,
+                role: 'assistant',
+                content: aiResponse.text,
+                senderType: 'ai',
+                metadata: sessionId ? {
+                    kind: 'assessment_gate',
+                    sessionId,
+                    lessonKey: gate.lessonKey,
+                    blockId: gate.blockId,
+                } : null,
+            } as Parameters<typeof repo.addMessage>[0]);
+
+            createdMessages.push(gateMessage);
+            await channel.sendMessage(externalId, aiResponse.text);
+
+            console.log(`[MessageHandler] Gated assessment triggered for socio ${socio.id}, block ${gate.blockId}, session ${sessionId ?? 'none'}`);
+        }
+
+        return {
+            responseText: isReusingSession ? '' : aiResponse.text, // No response text when reusing
+            mode: aiResponse.mode,
+            markers: aiResponse.markers,
+            socioId: socio.id,
+            isNewSocio,
+            isError: false,
+            messages: createdMessages,
+        };
+    }
+
     for (const flag of aiResponse.markers.flags) {
         await repo.createFlag({
             socioId: socio.id,
@@ -370,7 +448,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         }
     }
 
-    await repo.addMessage({
+    const assistantMessage = await repo.addMessage({
         socioId: socio.id,
         role: 'assistant',
         content: responseText,
@@ -408,5 +486,6 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         socioId: socio.id,
         isNewSocio,
         isError: aiResponse.isError,
+        messages: [assistantMessage],
     };
 }

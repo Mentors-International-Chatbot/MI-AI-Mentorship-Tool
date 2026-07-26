@@ -10,6 +10,7 @@ import {
     CHAT_SUBTITLE,
     CHAT_EMPTY_STATE_SOCIO,
 } from '@/lib/i18n/languages';
+import { AssessmentGateCard } from '@/components/AssessmentGateCard';
 
 interface ChatMessage {
     id?: string;
@@ -18,6 +19,7 @@ interface ChatMessage {
     createdAt?: string;
     isError?: boolean;
     senderType?: string | null;
+    metadata?: Record<string, unknown> | null;
 }
 
 type PollMessage = {
@@ -26,6 +28,7 @@ type PollMessage = {
     content: string;
     senderType: string | null;
     createdAt: string;
+    metadata?: Record<string, unknown> | null;
 };
 
 type ClientSession = {
@@ -178,6 +181,7 @@ export default function ChatPage() {
                             content: string;
                             createdAt: string;
                             senderType?: string | null;
+                            metadata?: Record<string, unknown> | null;
                         }[];
                         currentLesson?: number;
                         completedLessons?: number[];
@@ -190,6 +194,7 @@ export default function ChatPage() {
                             content: m.content,
                             createdAt: m.createdAt,
                             senderType: m.senderType ?? null,
+                            metadata: m.metadata ?? null,
                         })),
                     );
                     if (typeof payload.currentLesson === 'number') {
@@ -377,6 +382,7 @@ export default function ChatPage() {
                             content: m.content,
                             createdAt: m.createdAt,
                             senderType: m.senderType,
+                            metadata: m.metadata,
                         })),
                     ];
                 });
@@ -482,7 +488,17 @@ export default function ChatPage() {
                 return;
             }
 
-            if (data.response) {
+            // Use returned messages with DB ids and metadata (enables gate card rendering + poll dedupe)
+            if (data.messages && data.messages.length > 0) {
+                setMessages((prev) => [
+                    ...prev,
+                    ...data.messages.map((m: ChatMessage) => ({
+                        ...m,
+                        isError: Boolean(data.isError),
+                    })),
+                ]);
+            } else if (data.response) {
+                // Fallback for backwards compatibility
                 setMessages((prev) => [
                     ...prev,
                     {
@@ -602,49 +618,70 @@ export default function ChatPage() {
                     </div>
                 )}
 
-                {messages.map((msg, i) => (
-                    <div
-                        key={msg.id ?? `${msg.createdAt ?? 'm'}-${i}-${msg.role}`}
-                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
+                {messages.map((msg, i) => {
+                    // Assessment gate card - special rendering for gated teach-back messages
+                    if (msg.metadata?.kind === 'assessment_gate' && typeof msg.metadata.sessionId === 'string') {
+                        return (
+                            <div
+                                key={msg.id ?? `${msg.createdAt ?? 'm'}-${i}-${msg.role}`}
+                                className="flex justify-start"
+                            >
+                                <div className="max-w-[85%]">
+                                    <AssessmentGateCard
+                                        sessionId={msg.metadata.sessionId}
+                                        content={msg.content}
+                                        language={language}
+                                    />
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    // Standard message bubble
+                    return (
                         <div
-                            className={`flex flex-col gap-1 max-w-[80%] ${
-                                msg.role === 'user' ? 'items-end' : 'items-start'
-                            }`}
+                            key={msg.id ?? `${msg.createdAt ?? 'm'}-${i}-${msg.role}`}
+                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
                             <div
-                                className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                                    msg.role === 'user'
-                                        ? 'bg-emerald-600 text-white rounded-br-md whitespace-pre-wrap'
-                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-bl-md'
+                                className={`flex flex-col gap-1 max-w-[80%] ${
+                                    msg.role === 'user' ? 'items-end' : 'items-start'
                                 }`}
                             >
-                                {msg.role === 'assistant' ? (
-                                    renderAssistantMessageContent(msg.content)
-                                ) : (
-                                    msg.content
-                                )}
-                                {msg.role === 'assistant' && msg.senderType === 'mentor' && (
-                                    <span className="text-xs text-blue-500 dark:text-blue-400 block mt-2 font-medium">
-                                        — {CHAT_SUBTITLE[language].mentor}
-                                    </span>
-                                )}
+                                <div
+                                    className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                                        msg.role === 'user'
+                                            ? 'bg-emerald-600 text-white rounded-br-md whitespace-pre-wrap'
+                                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-bl-md'
+                                    }`}
+                                >
+                                    {msg.role === 'assistant' ? (
+                                        renderAssistantMessageContent(msg.content)
+                                    ) : (
+                                        msg.content
+                                    )}
+                                    {msg.role === 'assistant' && msg.senderType === 'mentor' && (
+                                        <span className="text-xs text-blue-500 dark:text-blue-400 block mt-2 font-medium">
+                                            — {CHAT_SUBTITLE[language].mentor}
+                                        </span>
+                                    )}
+                                </div>
+                                {msg.role === 'assistant' &&
+                                    msg.isError &&
+                                    i === messages.length - 1 &&
+                                    !isLoading && (
+                                        <button
+                                            type="button"
+                                            onClick={handleRetry}
+                                            className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-500 dark:hover:text-emerald-400 underline"
+                                        >
+                                            Reintentar / Retry
+                                        </button>
+                                    )}
                             </div>
-                            {msg.role === 'assistant' &&
-                                msg.isError &&
-                                i === messages.length - 1 &&
-                                !isLoading && (
-                                    <button
-                                        type="button"
-                                        onClick={handleRetry}
-                                        className="text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-500 dark:hover:text-emerald-400 underline"
-                                    >
-                                        Reintentar / Retry
-                                    </button>
-                                )}
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
 
                 {isLoading && messages.length > 0 && (
                     <div className="flex justify-start">

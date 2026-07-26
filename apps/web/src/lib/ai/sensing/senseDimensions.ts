@@ -16,6 +16,7 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { DIMENSION_DEFINITIONS } from '@/lib/ai/prompts/constants';
 import type { SensedDimension, DimensionStateMap, SensingResult } from './types';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
+import { isTrivialMessage } from './triviality';
 
 const SENSING_TIMEOUT_MS = 10000; // 10 seconds max - this should be fast
 const SENSING_MODEL = "anthropic/claude-haiku-4.5"; // Use a fast model for sensing
@@ -119,11 +120,15 @@ export async function senseDimensions(params: {
 }): Promise<SensingResult> {
   const { incomingText, priorState, lessonContext } = params;
 
-  // Skip sensing for very short messages
-  if (incomingText.trim().length < 3) {
+  // Skip sensing on messages that cannot carry signal ("ok", "sí", "next").
+  // Returning neutral defaults here would drag real state toward 5/10 via the
+  // EMA, so we return nothing and let the caller keep the prior state.
+  if (isTrivialMessage(incomingText, 'chat')) {
+    console.log('[Sensing] Skipped (trivial message), carrying prior state forward');
     return {
-      dimensions: getDefaultDimensions(),
+      dimensions: [],
       rawResponse: undefined,
+      skipped: true,
     };
   }
 

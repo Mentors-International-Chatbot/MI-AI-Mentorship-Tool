@@ -175,7 +175,7 @@ export async function generateSummary(
 
   const [messages, sentiments, progress, activeFlags, lessonsThisWeek] = await Promise.all([
     prisma.message.findMany({
-      where: { socioId, createdAt: { gte: weekAgo } },
+      where: { socioId, assessmentSessionId: null, createdAt: { gte: weekAgo } },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.messageSentiment.findMany({

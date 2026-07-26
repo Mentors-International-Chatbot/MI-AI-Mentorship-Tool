@@ -115,6 +115,10 @@ export async function buildTaskPrompt(
     case InteractionMode.POST_MENTOR:
       basePrompt = await buildPostMentorPrompt(socio, result.mentor!, participantNoun, language);
       break;
+    case InteractionMode.GATED_ASSESSMENT:
+      // GATED_ASSESSMENT is handled by assessment pipeline before buildPrompt is called
+      // (see service.ts:144 early return). This case is unreachable at runtime.
+      throw new Error(`Unexpected mode in task layer: ${result.mode}`);
   }
 
   // Append dimension context if available

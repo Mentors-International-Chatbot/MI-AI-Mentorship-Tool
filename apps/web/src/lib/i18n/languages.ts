@@ -79,6 +79,60 @@ export const CHAT_EMPTY_STATE_SOCIO: Record<SupportedLanguage, (name?: string) =
             : 'Olá! Escreva uma mensagem para começar.',
 };
 
+// ─── Assessment Strings (for gated teach-back UI) ─────────────────────
+
+interface AssessmentStrings {
+    startButton: string;
+    resumeButton: string;
+    viewButton: string;
+    completeButton: string;
+    backToChat: string;
+    scoreLabel: string;
+    loading: string;
+    error: string;
+    readOnlyNotice: string;
+    placeholder: string;
+}
+
+export const ASSESSMENT_STRINGS: Record<SupportedLanguage, AssessmentStrings> = {
+    es: {
+        startButton: 'Comenzar evaluación',
+        resumeButton: 'Continuar evaluación',
+        viewButton: 'Ver evaluación',
+        completeButton: 'Evaluación completada',
+        backToChat: 'Volver a tu lección',
+        scoreLabel: 'Comprensión',
+        loading: 'Cargando...',
+        error: 'No se pudo cargar la evaluación. Intenta de nuevo.',
+        readOnlyNotice: 'Esta evaluación ya está completada.',
+        placeholder: 'Escribe tu respuesta...',
+    },
+    en: {
+        startButton: 'Start assessment',
+        resumeButton: 'Resume assessment',
+        viewButton: 'View assessment',
+        completeButton: 'Assessment complete',
+        backToChat: 'Back to your lesson',
+        scoreLabel: 'Understanding',
+        loading: 'Loading...',
+        error: 'Could not load assessment. Please try again.',
+        readOnlyNotice: 'This assessment is already complete.',
+        placeholder: 'Type your response...',
+    },
+    pt: {
+        startButton: 'Iniciar avaliação',
+        resumeButton: 'Continuar avaliação',
+        viewButton: 'Ver avaliação',
+        completeButton: 'Avaliação concluída',
+        backToChat: 'Voltar para sua lição',
+        scoreLabel: 'Compreensão',
+        loading: 'Carregando...',
+        error: 'Não foi possível carregar a avaliação. Tente novamente.',
+        readOnlyNotice: 'Esta avaliação já foi concluída.',
+        placeholder: 'Digite sua resposta...',
+    },
+};
+
 // ─── AI Error Fallback Messages ───────────────────────────────────────
 
 export const AI_ERROR_FALLBACK: Record<SupportedLanguage, string> = {

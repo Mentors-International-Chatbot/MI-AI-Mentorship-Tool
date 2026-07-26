@@ -121,6 +121,18 @@ export const inMemoryRepo: Repo = {
         return progress;
     },
 
+    async resetMessageIndex(socioId) {
+        const progress = progressBySocio.get(socioId) ?? makeDefaultProgress(socioId);
+        progress.currentMessageIndex = 0;
+        progressBySocio.set(socioId, progress);
+        return progress;
+    },
+
+    async getAssessmentSessionsForSocioLesson(_socioId: string, _lessonKey: string, _blockId?: string) {
+        // In-memory repo doesn't track assessment sessions
+        return [];
+    },
+
     async completeLesson(socioId, lessonNumber, scores: LessonScores) {
         const progress = progressBySocio.get(socioId) ?? makeDefaultProgress(socioId);
         if (!progress.completedLessons.includes(lessonNumber)) {

@@ -24,4 +24,10 @@ export type DimensionStateMap = Record<string, DimensionState>;
 export interface SensingResult {
   dimensions: SensedDimension[];
   rawResponse?: string;  // For debugging
+  /**
+   * True when the message was too trivial to sense (bare acknowledgment or a
+   * few words). No LLM call was made and `dimensions` is empty - callers must
+   * carry the prior state forward unchanged rather than applying an EMA step.
+   */
+  skipped?: boolean;
 }
