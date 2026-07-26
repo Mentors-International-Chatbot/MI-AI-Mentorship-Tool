@@ -235,6 +235,11 @@ export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<Ass
     keyConcepts,
     turnCount,
     minTurns: passing.minTurns,
+    // Grade cumulatively - a terse confirmation this turn must not wipe out
+    // the understanding the student already demonstrated earlier.
+    priorStudentAnswers: conversationHistory
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content),
   });
 
   const probePromptParams: AssessmentPromptParams = {

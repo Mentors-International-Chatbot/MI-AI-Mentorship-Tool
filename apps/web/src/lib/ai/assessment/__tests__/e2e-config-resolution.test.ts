@@ -119,7 +119,7 @@ describe('E2E: Config Resolution from Journey Package', () => {
     expect(validatedPbj.config.assessment?.passing.dimensionKey).toBe('sequencing');
     expect(validatedPbj.config.assessment?.passing.threshold).toBe(7);
     expect(validatedPbj.config.assessment?.passing.minTurns).toBe(2);
-    expect(validatedPbj.config.assessment?.passing.maxTurns).toBe(10);
+    expect(validatedPbj.config.assessment?.passing.maxTurns).toBe(5);
   });
 
   it('ProgramVersionConfig correctly captures assessment config', () => {
@@ -149,7 +149,7 @@ describe('E2E: Config Resolution from Journey Package', () => {
     expect(configSnapshot.passing.dimensionKey).toBe('sequencing');
     expect(configSnapshot.passing.threshold).toBe(7);
     expect(configSnapshot.passing.minTurns).toBe(2);
-    expect(configSnapshot.passing.maxTurns).toBe(10);
+    expect(configSnapshot.passing.maxTurns).toBe(5);
 
     // Also verify other config fields made it through
     expect(configSnapshot.trackedDimensions).toHaveLength(2);
@@ -202,7 +202,7 @@ describe('E2E: Config Resolution from Journey Package', () => {
     expect(configSnapshot.passing.threshold).toBe(8); // Overridden
     expect(configSnapshot.passing.minTurns).toBe(3);  // Overridden
     expect(configSnapshot.passing.dimensionKey).toBe('sequencing'); // Not overridden
-    expect(configSnapshot.passing.maxTurns).toBe(10); // Not overridden
+    expect(configSnapshot.passing.maxTurns).toBe(5); // Not overridden
   });
 
   it('throws AssessmentConfigError when assessment config is missing', async () => {

@@ -43,7 +43,11 @@ const pbjPackage: JourneyPackageInput = {
         category: "comprehension",
         primary: true,
         scale: { min: 0, max: 10 },
-        calibrationMode: "zero_start",
+        // Fast onboarding course: seed at the midpoint so a student who conveys
+        // the core idea can clear threshold 7 within 2-3 turns. MI's curriculum
+        // keeps zero_start - this is deliberately per-course, not a global change.
+        calibrationMode: "assumed_baseline",
+        assumedBaseline: 5,
       },
       {
         key: "confidence",
@@ -70,7 +74,9 @@ const pbjPackage: JourneyPackageInput = {
       requiredDimensionKeys: ["sequencing"],
     },
     assessment: {
-      passing: { dimensionKey: "sequencing", threshold: 7, minTurns: 2, maxTurns: 10 },
+      // maxTurns 5: a gist-check that has not resolved in 5 turns should wrap up
+      // via onMaxTurnsWithoutPass rather than grinding on.
+      passing: { dimensionKey: "sequencing", threshold: 7, minTurns: 2, maxTurns: 5 },
       // studentVisibleDimensionKeys omitted → defaults to ["sequencing"]
       // recordedDimensionKeys omitted → defaults to all tracked
       onMaxTurnsWithoutPass: "complete_with_scores",
