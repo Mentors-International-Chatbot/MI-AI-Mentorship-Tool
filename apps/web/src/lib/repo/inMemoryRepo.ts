@@ -1,5 +1,6 @@
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
+import { DEFAULT_LANGUAGE } from '@/lib/i18n/languages';
 
 const sociosByKey = new Map<string, Socio>();
 const sociosById = new Map<string, Socio>();
@@ -50,7 +51,7 @@ export const inMemoryRepo: Repo = {
             whatsappPhoneNumber: channelType === 'whatsapp' ? externalId : null,
             channelType,
             externalId,
-            language: 'es',
+            language: DEFAULT_LANGUAGE,
             name: null,
             status: "NEW",
             aiPaused: false,

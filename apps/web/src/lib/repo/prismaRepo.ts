@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
+import { DEFAULT_LANGUAGE } from "@/lib/i18n/languages";
 import {
     Prisma,
     OnboardingStatus,
@@ -250,6 +251,9 @@ export const prismaRepo: Repo = {
                 channelType,
                 externalId,
                 whatsappPhoneNumber: channelType === 'whatsapp' ? externalId : null,
+                // Set explicitly rather than relying on the DB column default,
+                // which is still "es" (changing it needs a migration).
+                language: DEFAULT_LANGUAGE,
             },
         });
         return toSocio(socio);

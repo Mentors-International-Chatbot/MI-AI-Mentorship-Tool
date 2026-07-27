@@ -4,6 +4,7 @@ import { buildCorePrompt } from './layers/core';
 import { buildContextPrompt } from './layers/context';
 import { buildTaskPrompt } from './layers/task';
 import { buildContentPrompt } from './layers/content';
+import { DEFAULT_LANGUAGE } from '@/lib/i18n/languages';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 
@@ -36,7 +37,7 @@ export async function buildSystemPrompt(
   const overrides = stripInternalPromptOverrides(
     (socio as Record<string, unknown>).promptOverrides,
   );
-  const language = (socio.language || 'es') as SupportedLanguage;
+  const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
 
   // Layer 1: Core identity + tone override + sliders + language directive (DB-backed, course-scoped)
   const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language);

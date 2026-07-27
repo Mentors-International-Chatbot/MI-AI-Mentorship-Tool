@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/messaging/handler';
 import { WebChannel } from '@/lib/delivery';
 import { verifySession } from '@/lib/auth/session';
-import { type SupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 import { toClientMessage } from './toClientMessage';
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
         }
 
         const { message } = body;
-        language = (body.language || 'es') as SupportedLanguage;
+        language = (body.language || DEFAULT_LANGUAGE) as SupportedLanguage;
 
         if (!message) {
             return NextResponse.json(

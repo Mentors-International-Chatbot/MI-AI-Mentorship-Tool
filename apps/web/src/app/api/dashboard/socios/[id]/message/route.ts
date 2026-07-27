@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { repo } from '@/lib/repo';
 import { WhatsAppChannel } from '@/lib/delivery';
 import { verifyMentorOwnership } from '@/lib/auth/ownership';
+import { DEFAULT_LANGUAGE } from '@/lib/i18n/languages';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 
 const MENTOR_LABEL: Record<SupportedLanguage, string> = {
@@ -43,7 +44,7 @@ export async function POST(
 
   if (socio.channelType === 'whatsapp' && socio.whatsappPhoneNumber) {
     try {
-      const lang = (socio.language ?? 'es') as SupportedLanguage;
+      const lang = (socio.language ?? DEFAULT_LANGUAGE) as SupportedLanguage;
       const label = MENTOR_LABEL[lang] ?? MENTOR_LABEL['es'];
       const whatsappText = `${content.trim()}\n\n— ${label}`;
       const channel = new WhatsAppChannel();

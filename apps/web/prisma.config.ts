@@ -11,5 +11,11 @@ export default defineConfig({
   },
   datasource: {
     url: process.env.DATABASE_URL!,
+    // Used ONLY by `prisma migrate dev` to build its throwaway shadow database.
+    // Never used at runtime. Must be a DIRECT (non-pooled) Neon URL — the
+    // pooled `-pooler` endpoint cannot CREATE/DROP databases, which is why
+    // `db push` got used instead of `migrate dev` historically.
+    // Left undefined when the env var is unset, so nothing breaks without it.
+    shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL,
   },
 });

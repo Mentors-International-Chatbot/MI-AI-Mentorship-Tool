@@ -7,7 +7,7 @@ import { analyzeSentimentAndFlag } from '@/lib/sentiment/pipeline';
 import { extractAndStoreContext } from '@/lib/ai/contextExtractor';
 import type { DeliveryChannel, ChannelType } from '@/lib/delivery/types';
 import type { Message } from '@/lib/repo/types';
-import { LESSON_MESSAGES, type SupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, LESSON_MESSAGES, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getConfigNumber } from '@/lib/config/service';
 import { getCourseMeta, buildWelcomeMessage } from '@/lib/courses/course-meta';
 import { createAssessmentSession } from '@/lib/ai/assessment/createAssessmentSession';
@@ -47,7 +47,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
         if (channelType === 'web' && userName !== undefined) {
             const displayName = userName?.trim() ? userName.trim() : null;
-            const socioLang = (language || 'es') as SupportedLanguage;
+            const socioLang = (language || DEFAULT_LANGUAGE) as SupportedLanguage;
 
             await repo.updateSocio(socio.id, {
                 language: socioLang,
@@ -239,7 +239,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
     // Require curriculum key - no silent fallback
     if (!collectionKey) {
-        const socioLang = (socio.language || 'es') as SupportedLanguage;
+        const socioLang = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
         const joinMessage = socioLang === 'en'
             ? 'Please join a course first to continue. Visit the app to select your course.'
             : socioLang === 'pt'
@@ -376,7 +376,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         console.log(`[Financial] socio=${socio.id} revenue=${fin.revenue} netProfit=${fin.netProfit}`);
     }
 
-    const socioLang = ((socio.language || 'es') as SupportedLanguage);
+    const socioLang = ((socio.language || DEFAULT_LANGUAGE) as SupportedLanguage);
     const lm = LESSON_MESSAGES[socioLang] ?? LESSON_MESSAGES['es'];
 
     let responseText = aiResponse.text;
@@ -436,7 +436,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             console.log(`[Escalation Persisted] socio=${socio.id} reason=${reason}`);
         }
 
-        const lang = (socio.language ?? 'es') as SupportedLanguage;
+        const lang = (socio.language ?? DEFAULT_LANGUAGE) as SupportedLanguage;
         const langStrings = LESSON_MESSAGES[lang] ?? LESSON_MESSAGES['es'];
         const escalationConfirmation = '\n\n' + langStrings.escalationConfirmation;
         responseText = responseText + escalationConfirmation;

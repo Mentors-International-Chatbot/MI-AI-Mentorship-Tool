@@ -10,7 +10,7 @@ import {
     type DetermineModeResult,
 } from './prompts';
 import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
-import { AI_ERROR_FALLBACK, type SupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, AI_ERROR_FALLBACK, type SupportedLanguage } from '@/lib/i18n/languages';
 import { logEvent } from '@/lib/logging/logger';
 import {
     senseDimensions,
@@ -156,7 +156,7 @@ export async function generateAIResponse(
     // normal AI generation. The client should switch to assessment mode.
     if (modeResult.routerResult.mode === InteractionMode.GATED_ASSESSMENT) {
         const gateState = modeResult.routerResult.gatedAssessment!;
-        const lang = (socio.language || 'es') as SupportedLanguage;
+        const lang = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
 
         // Build assessment intro message
         const introText = lang === 'en'
@@ -274,7 +274,7 @@ export async function generateAIResponse(
             error: error instanceof Error ? error.message : String(error),
         });
 
-        const language = (socio.language || 'es') as SupportedLanguage;
+        const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
         return {
             text: AI_ERROR_FALLBACK[language] ?? AI_ERROR_FALLBACK['es'],
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },

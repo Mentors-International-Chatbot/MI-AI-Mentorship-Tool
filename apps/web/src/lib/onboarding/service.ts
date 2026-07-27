@@ -33,7 +33,7 @@ const PLATFORM_STRINGS: Record<SupportedLanguage, {
 }> = {
     es: {
         languagePicker:
-            '¡Hola! 👋\n\nElige tu idioma / Choose your language / Escolha seu idioma:\n\n1. Español\n2. English\n3. Português',
+            '¡Hola! 👋\n\nChoose your language / Elige tu idioma / Escolha seu idioma:\n\n1. English\n2. Español\n3. Português',
         languageConfirmed: '¡Perfecto! Continuamos en español.',
         consentPrompt:
             "Para continuar, por favor lee y acepta nuestros términos de uso. Responde 'ACEPTO' para iniciar.",
@@ -43,7 +43,7 @@ const PLATFORM_STRINGS: Record<SupportedLanguage, {
     },
     en: {
         languagePicker:
-            'Hello! 👋\n\nChoose your language / Elige tu idioma / Escolha seu idioma:\n\n1. Español\n2. English\n3. Português',
+            'Hello! 👋\n\nChoose your language / Elige tu idioma / Escolha seu idioma:\n\n1. English\n2. Español\n3. Português',
         languageConfirmed: "Great! We'll continue in English.",
         consentPrompt:
             "To continue, please read and accept our terms of use. Reply 'ACCEPT' to start.",
@@ -53,7 +53,7 @@ const PLATFORM_STRINGS: Record<SupportedLanguage, {
     },
     pt: {
         languagePicker:
-            'Olá! 👋\n\nEscolha seu idioma / Elige tu idioma / Choose your language:\n\n1. Español\n2. English\n3. Português',
+            'Olá! 👋\n\nChoose your language / Escolha seu idioma / Elige tu idioma:\n\n1. English\n2. Español\n3. Português',
         languageConfirmed: 'Perfeito! Vamos continuar em português.',
         consentPrompt:
             "Para continuar, por favor leia e aceite nossos termos de uso. Responda 'ACEITO' para começar.",

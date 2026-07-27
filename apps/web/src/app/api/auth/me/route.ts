@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth/session';
 import { prisma } from '@/lib/db';
 import { repo } from '@/lib/repo';
-import { isSupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, isSupportedLanguage } from '@/lib/i18n/languages';
 import { getCourseMeta } from '@/lib/courses/course-meta';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,7 @@ export async function GET() {
   if (session.role === 'socio') {
     const socio = await repo.getSocio('web', session.userId);
     if (socio) {
-      language = socio.language || 'es';
+      language = socio.language || DEFAULT_LANGUAGE;
       curriculumCollectionKey = socio.curriculumCollectionKey ?? null;
 
       // Fetch course metadata if socio has a curriculum

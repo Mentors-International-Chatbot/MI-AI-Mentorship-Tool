@@ -1,8 +1,8 @@
 export type SupportedLanguage = 'es' | 'en' | 'pt';
 
-export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['es', 'en', 'pt'];
+export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'es', 'pt'];
 
-export const DEFAULT_LANGUAGE: SupportedLanguage = 'es';
+export const DEFAULT_LANGUAGE: SupportedLanguage = 'en';
 
 export interface LanguageMeta {
     code: SupportedLanguage;
@@ -224,8 +224,9 @@ export function getLanguageDirective(language: SupportedLanguage): string {
 export function parseLanguageChoice(input: string): SupportedLanguage | null {
     const cleaned = input.trim().toLowerCase();
 
-    if (cleaned === '1' || cleaned === 'español' || cleaned === 'espanol' || cleaned === 'spanish') return 'es';
-    if (cleaned === '2' || cleaned === 'english' || cleaned === 'inglés' || cleaned === 'ingles') return 'en';
+    // Numbering follows the picker order in onboarding/service.ts: English first.
+    if (cleaned === '1' || cleaned === 'english' || cleaned === 'inglés' || cleaned === 'ingles') return 'en';
+    if (cleaned === '2' || cleaned === 'español' || cleaned === 'espanol' || cleaned === 'spanish') return 'es';
     if (cleaned === '3' || cleaned === 'português' || cleaned === 'portugues' || cleaned === 'portuguese') return 'pt';
 
     return null;

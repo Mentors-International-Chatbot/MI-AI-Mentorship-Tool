@@ -1,6 +1,6 @@
 import { ToneOverride, PromptOverrides, ConcisivenessLevel } from '../types';
 import { MAX_SENTENCES_PER_MESSAGE, MAX_EMOJIS_PER_MESSAGE } from '../constants';
-import { getLanguageDirective, type SupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, getLanguageDirective, type SupportedLanguage } from '@/lib/i18n/languages';
 import { repo } from '@/lib/repo';
 // getChatbotDisplayName removed - mentor name now comes from course metadata only
 import { getCourseMeta, resolveLocalized, type CourseMeta } from '@/lib/courses/course-meta';
@@ -357,7 +357,7 @@ export async function buildCorePrompt(
   overrides?: PromptOverrides,
   language?: SupportedLanguage,
 ): Promise<string> {
-  const lang = language ?? 'es';
+  const lang = language ?? DEFAULT_LANGUAGE;
 
   // ALWAYS get course metadata - it's the single source of truth for mentor name
   const meta = await getCourseMeta(collectionKey);
@@ -411,7 +411,7 @@ export async function buildCorePrompt(
     prompt += sliderSnippet;
   }
 
-  const directive = getLanguageDirective(language ?? 'es');
+  const directive = getLanguageDirective(language ?? DEFAULT_LANGUAGE);
   if (directive) {
     prompt += '\n\n' + directive;
   }
