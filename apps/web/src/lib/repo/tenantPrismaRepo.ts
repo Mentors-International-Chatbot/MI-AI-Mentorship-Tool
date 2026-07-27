@@ -657,12 +657,15 @@ export const tenantPrismaRepo: TenantRepo = {
    * Resolve organizationId for a socio with fallback chain:
    * 1. ParticipantProfile path (enrolled socios)
    * 2. Curriculum collection → organization (course-based resolution)
-   * 3. Default MI organization (platform fallback)
+   * 3. Env-configured default organization (platform fallback, logged loudly)
    *
-   * This ensures org resolution NEVER fails for a socio in a course.
+   * Tier 3 exists so org resolution never walls off a socio mid-flow, but it is
+   * a cross-tenant hazard: an orphaned socio lands in whatever tenant is
+   * configured. It is therefore configuration-driven (never a hardcoded tenant)
+   * and every hit is warned about so mis-assignment is visible rather than silent.
    */
   async resolveOrganizationIdForSocio(socioId: string): Promise<string> {
-    const DEFAULT_ORG_ID = '8d1ca50e-b191-4934-ad36-0d9873ce247a'; // MI org
+    const DEFAULT_ORG_ID = process.env.DEFAULT_ORGANIZATION_ID;
 
     // 1. Try ParticipantProfile path (works for seeded/enrolled socios)
     const participant = await prisma.participantProfile.findUnique({
@@ -688,8 +691,25 @@ export const tenantPrismaRepo: TenantRepo = {
       }
     }
 
-    // 3. Fall back to default MI organization
-    console.log(`[resolveOrganizationIdForSocio] Using default org for socio ${socioId}`);
+    // 3. Fall back to the env-configured default organization.
+    // Reaching here means the socio has no ParticipantProfile and no resolvable
+    // curriculum — it is an orphan, and assigning it to ANY tenant is a guess.
+    if (!DEFAULT_ORG_ID) {
+      console.error(
+        `[TenantResolve] ERROR socio ${socioId} has no ParticipantProfile and no ` +
+          `resolvable curriculum, and DEFAULT_ORGANIZATION_ID is not set. Refusing ` +
+          `to guess a tenant. Set DEFAULT_ORGANIZATION_ID or fix this socio's assignment.`,
+      );
+      throw new Error(
+        `Cannot resolve organization for socio ${socioId}: no profile, no curriculum, ` +
+          `and DEFAULT_ORGANIZATION_ID is unset.`,
+      );
+    }
+
+    console.warn(
+      `[TenantResolve] WARN socio ${socioId} resolved to DEFAULT org ${DEFAULT_ORG_ID} — ` +
+        `no profile or curriculum. This is a fallback; verify tenant assignment.`,
+    );
     return DEFAULT_ORG_ID;
   },
 

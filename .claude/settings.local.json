@@ -13,7 +13,8 @@
       "Bash(git check-ignore *)",
       "Bash(mkdir -p /tmp/gen-test)",
       "Read(//tmp/gen-test/**)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(awk 'NR>=250 && NR<=300 && \\(/try {/ || /catch/\\)' src/lib/messaging/handler.ts)"
     ]
   }
 }
