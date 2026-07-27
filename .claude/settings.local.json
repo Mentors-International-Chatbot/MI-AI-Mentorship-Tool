@@ -10,7 +10,10 @@
       "Bash(claude update:*)",
       "Bash(claude:*)",
       "Bash(pkill -f \"next dev\")",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(mkdir -p /tmp/gen-test)",
+      "Read(//tmp/gen-test/**)",
+      "Read(//private/tmp/**)"
     ]
   }
 }
