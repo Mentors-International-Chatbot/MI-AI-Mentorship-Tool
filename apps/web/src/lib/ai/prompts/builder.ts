@@ -7,6 +7,7 @@ import { buildContentPrompt } from './layers/content';
 import { DEFAULT_LANGUAGE } from '@/lib/i18n/languages';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
+import type { PromptVersionSink } from './loadPrompt';
 
 // ─── Prompt Builder ─────────────────────────────────────────────────
 // Assembles the 4-layer system prompt at runtime.
@@ -33,6 +34,12 @@ export async function buildSystemPrompt(
   progress: SocioProgress | undefined,
   collectionKey: string,
   dimensionState?: DimensionStateMap,
+  /**
+   * Trace-only accumulator. Layers 1 and 3 write their resolved DB prompt
+   * version here when an active SystemPrompt row overrode the code default;
+   * absent keys mean the code default was used. Purely observational.
+   */
+  sink?: PromptVersionSink,
 ): Promise<string> {
   const overrides = stripInternalPromptOverrides(
     (socio as Record<string, unknown>).promptOverrides,
@@ -40,13 +47,13 @@ export async function buildSystemPrompt(
   const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
 
   // Layer 1: Core identity + tone override + sliders + language directive (DB-backed, course-scoped)
-  const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language);
+  const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language, sink);
 
   // Layer 2: Socio context (now async — fetches persistent SocioContext from DB)
   const layer2 = await buildContextPrompt(socio, progress, collectionKey, language);
 
   // Layer 3: Task context (mode-specific instructions + dimension state)
-  const layer3 = await buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState, language);
+  const layer3 = await buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState, language, sink);
 
   // Layer 4: Lesson content (only for teaching modes)
   const layer4 = await buildContentPrompt(routerResult, collectionKey, language);

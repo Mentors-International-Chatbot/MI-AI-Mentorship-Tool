@@ -1,6 +1,10 @@
 'use client';
 
+import { useDashboardLang } from './DashboardLangContext';
+
 export function LogoutButton() {
+  const { t } = useDashboardLang();
+
   return (
     <button
       onClick={async () => {
@@ -9,7 +13,7 @@ export function LogoutButton() {
       }}
       className="text-xs text-gray-400 hover:text-white transition-colors"
     >
-      Sign Out
+      {t.signOut}
     </button>
   );
 }

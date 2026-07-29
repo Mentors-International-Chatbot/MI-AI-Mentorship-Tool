@@ -16,10 +16,14 @@ import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { DIMENSION_DEFINITIONS } from '@/lib/ai/prompts/constants';
 import type { SensedDimension, DimensionStateMap, SensingResult } from './types';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
+import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
 import { isTrivialMessage } from './triviality';
 
 const SENSING_TIMEOUT_MS = 10000; // 10 seconds max - this should be fast
 const SENSING_MODEL = "anthropic/claude-haiku-4.5"; // Use a fast model for sensing
+
+/** Bump whenever SENSING_SYSTEM_PROMPT changes. Recorded on every AiInvocation. */
+export const SENSING_PROMPT_VERSION = 'v1';
 
 const SENSING_SYSTEM_PROMPT = `You are a student assessment system. Analyze the student's message and output ONLY a JSON array.
 
@@ -117,6 +121,10 @@ export async function senseDimensions(params: {
   incomingText: string;
   priorState: DimensionStateMap;
   lessonContext: string;
+  /** Trace-only: attaches this sensing call to a socio in ai_invocations. */
+  socioId?: string;
+  /** Trace-only: attaches this sensing call to an organization in ai_invocations. */
+  organizationId?: string;
 }): Promise<SensingResult> {
   const { incomingText, priorState, lessonContext } = params;
 
@@ -141,15 +149,23 @@ export async function senseDimensions(params: {
   const userPrompt = buildSensingPrompt({ incomingText, priorState, lessonContext });
 
   try {
-    const response = await Promise.race([
-      chat.invoke([
-        new SystemMessage(SENSING_SYSTEM_PROMPT),
-        new HumanMessage(userPrompt),
+    const response = await invokeTraced({
+      operation: 'sensing',
+      model: SENSING_MODEL,
+      promptVersion: { sensing: SENSING_PROMPT_VERSION },
+      systemPrompt: SENSING_SYSTEM_PROMPT,
+      socioId: params.socioId,
+      organizationId: params.organizationId,
+      invoke: () => Promise.race([
+        chat.invoke([
+          new SystemMessage(SENSING_SYSTEM_PROMPT),
+          new HumanMessage(userPrompt),
+        ]),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Sensing timeout')), SENSING_TIMEOUT_MS)
+        ),
       ]),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Sensing timeout')), SENSING_TIMEOUT_MS)
-      ),
-    ]);
+    });
 
     const rawContent = typeof response.content === 'string'
       ? response.content

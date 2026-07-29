@@ -4,6 +4,34 @@ import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import { DEFAULT_PERSONALIZATION_INSTRUCTION } from '@/lib/courses/defaults';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 
+/** Bump whenever the Layer 4 prompt text changes. Recorded on every AiInvocation. */
+export const CONTENT_PROMPT_VERSION = 'v1';
+
+/**
+ * Trace identity for the lesson content actually injected this turn.
+ *
+ * Layer 4 varies per lesson, so a flat version constant would collapse every
+ * lesson into one bucket and make traces useless for "which lesson was being
+ * taught when the grader misbehaved". Mirrors buildContentPrompt's switch —
+ * returns null for exactly the modes that inject no content block.
+ */
+export function getContentIdentity(
+  result: RouterResult,
+  collectionKey: string,
+): string | null {
+  switch (result.mode) {
+    case InteractionMode.LESSON_START:
+    case InteractionMode.LESSON_DELIVERY:
+      return `${collectionKey}/lesson-${result.lesson!.lessonNumber}`;
+    case InteractionMode.FREEFORM_QUESTION:
+      return `${collectionKey}/freeform-reference`;
+    case InteractionMode.RETEACH:
+      return `${collectionKey}/reteach-${result.reteach!.lessonNumber}`;
+    default:
+      return null;
+  }
+}
+
 // ─── Layer 4: Lesson Content — Only During Teaching Modes ───────────
 // Provides the actual curriculum material the AI needs to teach from.
 // Only included for LESSON_START, LESSON_DELIVERY, FREEFORM_QUESTION, and RETEACH.

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { generateSummary } from '@/lib/summary/generateSummary';
 import { verifyMentorOwnership } from '@/lib/auth/ownership';
-import { isSupportedLanguage } from '@/lib/i18n/languages';
+import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
 
 export async function POST(
   _req: NextRequest,
@@ -15,9 +14,7 @@ export async function POST(
   const auth = await verifyMentorOwnership(socioId);
   if (!auth.authorized) return auth.response;
 
-  const cookieStore = await cookies();
-  const rawLang = cookieStore.get('dashboard_lang')?.value ?? 'en';
-  const dashboardLang = isSupportedLanguage(rawLang) ? rawLang : 'en';
+  const dashboardLang = await resolveDashboardLanguage();
 
   try {
     const generated = await generateSummary(socioId, dashboardLang);

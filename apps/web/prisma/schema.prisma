@@ -727,3 +727,32 @@ model AssessmentSession {
   @@index([socioId, status])
   @@map("assessment_sessions")
 }
+
+model AiInvocation {
+  id                  String   @id @default(uuid())
+  createdAt           DateTime @default(now()) @map("created_at")
+  organizationId      String?  @map("organization_id")
+  socioId             String?  @map("socio_id")
+  assessmentSessionId String?  @map("assessment_session_id")
+  // Free-form string, not an enum: a new operation must not require a migration.
+  // lesson_delivery | assessment_turn | sensing | assessment_sensing | sentiment
+  // | summary | onboarding
+  operation           String
+  mode                String?
+  model               String
+  promptTokensApprox  Int?     @map("prompt_tokens_approx")
+  responseLength      Int?     @map("response_length")
+  latencyMs           Int      @map("latency_ms")
+  // { core, context, task, content, language, evaluator } - whatever subset applies
+  promptVersion       Json     @map("prompt_version")
+  promptHash          String   @map("prompt_hash")
+  // Full assembled prompt, stored ONLY when AI_TRACE=full
+  promptText          String?  @map("prompt_text")
+  success             Boolean
+  errorMessage        String?  @map("error_message")
+
+  @@index([operation, createdAt])
+  @@index([socioId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("ai_invocations")
+}

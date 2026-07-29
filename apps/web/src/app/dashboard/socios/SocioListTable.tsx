@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { SocioHealth } from '@/lib/health';
+import { formatHealthReason } from '@/lib/health/format';
 import { useDashboardLang } from '../DashboardLangContext';
 
 type SocioRow = {
@@ -28,6 +29,13 @@ export function SocioListTable({ rows }: { rows: SocioRow[] }) {
     () => rows.filter((row) => healthFilter === 'ALL' || row.health.status === healthFilter),
     [rows, healthFilter],
   );
+
+  const FILTER_LABELS: Record<'ALL' | 'RED' | 'YELLOW' | 'GREEN', string> = {
+    ALL: t.filterAll,
+    RED: t.filterRed,
+    YELLOW: t.filterYellow,
+    GREEN: t.filterGreen,
+  };
 
   function formatDate(iso: string | null): string {
     if (!iso) return t.never;
@@ -58,14 +66,14 @@ export function SocioListTable({ rows }: { rows: SocioRow[] }) {
                 : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
             }`}
           >
-            {status === 'ALL' ? 'Todos' : status}
+            {FILTER_LABELS[status]}
           </button>
         ))}
       </div>
 
       {filteredRows.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-          No hay socios con estado {healthFilter}.
+          {t.noSociosWithStatus(FILTER_LABELS[healthFilter])}
         </div>
       ) : null}
 
@@ -86,7 +94,9 @@ export function SocioListTable({ rows }: { rows: SocioRow[] }) {
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center gap-2">
                   <span className={`inline-block w-3 h-3 rounded-full ${STATUS_DOT[row.health.status]}`} />
-                  <span className="text-xs text-gray-500">{row.health.reasons[0]}</span>
+                  <span className="text-xs text-gray-500">
+                    {row.health.reasons[0] ? formatHealthReason(row.health.reasons[0], t) : ''}
+                  </span>
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">

@@ -235,6 +235,57 @@ export const trackedDimensionSchema = z
     },
   );
 
+// ── Dashboard panels: what a mentor sees for a participant on this course ────
+//
+// Panels are configuration, not code. The data each one renders already flows
+// through the metric pipeline, so a course declares which slices matter to it
+// rather than the dashboard hardcoding one course's assumptions. A course with
+// no revenue simply never declares `financial_snapshots`.
+//
+// Mentor tooling that is not course-specific (AI sliders, alert flags) is not
+// a panel — it renders for every course.
+
+export const dashboardPanelSchema = z.discriminatedUnion("type", [
+  /** Trend of one tracked dimension, read from that dimension's observations. */
+  z.object({
+    type: z.literal("dimension_trend"),
+    dimensionKey: key,
+    title: localizedStringSchema.optional(),
+  }),
+  /** Per-lesson gate results: score, pass state, attempts. */
+  z.object({
+    type: z.literal("assessment_scores"),
+    title: localizedStringSchema.optional(),
+  }),
+  /** Lesson-by-lesson completion and understanding. */
+  z.object({
+    type: z.literal("lesson_progress"),
+    title: localizedStringSchema.optional(),
+  }),
+  /** AI-generated weekly rollups. */
+  z.object({
+    type: z.literal("weekly_summary"),
+    title: localizedStringSchema.optional(),
+  }),
+  /** Revenue / net profit over time. Requires a course that collects them. */
+  z.object({
+    type: z.literal("financial_snapshots"),
+    title: localizedStringSchema.optional(),
+  }),
+]);
+export type DashboardPanel = z.infer<typeof dashboardPanelSchema>;
+export type DashboardPanelType = DashboardPanel["type"];
+
+export const dashboardSchema = z.object({
+  /**
+   * Panels to render, in order. **Array order is render order** — the first
+   * entry appears at the top of the dashboard's panel column. Reordering this
+   * array is how an author reorders the dashboard.
+   */
+  panels: z.array(dashboardPanelSchema).default([]),
+});
+export type DashboardConfig = z.infer<typeof dashboardSchema>;
+
 const alertRuleSchema = z.object({
   id: key,
   dimensionKey: key,
@@ -292,6 +343,12 @@ export const configSchema = z.object({
       autoAppendTeachBack: z.boolean().default(false), // synthesize a gated teach_back per lesson (importer, Phase C)
     })
     .optional(),
+  /**
+   * Which panels the mentor dashboard renders for this course, in order.
+   * Optional: absent config falls back to a course-agnostic default
+   * (see DEFAULT_DASHBOARD_PANELS) — never another course's panels.
+   */
+  dashboard: dashboardSchema.optional(),
 });
 
 // ── Outcome: the completable project (-> Program outcome) ─────────────────────
@@ -499,6 +556,37 @@ export const journeyPackageSchema = z
         });
       }
     }
+
+    // ── Dashboard panel validation ────────────────────────────────────────────
+    const seenPanelTypes = new Set<string>();
+    pkg.config.dashboard?.panels.forEach((panel, i) => {
+      if (panel.type === "dimension_trend") {
+        if (!dimKeys.has(panel.dimensionKey)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `dashboard.panels[${i}] charts unknown dimension "${panel.dimensionKey}" — add it to trackedDimensions`,
+          });
+        }
+        // Two trends of the same dimension would render identical panels.
+        const trendKey = `dimension_trend:${panel.dimensionKey}`;
+        if (seenPanelTypes.has(trendKey)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `dashboard.panels[${i}] duplicates an earlier trend for dimension "${panel.dimensionKey}"`,
+          });
+        }
+        seenPanelTypes.add(trendKey);
+        return;
+      }
+      // The singleton panels each render one fixed data source.
+      if (seenPanelTypes.has(panel.type)) {
+        ctx.addIssue({
+          code: "custom",
+          message: `dashboard.panels[${i}] duplicates an earlier "${panel.type}" panel`,
+        });
+      }
+      seenPanelTypes.add(panel.type);
+    });
 
     // ── Assessment config validation ──────────────────────────────────────────
     if (pkg.config.assessment) {

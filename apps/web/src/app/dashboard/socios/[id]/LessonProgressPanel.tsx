@@ -11,17 +11,41 @@ type SerializedLessonProgress = {
   updatedAt: string;
 };
 
-const TOTAL_LESSONS = 28;
-
-export function LessonProgressPanel({ lessonProgress }: { lessonProgress: SerializedLessonProgress[] }) {
+export function LessonProgressPanel({
+  lessonProgress,
+  lessonCount,
+}: {
+  lessonProgress: SerializedLessonProgress[];
+  /** Lessons in this course. Comes from the course's collection, not a constant. */
+  lessonCount: number;
+}) {
   const { t } = useDashboardLang();
   const progressMap = new Map(lessonProgress.map(lp => [lp.lessonNumber, lp]));
+
+  // lessonCount === 0 is ambiguous: the course genuinely has no lessons, or the
+  // collection lookup failed (unresolved tenant, missing collection). Recorded
+  // progress disambiguates — if the socio has worked lessons, the course has
+  // them. Fall back to the highest lesson touched so a resolution hiccup shows
+  // a slightly-short grid rather than blanking the panel mid-conversation.
+  const gridLength =
+    lessonCount > 0
+      ? lessonCount
+      : lessonProgress.reduce((max, lp) => Math.max(max, lp.lessonNumber), 0);
+
+  if (gridLength === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="font-semibold text-gray-900 mb-3">{t.lessonProgressTitle}</h3>
+        <p className="text-sm text-gray-400">{t.lessonProgressEmpty}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-lg shadow p-4">
       <h3 className="font-semibold text-gray-900 mb-3">{t.lessonProgressTitle}</h3>
       <div className="grid grid-cols-7 gap-2">
-        {Array.from({ length: TOTAL_LESSONS }, (_, i) => {
+        {Array.from({ length: gridLength }, (_, i) => {
           const num = i + 1;
           const lp = progressMap.get(num);
           const completed = lp?.completedAt != null;

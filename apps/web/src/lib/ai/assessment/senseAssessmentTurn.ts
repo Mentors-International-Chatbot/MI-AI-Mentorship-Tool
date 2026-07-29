@@ -12,13 +12,28 @@
 
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
+import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
 import { applySensedToState } from '@/lib/ai/sensing/updateDimensionState';
 import { isTrivialMessage } from '@/lib/ai/sensing/triviality';
 import type { DimensionStateMap, SensedDimension } from '@/lib/ai/sensing/types';
 import type { TrackedDimension } from '@/lib/journey-package/journey-package.schema';
 
 const ASSESSMENT_SENSING_TIMEOUT_MS = 10000;
-const ASSESSMENT_SENSING_MODEL = "anthropic/claude-haiku-4.5";
+export const ASSESSMENT_SENSING_MODEL = "anthropic/claude-haiku-4.5";
+
+/** Bump whenever buildAssessmentSensingPrompt's text changes. Recorded on every AiInvocation. */
+export const ASSESSMENT_SENSING_PROMPT_VERSION = 'v1';
+
+/**
+ * Trace-only identifiers. Carried through the assessment pipeline so
+ * ai_invocations rows can be joined back to a socio, org and session.
+ * Never read by any scoring or gating logic.
+ */
+export interface AssessmentTraceContext {
+  socioId?: string;
+  organizationId?: string;
+  assessmentSessionId?: string;
+}
 
 /**
  * Assessment-specific sensing prompt.
@@ -221,6 +236,8 @@ export async function senseAssessmentTurn(params: {
   minTurns: number;
   /** The student's earlier answers this session, so scoring is cumulative */
   priorStudentAnswers?: string[];
+  /** Trace-only: identifies this call in ai_invocations. */
+  trace?: AssessmentTraceContext;
 }): Promise<DimensionStateMap> {
   const { studentText, priorState, dimensions, lessonContext, keyConcepts, turnCount, minTurns } = params;
   const priorStudentAnswers = params.priorStudentAnswers ?? [];
@@ -248,15 +265,24 @@ export async function senseAssessmentTurn(params: {
   const userPrompt = buildAssessmentUserPrompt({ studentText, priorState, priorStudentAnswers });
 
   try {
-    const response = await Promise.race([
-      chat.invoke([
-        new SystemMessage(systemPrompt),
-        new HumanMessage(userPrompt),
+    const response = await invokeTraced({
+      operation: 'assessment_sensing',
+      model: ASSESSMENT_SENSING_MODEL,
+      promptVersion: { evaluator: ASSESSMENT_SENSING_PROMPT_VERSION },
+      systemPrompt,
+      socioId: params.trace?.socioId,
+      organizationId: params.trace?.organizationId,
+      assessmentSessionId: params.trace?.assessmentSessionId,
+      invoke: () => Promise.race([
+        chat.invoke([
+          new SystemMessage(systemPrompt),
+          new HumanMessage(userPrompt),
+        ]),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Assessment sensing timeout')), ASSESSMENT_SENSING_TIMEOUT_MS)
+        ),
       ]),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Assessment sensing timeout')), ASSESSMENT_SENSING_TIMEOUT_MS)
-      ),
-    ]);
+    });
 
     const rawContent = typeof response.content === 'string'
       ? response.content

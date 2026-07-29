@@ -11,7 +11,7 @@ export async function analyzeSentimentAndFlag(
   socioId: string,
   message: string,
 ): Promise<void> {
-  const result = await analyzeSentiment(message);
+  const result = await analyzeSentiment(message, socioId);
 
   await repo.saveSentiment({
     messageId,

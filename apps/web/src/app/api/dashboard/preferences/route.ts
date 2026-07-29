@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
-import { prisma } from '@/lib/db';
+import { repo } from '@/lib/repo';
 import { verifySession } from '@/lib/auth/session';
 import { isSupportedLanguage } from '@/lib/i18n/languages';
 
-/** Persist mentor UI language for cron summaries (dashboard cookie is client-only). */
+/**
+ * Persist the viewer's dashboard UI language.
+ *
+ * This is the source of truth read by `resolveDashboardLanguage` on every
+ * dashboard render, so the choice follows the user across devices rather than
+ * living only in a browser cookie. Also used by the cron summary job.
+ */
 export async function PATCH(request: NextRequest) {
   const session = await verifySession();
-  if (!session || session.role !== 'mentor') {
+  if (!session || (session.role !== 'mentor' && session.role !== 'admin')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -17,10 +22,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid preferredLanguage' }, { status: 400 });
   }
 
-  const updated = await prisma.$executeRaw(
-    Prisma.sql`UPDATE mentors SET preferred_language = ${raw} WHERE id = ${session.userId}`,
-  );
-  if (updated === 0) {
+  const updated = await repo.setMentorPreferredLanguage(session.userId, raw);
+  if (!updated) {
     return NextResponse.json({ error: 'Mentor not found' }, { status: 404 });
   }
 

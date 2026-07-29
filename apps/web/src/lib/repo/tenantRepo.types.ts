@@ -250,6 +250,20 @@ export type AssessmentMessage = {
  * 3. Verify ownership before updates/deletes
  * 4. Throw TenantIsolationError on cross-tenant access attempts
  */
+/** Which tier of the socio → organization fallback chain produced the answer. */
+export type OrgResolutionSource =
+  /** Tier 1 — the socio's ParticipantProfile. Authoritative. */
+  | 'participant_profile'
+  /** Tier 2 — the socio's curriculum collection. Authoritative. */
+  | 'collection_key'
+  /** Tier 3 — DEFAULT_ORGANIZATION_ID. A guess, not a tenant identification. */
+  | 'default';
+
+export type ResolvedOrganization = {
+  organizationId: string;
+  source: OrgResolutionSource;
+};
+
 export interface TenantRepo {
   // ─── Organization ──────────────────────────────────────────────────────────
   getOrganization(ctx: TenantContext): Promise<Organization | null>;
@@ -263,6 +277,17 @@ export interface TenantRepo {
    * 3. Default MI organization (platform fallback)
    */
   resolveOrganizationIdForSocio(socioId: string): Promise<string>;
+  /**
+   * Same resolution as {@link resolveOrganizationIdForSocio}, but reports which
+   * tier answered.
+   *
+   * Tiers 1 and 2 identify a real tenant. Tier 3 (`"default"`) is a guess — the
+   * socio is an orphan and lands in whatever `DEFAULT_ORGANIZATION_ID` names.
+   * Callers that go on to read tenant-owned data by a non-unique key (a
+   * collection slug, say) must treat `"default"` as "unresolved" and decline,
+   * or they will read a different tenant's rows.
+   */
+  resolveOrganizationForSocio(socioId: string): Promise<ResolvedOrganization>;
 
   // ─── Organization Membership ───────────────────────────────────────────────
   getMemberships(ctx: TenantContext): Promise<OrganizationMembership[]>;

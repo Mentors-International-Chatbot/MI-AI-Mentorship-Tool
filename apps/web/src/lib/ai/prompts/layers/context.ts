@@ -5,6 +5,9 @@ import { repo } from '@/lib/repo';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 
+/** Bump whenever the Layer 2 prompt text changes. Recorded on every AiInvocation. */
+export const CONTEXT_PROMPT_VERSION = 'v1';
+
 // ─── Layer 2: Socio Context (~150 tokens) — Always Sent ────────────
 // Built dynamically from the database for every message.
 

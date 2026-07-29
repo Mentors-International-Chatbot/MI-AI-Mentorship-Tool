@@ -114,6 +114,7 @@ export async function POST(req: NextRequest) {
       const openingMessage = await generateOpeningMessage({
         teachBackPrompt: configSnapshot.teachBackPrompt,
         aiBehavior: configSnapshot.aiBehavior,
+        trace: { socioId, organizationId, assessmentSessionId: sessionToUse.id },
       });
 
       await tenantPrismaRepo.addAssessmentMessage(ctx, sessionToUse.id, {

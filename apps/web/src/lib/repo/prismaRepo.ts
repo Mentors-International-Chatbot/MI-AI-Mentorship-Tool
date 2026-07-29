@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
-import { DEFAULT_LANGUAGE } from "@/lib/i18n/languages";
+import { DEFAULT_LANGUAGE, isSupportedLanguage } from "@/lib/i18n/languages";
 import {
     Prisma,
     OnboardingStatus,
@@ -557,6 +557,26 @@ export const prismaRepo: Repo = {
             orderBy: { createdAt: 'desc' },
         });
         return rows.map(toSentiment);
+    },
+
+    async getMentorPreferredLanguage(mentorId) {
+        const mentor = await prisma.mentor.findUnique({
+            where: { id: mentorId },
+            select: { preferredLanguage: true },
+        });
+        if (!mentor) return null;
+        return isSupportedLanguage(mentor.preferredLanguage)
+            ? mentor.preferredLanguage
+            : null;
+    },
+
+    async setMentorPreferredLanguage(mentorId, language) {
+        // updateMany so a missing mentor reports false instead of throwing.
+        const result = await prisma.mentor.updateMany({
+            where: { id: mentorId },
+            data: { preferredLanguage: language },
+        });
+        return result.count > 0;
     },
 
     async getSocioContext(socioId) {

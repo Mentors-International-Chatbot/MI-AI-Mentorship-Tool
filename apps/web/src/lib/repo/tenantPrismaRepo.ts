@@ -25,6 +25,7 @@ import type {
   AssessmentSession,
   AssessmentSessionStatus,
   AssessmentMessage,
+  ResolvedOrganization,
 } from './tenantRepo.types';
 import type {
   Organization as PrismaOrganization,
@@ -625,6 +626,74 @@ async function verifyProgramVersionOwnership(ctx: TenantContext, versionId: stri
   }
 }
 
+/**
+ * Single implementation of the socio → organization fallback chain, shared by
+ * `resolveOrganizationIdForSocio` and `resolveOrganizationForSocio` so the two
+ * can never drift. See the interface docs for tier semantics.
+ */
+async function resolveOrgWithSource(socioId: string): Promise<ResolvedOrganization> {
+  const DEFAULT_ORG_ID = process.env.DEFAULT_ORGANIZATION_ID;
+
+  // 1. Try ParticipantProfile path (works for seeded/enrolled socios)
+  const participant = await prisma.participantProfile.findUnique({
+    where: { socioId },
+    select: { organizationId: true },
+  });
+  if (participant?.organizationId) {
+    return { organizationId: participant.organizationId, source: 'participant_profile' };
+  }
+
+  // 2. Try curriculum_collection_key → content_collections → organization_id
+  const socio = await prisma.socio.findUnique({
+    where: { id: socioId },
+    select: { curriculumCollectionKey: true },
+  });
+  if (socio?.curriculumCollectionKey) {
+    // Slugs are unique per organization, not globally. If two tenants hold the
+    // same slug there is no way to tell which one owns this socio, so an
+    // ambiguous match is not a resolution — fall through to tier 3 rather than
+    // stamping an arbitrary row as authoritative.
+    const candidates = await prisma.contentCollection.findMany({
+      where: { slug: socio.curriculumCollectionKey },
+      select: { organizationId: true },
+    });
+
+    if (candidates.length === 1) {
+      return { organizationId: candidates[0].organizationId, source: 'collection_key' };
+    }
+
+    if (candidates.length > 1) {
+      console.warn(
+        `[TenantResolve] WARN curriculum slug "${socio.curriculumCollectionKey}" is held by ` +
+          `${candidates.length} organizations (${candidates.map((c) => c.organizationId).join(', ')}) — ` +
+          `cannot resolve socio ${socioId} by curriculum. Two tenants collide on this slug; ` +
+          `falling through to the default organization.`,
+      );
+    }
+  }
+
+  // 3. Fall back to the env-configured default organization.
+  // Reaching here means the socio has no ParticipantProfile and no resolvable
+  // curriculum — it is an orphan, and assigning it to ANY tenant is a guess.
+  if (!DEFAULT_ORG_ID) {
+    console.error(
+      `[TenantResolve] ERROR socio ${socioId} has no ParticipantProfile and no ` +
+        `resolvable curriculum, and DEFAULT_ORGANIZATION_ID is not set. Refusing ` +
+        `to guess a tenant. Set DEFAULT_ORGANIZATION_ID or fix this socio's assignment.`,
+    );
+    throw new Error(
+      `Cannot resolve organization for socio ${socioId}: no profile, no curriculum, ` +
+        `and DEFAULT_ORGANIZATION_ID is unset.`,
+    );
+  }
+
+  console.warn(
+    `[TenantResolve] WARN socio ${socioId} resolved to DEFAULT org ${DEFAULT_ORG_ID} — ` +
+      `no profile or curriculum. This is a fallback; verify tenant assignment.`,
+  );
+  return { organizationId: DEFAULT_ORG_ID, source: 'default' };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // TenantRepo Implementation
 // ═══════════════════════════════════════════════════════════════════════════
@@ -665,52 +734,12 @@ export const tenantPrismaRepo: TenantRepo = {
    * and every hit is warned about so mis-assignment is visible rather than silent.
    */
   async resolveOrganizationIdForSocio(socioId: string): Promise<string> {
-    const DEFAULT_ORG_ID = process.env.DEFAULT_ORGANIZATION_ID;
+    const { organizationId } = await resolveOrgWithSource(socioId);
+    return organizationId;
+  },
 
-    // 1. Try ParticipantProfile path (works for seeded/enrolled socios)
-    const participant = await prisma.participantProfile.findUnique({
-      where: { socioId },
-      select: { organizationId: true },
-    });
-    if (participant?.organizationId) {
-      return participant.organizationId;
-    }
-
-    // 2. Try curriculum_collection_key → content_collections → organization_id
-    const socio = await prisma.socio.findUnique({
-      where: { id: socioId },
-      select: { curriculumCollectionKey: true },
-    });
-    if (socio?.curriculumCollectionKey) {
-      const collection = await prisma.contentCollection.findFirst({
-        where: { slug: socio.curriculumCollectionKey },
-        select: { organizationId: true },
-      });
-      if (collection?.organizationId) {
-        return collection.organizationId;
-      }
-    }
-
-    // 3. Fall back to the env-configured default organization.
-    // Reaching here means the socio has no ParticipantProfile and no resolvable
-    // curriculum — it is an orphan, and assigning it to ANY tenant is a guess.
-    if (!DEFAULT_ORG_ID) {
-      console.error(
-        `[TenantResolve] ERROR socio ${socioId} has no ParticipantProfile and no ` +
-          `resolvable curriculum, and DEFAULT_ORGANIZATION_ID is not set. Refusing ` +
-          `to guess a tenant. Set DEFAULT_ORGANIZATION_ID or fix this socio's assignment.`,
-      );
-      throw new Error(
-        `Cannot resolve organization for socio ${socioId}: no profile, no curriculum, ` +
-          `and DEFAULT_ORGANIZATION_ID is unset.`,
-      );
-    }
-
-    console.warn(
-      `[TenantResolve] WARN socio ${socioId} resolved to DEFAULT org ${DEFAULT_ORG_ID} — ` +
-        `no profile or curriculum. This is a fallback; verify tenant assignment.`,
-    );
-    return DEFAULT_ORG_ID;
+  async resolveOrganizationForSocio(socioId: string): Promise<ResolvedOrganization> {
+    return resolveOrgWithSource(socioId);
   },
 
   // ─── Organization Membership ───────────────────────────────────────────────

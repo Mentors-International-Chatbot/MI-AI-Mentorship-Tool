@@ -114,6 +114,39 @@ export async function importJourneyPackage(
 ): Promise<ImportResult> {
   const warnings: string[] = [];
 
+  // ─── 0a. Refuse to overwrite a non-draft version — BEFORE any write ────────
+  //
+  // This has to be the first thing the function does. The import is not
+  // transactional, and the ContentCollection / ContentLesson / LessonVersion
+  // upserts below all rewrite title and body with no status check of their own.
+  // Guarding later would let a refused import still overwrite published lesson
+  // bodies on its way to throwing.
+  //
+  // The upsert's `update` branch also deliberately preserves `status`, so a
+  // re-import at a published version's string would leave the row published
+  // while swapping in a config that never passed validateForPublication.
+  // Immutability of non-draft versions is documented in publication.service.ts;
+  // this is where it is enforced.
+  const existingVersion = await prisma.programVersion.findUnique({
+    where: {
+      programId_version: {
+        programId: opts.programId,
+        version: pkg.metadata.version,
+      },
+    },
+    select: { status: true },
+  });
+
+  if (existingVersion && existingVersion.status !== "draft") {
+    throw new Error(
+      `Refusing to import over ProgramVersion "${pkg.metadata.version}": it is ` +
+        `${existingVersion.status}, not draft. Published and archived versions are ` +
+        `immutable — a re-import would replace released content with a config that ` +
+        `never went through validateForPublication. Bump metadata.version to a new ` +
+        `version string (current: "${pkg.metadata.version}") and import that instead.`,
+    );
+  }
+
   // ─── 0. Auto-append teach-back blocks if enabled ───────────────────────────
   const { lessons, synthesizedCount } = maybeAppendTeachBack(
     pkg.curriculum.lessons,
@@ -208,6 +241,7 @@ export async function importJourneyPackage(
     alertRules: pkg.config.alertRules,
     graduation: pkg.config.graduation,
     assessment: pkg.config.assessment,
+    dashboard: pkg.config.dashboard,
 
     // Reference to curriculum
     curriculumCollectionKey: pkg.curriculum.collectionKey,
@@ -235,6 +269,7 @@ export async function importJourneyPackage(
   }
 
   // ─── 4. Upsert ProgramVersion in draft state ─────────────────────────────
+  // Non-draft versions were already refused in step 0a, before any writes.
   const programVersion = await prisma.programVersion.upsert({
     where: {
       programId_version: {

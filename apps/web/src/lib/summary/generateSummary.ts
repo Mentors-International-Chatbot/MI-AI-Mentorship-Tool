@@ -1,12 +1,16 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { prisma } from '@/lib/db';
-import { createOpenRouterChat } from '@/lib/ai/openrouter';
+import { createOpenRouterChat, resolveOpenRouterModel } from '@/lib/ai/openrouter';
+import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
 import {
   DEFAULT_LANGUAGE,
   type SupportedLanguage,
   isSupportedLanguage,
 } from '@/lib/i18n/languages';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
+
+/** Bump whenever the summary system/human prompt text changes. Recorded on every AiInvocation. */
+export const SUMMARY_PROMPT_VERSION = 'v1';
 
 export type SummaryFlags = {
   risks: string[];
@@ -238,10 +242,19 @@ export async function generateSummary(
     maxTokens: 500,
   });
 
-  const response = await chat.invoke([
-    new SystemMessage(systemMessageForLang(lang)),
-    new HumanMessage(prompt),
-  ]);
+  const systemPrompt = systemMessageForLang(lang);
+
+  const response = await invokeTraced({
+    operation: 'summary',
+    model: resolveOpenRouterModel(),
+    promptVersion: { summary: SUMMARY_PROMPT_VERSION, language: lang },
+    systemPrompt,
+    socioId,
+    invoke: () => chat.invoke([
+      new SystemMessage(systemPrompt),
+      new HumanMessage(prompt),
+    ]),
+  });
 
   const raw = typeof response.content === 'string'
     ? response.content

@@ -11,11 +11,14 @@ import {
 } from '../types';
 import { getLessonTitle } from '@/lib/lessons/db-lesson-service';
 import { FLAG_RED_THRESHOLD, RETEACH_LEVEL_THRESHOLD, CONFUSION_ESCALATE_THRESHOLD } from '../constants';
-import { loadActivePrompt } from '../loadPrompt';
+import { loadActivePrompt, type PromptVersionSink } from '../loadPrompt';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import { DEFAULT_PERSONALIZATION_INSTRUCTION } from '@/lib/courses/defaults';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
+
+/** Bump whenever the Layer 3 prompt text changes. Recorded on every AiInvocation. */
+export const TASK_PROMPT_VERSION = 'v1';
 
 // ─── Layer 3: Task Context — One Per Interaction Mode ───────────────
 // The router determines the mode; this function returns the right prompt.
@@ -83,6 +86,8 @@ export async function buildTaskPrompt(
   collectionKey: string,
   dimensionState?: DimensionStateMap,
   language: SupportedLanguage = 'es',
+  /** Trace-only: receives `task` when a DB-backed prompt overrode the default. */
+  sink?: PromptVersionSink,
 ): Promise<string> {
   const dimensionContext = buildDimensionContext(dimensionState);
   const meta = await getCourseMeta(collectionKey);
@@ -92,28 +97,28 @@ export async function buildTaskPrompt(
 
   switch (result.mode) {
     case InteractionMode.LESSON_START:
-      basePrompt = await buildLessonStartPrompt(socio, result.lesson!, meta, participantNoun, language);
+      basePrompt = await buildLessonStartPrompt(socio, result.lesson!, meta, participantNoun, language, sink);
       break;
     case InteractionMode.LESSON_DELIVERY:
-      basePrompt = await buildLessonDeliveryPrompt(socio, result.lesson!, meta, participantNoun, language);
+      basePrompt = await buildLessonDeliveryPrompt(socio, result.lesson!, meta, participantNoun, language, sink);
       break;
     case InteractionMode.FREEFORM_QUESTION:
-      basePrompt = await buildFreeformPrompt(progress, collectionKey, meta, participantNoun, language);
+      basePrompt = await buildFreeformPrompt(progress, collectionKey, meta, participantNoun, language, sink);
       break;
     case InteractionMode.CHECKIN:
-      basePrompt = await buildCheckinPrompt(socio, result.checkin!, meta, participantNoun, language);
+      basePrompt = await buildCheckinPrompt(socio, result.checkin!, meta, participantNoun, language, sink);
       break;
     case InteractionMode.RETEACH:
-      basePrompt = await buildReteachPrompt(socio, result.reteach!, meta, participantNoun, language);
+      basePrompt = await buildReteachPrompt(socio, result.reteach!, meta, participantNoun, language, sink);
       break;
     case InteractionMode.REMINDER:
-      basePrompt = await buildReminderPrompt(socio, result.reminder!, participantNoun, language);
+      basePrompt = await buildReminderPrompt(socio, result.reminder!, participantNoun, language, sink);
       break;
     case InteractionMode.MENTOR_HANDOFF:
-      basePrompt = await buildMentorHandoffPrompt(socio, result.mentor!, participantNoun, language);
+      basePrompt = await buildMentorHandoffPrompt(socio, result.mentor!, participantNoun, language, sink);
       break;
     case InteractionMode.POST_MENTOR:
-      basePrompt = await buildPostMentorPrompt(socio, result.mentor!, participantNoun, language);
+      basePrompt = await buildPostMentorPrompt(socio, result.mentor!, participantNoun, language, sink);
       break;
     case InteractionMode.GATED_ASSESSMENT:
       // GATED_ASSESSMENT is handled by assessment pipeline before buildPrompt is called
@@ -137,6 +142,7 @@ async function buildLessonStartPrompt(
   meta: Awaited<ReturnType<typeof getCourseMeta>>,
   participantNoun: string,
   language: SupportedLanguage,
+  sink?: PromptVersionSink,
 ): Promise<string> {
   const prev = lesson.previousLessonTitleEs
     ? `  - Lección anterior completada: "${lesson.previousLessonTitleEs}" (puntuación de comprensión: ${lesson.lastUnderstanding ?? 'N/A'}/10)`
@@ -164,7 +170,7 @@ INSTRUCCIONES:
 - Haz que suene como una conversación, no como una clase formal.
 - Termina con una pregunta abierta para que el ${participantNoun} se enganche.`;
 
-  const instructions = await loadActivePrompt('lesson_start', defaultInstructions);
+  const instructions = await loadActivePrompt('lesson_start', defaultInstructions, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;
 }
 
@@ -176,6 +182,7 @@ async function buildLessonDeliveryPrompt(
   meta: Awaited<ReturnType<typeof getCourseMeta>>,
   participantNoun: string,
   language: SupportedLanguage,
+  sink?: PromptVersionSink,
 ): Promise<string> {
   // Localized scaffolding for lesson delivery
   const scf: Record<SupportedLanguage, {
@@ -288,7 +295,7 @@ ${s.lastMessageInstructions(participantNoun, lesson.lessonNumber, lesson.message
 
 ${s.instructions(participantNoun, personalizationInstruction)}`;
 
-  const instructions = await loadActivePrompt('lesson_delivery', defaultInstructions);
+  const instructions = await loadActivePrompt('lesson_delivery', defaultInstructions, sink, 'task');
   return `${instructions}${lastMessageNote}\n\n${dynamicContext.trim()}`;
 }
 
@@ -300,6 +307,7 @@ async function buildFreeformPrompt(
   meta: Awaited<ReturnType<typeof getCourseMeta>>,
   participantNoun: string,
   _language: SupportedLanguage,
+  sink?: PromptVersionSink,
 ): Promise<string> {
   const completed = progress?.completedLessons ?? [];
   const currentNum = progress?.currentLessonNumber ?? 1;
@@ -328,7 +336,7 @@ INSTRUCCIONES:
 - NO inventes información. Si no está en el currículo, no lo digas.
 - Mantén la respuesta en máximo 2-3 mensajes cortos.`;
 
-  const instructions = await loadActivePrompt('freeform', defaultInstructions);
+  const instructions = await loadActivePrompt('freeform', defaultInstructions, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;
 }
 
@@ -340,6 +348,7 @@ async function buildCheckinPrompt(
   meta: Awaited<ReturnType<typeof getCourseMeta>>,
   participantNoun: string,
   language: SupportedLanguage,
+  sink?: PromptVersionSink,
 ): Promise<string> {
   const hasLearnerContext = meta.learnerContext !== undefined;
   const contextLabel = hasLearnerContext
@@ -561,7 +570,7 @@ INSTRUÇÕES:
 
   const defaultInstructions = instructionTemplates[language] ?? instructionTemplates['en'];
 
-  const instructions = await loadActivePrompt('checkin', defaultInstructions);
+  const instructions = await loadActivePrompt('checkin', defaultInstructions, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;
 }
 
@@ -573,6 +582,7 @@ async function buildReteachPrompt(
   meta: Awaited<ReturnType<typeof getCourseMeta>>,
   participantNoun: string,
   language: SupportedLanguage,
+  sink?: PromptVersionSink,
 ): Promise<string> {
   // Context reference - use learnerContext label or generic
   const contextRefStrings: Record<SupportedLanguage, string> = {
@@ -689,7 +699,7 @@ INSTRUÇÕES:
   };
 
   const defaultInstructions = instructionTemplates[language] ?? instructionTemplates['en'];
-  const instructions = await loadActivePrompt('reteach', defaultInstructions);
+  const instructions = await loadActivePrompt('reteach', defaultInstructions, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;
 }
 
@@ -700,6 +710,7 @@ async function buildReminderPrompt(
   reminder: ReminderState,
   participantNoun: string,
   language: SupportedLanguage = 'es',
+  sink?: PromptVersionSink,
 ): Promise<string> {
   // Localized scaffolding
   const scf: Record<SupportedLanguage, {
@@ -778,7 +789,7 @@ INSTRUÇÕES:
   };
 
   const defaultInstructions = instructionTemplates[language] ?? instructionTemplates['en'];
-  const instructions = await loadActivePrompt('reminder', defaultInstructions);
+  const instructions = await loadActivePrompt('reminder', defaultInstructions, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;
 }
 
@@ -789,6 +800,7 @@ async function buildMentorHandoffPrompt(
   mentor: MentorSession,
   participantNoun: string,
   language: SupportedLanguage = 'es',
+  sink?: PromptVersionSink,
 ): Promise<string> {
   const scf: Record<SupportedLanguage, {
     contextHeader: string;
@@ -839,7 +851,7 @@ INSTRUÇÕES:
   };
 
   const defaultInstructions = instructionTemplates[language] ?? instructionTemplates['en'];
-  const instructions = await loadActivePrompt('mentor_handoff', defaultInstructions);
+  const instructions = await loadActivePrompt('mentor_handoff', defaultInstructions, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;
 }
 
@@ -850,6 +862,7 @@ async function buildPostMentorPrompt(
   mentor: MentorSession,
   participantNoun: string,
   language: SupportedLanguage = 'es',
+  sink?: PromptVersionSink,
 ): Promise<string> {
   const scf: Record<SupportedLanguage, {
     contextHeader: string;
@@ -912,6 +925,6 @@ INSTRUÇÕES:
   };
 
   const defaultInstructions = instructionTemplates[language] ?? instructionTemplates['en'];
-  const instructions = await loadActivePrompt('post_mentor', defaultInstructions);
+  const instructions = await loadActivePrompt('post_mentor', defaultInstructions, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;
 }

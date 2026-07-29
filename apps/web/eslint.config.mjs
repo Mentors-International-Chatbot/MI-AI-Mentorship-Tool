@@ -40,6 +40,9 @@ const eslintConfig = defineConfig([
       "src/lib/ai/sensing/**",
       // Summary generation reads multiple tables for context assembly
       "src/lib/summary/**",
+      // AI invocation tracing is an observability sink, not tenant data: it
+      // only ever inserts into ai_invocations and swallows its own failures
+      "src/lib/ai/trace/**",
     ],
     rules: {
       "no-restricted-syntax": [

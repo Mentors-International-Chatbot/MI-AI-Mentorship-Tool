@@ -3,9 +3,26 @@ import type { SupportedLanguage } from './languages';
 export interface DashboardStrings {
   // Layout
   panelTitle: string;
+  navWebChat: string;
+  navAdmin: string;
+  signOut: string;
   // Socios list
   sociosTitle: string;
   noActiveSocios: string;
+  // Health filter (socios list)
+  filterAll: string;
+  filterRed: string;
+  filterYellow: string;
+  filterGreen: string;
+  noSociosWithStatus: (status: string) => string;
+  // Health reasons — one per HealthReason kind. Spanish is the pre-existing
+  // wording, preserved byte-for-byte; en/pt use real plural forms.
+  healthReasonRedAlerts: (count: number) => string;
+  healthReasonYellowAlerts: (count: number) => string;
+  healthReasonInactive: (days: number) => string;
+  healthReasonLowUnderstanding: (score: number) => string;
+  healthReasonModerateUnderstanding: (score: number) => string;
+  healthReasonNone: string;
   thStatus: string;
   thName: string;
   thChannel: string;
@@ -70,6 +87,7 @@ export interface DashboardStrings {
   sentimentPositive: string;
   // Lesson progress
   lessonProgressTitle: string;
+  lessonProgressEmpty: string;
   lessonPending: string;
   lessonCompleted: string;
   lessonInProgress: string;
@@ -93,12 +111,36 @@ export interface DashboardStrings {
   // Revenue trend (socio detail)
   revenueTrendTitle: string;
   revenueTrendEmpty: string;
+  // Configurable panels
+  /** Fallback heading for a dimension_trend panel with no configured title. */
+  dimensionTrendTitle: (dimension: string) => string;
+  dimensionTrendEmpty: string;
+  assessmentScoresTitle: string;
+  assessmentScoresEmpty: string;
+  assessmentPassed: string;
+  assessmentNotPassed: string;
+  assessmentInProgress: string;
+  assessmentAttempts: (n: number) => string;
 }
 
 const es: DashboardStrings = {
   panelTitle: 'Panel de Mentores',
+  navWebChat: 'Chat web',
+  navAdmin: 'Administración',
+  signOut: 'Cerrar sesión',
   sociosTitle: 'Socios',
   noActiveSocios: 'No hay socios activos.',
+  filterAll: 'Todos',
+  filterRed: 'Rojo',
+  filterYellow: 'Amarillo',
+  filterGreen: 'Verde',
+  noSociosWithStatus: (status) => `No hay socios con estado ${status}.`,
+  healthReasonRedAlerts: (count) => `${count} alerta(s) roja(s) sin resolver`,
+  healthReasonYellowAlerts: (count) => `${count} alerta(s) amarilla(s) sin resolver`,
+  healthReasonInactive: (days) => `Inactivo por ${days} días`,
+  healthReasonLowUnderstanding: (score) => `Comprensión baja: ${score}/10`,
+  healthReasonModerateUnderstanding: (score) => `Comprensión moderada: ${score}/10`,
+  healthReasonNone: 'Sin alertas',
   thStatus: 'Estado',
   thName: 'Nombre',
   thChannel: 'Canal',
@@ -155,6 +197,7 @@ const es: DashboardStrings = {
   sentimentNeutral: 'Neutral',
   sentimentPositive: 'Positivo',
   lessonProgressTitle: 'Progreso de lecciones',
+  lessonProgressEmpty: 'Este curso aún no tiene lecciones.',
   lessonPending: 'Pendiente',
   lessonCompleted: 'Completada',
   lessonInProgress: 'En progreso',
@@ -177,12 +220,37 @@ const es: DashboardStrings = {
   revenueTrendTitle: 'Tendencia de ingresos',
   revenueTrendEmpty:
     'Aún no hay datos suficientes para mostrar una tendencia. Los ingresos aparecerán cuando el socio reporte cifras en la conversación.',
+  dimensionTrendTitle: (dimension) => `Tendencia: ${dimension}`,
+  dimensionTrendEmpty: 'Aún no hay suficientes mediciones para mostrar una tendencia.',
+  assessmentScoresTitle: 'Resultados de evaluación',
+  assessmentScoresEmpty: 'Sin evaluaciones aún.',
+  assessmentPassed: 'Aprobada',
+  assessmentNotPassed: 'No aprobada',
+  assessmentInProgress: 'En curso',
+  assessmentAttempts: (n) => (n === 1 ? '1 intento' : `${n} intentos`),
 };
 
 const en: DashboardStrings = {
   panelTitle: 'Mentor Dashboard',
+  navWebChat: 'Web chat',
+  navAdmin: 'Admin',
+  signOut: 'Sign Out',
   sociosTitle: 'Socios',
   noActiveSocios: 'No active socios.',
+  filterAll: 'All',
+  filterRed: 'Red',
+  filterYellow: 'Yellow',
+  filterGreen: 'Green',
+  noSociosWithStatus: (status) => `No socios with status ${status}.`,
+  healthReasonRedAlerts: (count) =>
+    count === 1 ? '1 unresolved red alert' : `${count} unresolved red alerts`,
+  healthReasonYellowAlerts: (count) =>
+    count === 1 ? '1 unresolved yellow alert' : `${count} unresolved yellow alerts`,
+  healthReasonInactive: (days) =>
+    days === 1 ? 'Inactive for 1 day' : `Inactive for ${days} days`,
+  healthReasonLowUnderstanding: (score) => `Low comprehension: ${score}/10`,
+  healthReasonModerateUnderstanding: (score) => `Moderate comprehension: ${score}/10`,
+  healthReasonNone: 'No alerts',
   thStatus: 'Status',
   thName: 'Name',
   thChannel: 'Channel',
@@ -239,6 +307,7 @@ const en: DashboardStrings = {
   sentimentNeutral: 'Neutral',
   sentimentPositive: 'Positive',
   lessonProgressTitle: 'Lesson progress',
+  lessonProgressEmpty: 'This course has no lessons yet.',
   lessonPending: 'Pending',
   lessonCompleted: 'Completed',
   lessonInProgress: 'In progress',
@@ -261,12 +330,36 @@ const en: DashboardStrings = {
   revenueTrendTitle: 'Revenue trend',
   revenueTrendEmpty:
     'Not enough data yet to show a trend. Revenue appears when the socio reports figures in conversation.',
+  dimensionTrendTitle: (dimension) => `${dimension} trend`,
+  dimensionTrendEmpty: 'Not enough measurements yet to show a trend.',
+  assessmentScoresTitle: 'Assessment results',
+  assessmentScoresEmpty: 'No assessments yet.',
+  assessmentPassed: 'Passed',
+  assessmentNotPassed: 'Not passed',
+  assessmentInProgress: 'In progress',
+  assessmentAttempts: (n) => (n === 1 ? '1 attempt' : `${n} attempts`),
 };
 
 const pt: DashboardStrings = {
   panelTitle: 'Painel de Mentores',
+  navWebChat: 'Chat web',
+  navAdmin: 'Administração',
+  signOut: 'Sair',
   sociosTitle: 'Sócios',
   noActiveSocios: 'Nenhum sócio ativo.',
+  filterAll: 'Todos',
+  filterRed: 'Vermelho',
+  filterYellow: 'Amarelo',
+  filterGreen: 'Verde',
+  noSociosWithStatus: (status) => `Nenhum sócio com status ${status}.`,
+  healthReasonRedAlerts: (count) =>
+    count === 1 ? '1 alerta vermelho não resolvido' : `${count} alertas vermelhos não resolvidos`,
+  healthReasonYellowAlerts: (count) =>
+    count === 1 ? '1 alerta amarelo não resolvido' : `${count} alertas amarelos não resolvidos`,
+  healthReasonInactive: (days) => (days === 1 ? 'Inativo há 1 dia' : `Inativo há ${days} dias`),
+  healthReasonLowUnderstanding: (score) => `Compreensão baixa: ${score}/10`,
+  healthReasonModerateUnderstanding: (score) => `Compreensão moderada: ${score}/10`,
+  healthReasonNone: 'Sem alertas',
   thStatus: 'Status',
   thName: 'Nome',
   thChannel: 'Canal',
@@ -323,6 +416,7 @@ const pt: DashboardStrings = {
   sentimentNeutral: 'Neutro',
   sentimentPositive: 'Positivo',
   lessonProgressTitle: 'Progresso das lições',
+  lessonProgressEmpty: 'Este curso ainda não tem lições.',
   lessonPending: 'Pendente',
   lessonCompleted: 'Concluída',
   lessonInProgress: 'Em andamento',
@@ -345,6 +439,14 @@ const pt: DashboardStrings = {
   revenueTrendTitle: 'Tendência de receita',
   revenueTrendEmpty:
     'Ainda não há dados suficientes para mostrar uma tendência. A receita aparece quando o sócio informar valores na conversa.',
+  dimensionTrendTitle: (dimension) => `Tendência: ${dimension}`,
+  dimensionTrendEmpty: 'Ainda não há medições suficientes para mostrar uma tendência.',
+  assessmentScoresTitle: 'Resultados da avaliação',
+  assessmentScoresEmpty: 'Nenhuma avaliação ainda.',
+  assessmentPassed: 'Aprovada',
+  assessmentNotPassed: 'Não aprovada',
+  assessmentInProgress: 'Em andamento',
+  assessmentAttempts: (n) => (n === 1 ? '1 tentativa' : `${n} tentativas`),
 };
 
 const DASHBOARD_STRINGS: Record<SupportedLanguage, DashboardStrings> = { es, en, pt };

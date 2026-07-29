@@ -22,11 +22,17 @@
 
 import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
-import { senseAssessmentTurn, createInitialSessionState } from './senseAssessmentTurn';
+import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
+import {
+  senseAssessmentTurn,
+  createInitialSessionState,
+  type AssessmentTraceContext,
+} from './senseAssessmentTurn';
 import {
   buildAssessmentPrompt,
   buildPassedClosingMessage,
   buildMaxTurnsClosingMessage,
+  ASSESSMENT_EVALUATOR_PROMPT_VERSION,
   type AssessmentPromptParams,
 } from './buildAssessmentPrompt';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
@@ -81,7 +87,11 @@ export interface AssessmentTurnInput {
   turnCount: number;
   /** Assessment configuration */
   config: AssessmentConfig;
+  /** Trace-only identifiers for ai_invocations. Never affects scoring. */
+  trace?: AssessmentTraceContext;
 }
+
+export type { AssessmentTraceContext };
 
 export type AssessmentTurnOutcome =
   | { status: 'continue'; updatedState: DimensionStateMap; evaluatorResponse: string }
@@ -134,6 +144,7 @@ async function generateEvaluatorResponse(params: {
   systemPrompt: string;
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   studentText: string;
+  trace?: AssessmentTraceContext;
 }): Promise<string> {
   const { systemPrompt, conversationHistory, studentText } = params;
 
@@ -153,12 +164,22 @@ async function generateEvaluatorResponse(params: {
   ];
 
   try {
-    const response = await Promise.race([
-      chat.invoke(messages),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Evaluator response timeout')), EVALUATOR_TIMEOUT_MS)
-      ),
-    ]);
+    const response = await invokeTraced({
+      operation: 'assessment_turn',
+      model: EVALUATOR_MODEL,
+      promptVersion: { evaluator: ASSESSMENT_EVALUATOR_PROMPT_VERSION },
+      systemPrompt,
+      socioId: params.trace?.socioId,
+      organizationId: params.trace?.organizationId,
+      assessmentSessionId: params.trace?.assessmentSessionId,
+      mode: 'probe',
+      invoke: () => Promise.race([
+        chat.invoke(messages),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Evaluator response timeout')), EVALUATOR_TIMEOUT_MS)
+        ),
+      ]),
+    });
 
     return typeof response.content === 'string'
       ? response.content
@@ -174,6 +195,7 @@ async function generateClosingMessage(params: {
   systemPrompt: string;
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   studentText: string;
+  trace?: AssessmentTraceContext;
 }): Promise<string> {
   const { systemPrompt, conversationHistory, studentText } = params;
 
@@ -193,12 +215,22 @@ async function generateClosingMessage(params: {
   ];
 
   try {
-    const response = await Promise.race([
-      chat.invoke(messages),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Closing message timeout')), EVALUATOR_TIMEOUT_MS)
-      ),
-    ]);
+    const response = await invokeTraced({
+      operation: 'assessment_turn',
+      model: EVALUATOR_MODEL,
+      promptVersion: { evaluator: ASSESSMENT_EVALUATOR_PROMPT_VERSION },
+      systemPrompt,
+      socioId: params.trace?.socioId,
+      organizationId: params.trace?.organizationId,
+      assessmentSessionId: params.trace?.assessmentSessionId,
+      mode: 'closing',
+      invoke: () => Promise.race([
+        chat.invoke(messages),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Closing message timeout')), EVALUATOR_TIMEOUT_MS)
+        ),
+      ]),
+    });
 
     return typeof response.content === 'string'
       ? response.content
@@ -220,7 +252,7 @@ async function generateClosingMessage(params: {
  * @returns Outcome with updated state and evaluator response or closing message
  */
 export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<AssessmentTurnOutcome> {
-  const { studentText, conversationHistory, priorState, turnCount, config } = input;
+  const { studentText, conversationHistory, priorState, turnCount, config, trace } = input;
   const { passing, aiBehavior, keyConcepts, evaluatesConcepts, dimensions, studentVisibleDimensionKeys, onMaxTurnsPolicy } = config;
 
   // ─── Step 1: Sense and draft the probe concurrently ───────────────────────
@@ -240,6 +272,7 @@ export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<Ass
     priorStudentAnswers: conversationHistory
       .filter((m) => m.role === 'user')
       .map((m) => m.content),
+    trace,
   });
 
   const probePromptParams: AssessmentPromptParams = {
@@ -257,6 +290,7 @@ export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<Ass
     systemPrompt: buildAssessmentPrompt(probePromptParams),
     conversationHistory,
     studentText,
+    trace,
   });
 
   const [updatedState, evaluatorResponse] = await Promise.all([sensingPromise, probePromise]);
@@ -277,6 +311,7 @@ export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<Ass
       systemPrompt: closingPrompt,
       conversationHistory,
       studentText,
+      trace,
     });
 
     return {
@@ -300,6 +335,7 @@ export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<Ass
       systemPrompt: closingPrompt,
       conversationHistory,
       studentText,
+      trace,
     });
 
     return {
@@ -333,6 +369,8 @@ export function createEmptySessionState(dimensions: TrackedDimension[]): Dimensi
 export async function generateOpeningMessage(params: {
   teachBackPrompt: string;
   aiBehavior: AssessmentConfig['aiBehavior'];
+  /** Trace-only identifiers for ai_invocations. */
+  trace?: AssessmentTraceContext;
 }): Promise<string> {
   const { teachBackPrompt, aiBehavior } = params;
 
@@ -359,12 +397,22 @@ Write a brief, warm introduction (1-2 sentences) then present the question. Do n
   });
 
   try {
-    const response = await Promise.race([
-      chat.invoke([new SystemMessage(systemPrompt)]),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Opening message timeout')), EVALUATOR_TIMEOUT_MS)
-      ),
-    ]);
+    const response = await invokeTraced({
+      operation: 'assessment_turn',
+      model: EVALUATOR_MODEL,
+      promptVersion: { evaluator: ASSESSMENT_EVALUATOR_PROMPT_VERSION },
+      systemPrompt,
+      socioId: params.trace?.socioId,
+      organizationId: params.trace?.organizationId,
+      assessmentSessionId: params.trace?.assessmentSessionId,
+      mode: 'opening',
+      invoke: () => Promise.race([
+        chat.invoke([new SystemMessage(systemPrompt)]),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Opening message timeout')), EVALUATOR_TIMEOUT_MS)
+        ),
+      ]),
+    });
 
     return typeof response.content === 'string'
       ? response.content

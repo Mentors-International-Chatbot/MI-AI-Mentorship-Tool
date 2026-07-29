@@ -1,4 +1,5 @@
 import type { ChannelType } from '@/lib/delivery/types';
+import type { SupportedLanguage } from '@/lib/i18n/languages';
 import type { AssessmentSession } from './tenantRepo.types';
 
 export type Role = "user" | "assistant" | "system" | "mentor";
@@ -200,6 +201,12 @@ export interface Repo {
     resolveFlag(flagId: string, mentorId: string): Promise<SocioFlag>;
     upsertLessonProgress(socioId: string, lessonNumber: number, understanding: number | null, completed: boolean): Promise<LessonProgressRecord>;
     getLessonProgressAll(socioId: string): Promise<LessonProgressRecord[]>;
+
+    // Mentor/admin UI preferences
+    /** Returns null when the mentor is unknown or the stored value is not a supported language. */
+    getMentorPreferredLanguage(mentorId: string): Promise<SupportedLanguage | null>;
+    /** Returns false when no mentor row matched. */
+    setMentorPreferredLanguage(mentorId: string, language: SupportedLanguage): Promise<boolean>;
 
     // Sentiment methods
     saveSentiment(data: Omit<MessageSentimentRecord, 'id' | 'createdAt'>): Promise<MessageSentimentRecord>;

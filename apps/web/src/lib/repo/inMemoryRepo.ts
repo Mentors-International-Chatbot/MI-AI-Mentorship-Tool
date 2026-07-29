@@ -1,6 +1,6 @@
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
-import { DEFAULT_LANGUAGE } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 
 const sociosByKey = new Map<string, Socio>();
 const sociosById = new Map<string, Socio>();
@@ -15,6 +15,7 @@ const systemPrompts = new Map<string, SystemPrompt[]>();
 const summariesBySocio = new Map<string, Summary[]>();
 const financialsBySocio = new Map<string, FinancialSnapshot[]>();
 const feedbackBySocio = new Map<string, SocioFeedback[]>();
+const mentorLanguageById = new Map<string, SupportedLanguage>();
 
 function channelKey(channelType: string, externalId: string): string {
     return `${channelType}:${externalId}`;
@@ -306,6 +307,16 @@ export const inMemoryRepo: Repo = {
             }
         }
         return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    },
+
+    async getMentorPreferredLanguage(mentorId) {
+        return mentorLanguageById.get(mentorId) ?? null;
+    },
+
+    async setMentorPreferredLanguage(mentorId, language) {
+        // No mentor store in the test double, so every id is treated as valid.
+        mentorLanguageById.set(mentorId, language);
+        return true;
     },
 
     async getSocioContext(socioId) {

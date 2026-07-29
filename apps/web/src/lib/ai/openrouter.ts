@@ -10,13 +10,22 @@ type OpenRouterChatOptions = {
   maxTokens?: number;
 };
 
+/**
+ * The model id createOpenRouterChat would use for the given override.
+ * Exported so tracing can record the effective model without reaching into
+ * the ChatOpenAI instance.
+ */
+export function resolveOpenRouterModel(model?: string): string {
+  return model ?? process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL;
+}
+
 export function createOpenRouterChat(options: OpenRouterChatOptions): ChatOpenAI {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error("Missing OPENROUTER_API_KEY environment variable");
   }
 
-  const model = options.model ?? process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL;
+  const model = resolveOpenRouterModel(options.model);
 
   return new ChatOpenAI({
     model,

@@ -125,7 +125,9 @@ async function buildMIJourneyPackage(): Promise<JourneyPackage> {
       description:
         "28-lesson financial literacy and business mentoring curriculum for micro-entrepreneurs in Colombia.",
       languages: ["es"],
-      version: "1.0.0",
+      // 1.1.0 adds config.dashboard. Bumped rather than re-importing over
+      // 1.0.0 so the published 1.0.0 stays an intact, archived record.
+      version: "1.1.0",
       author: {
         name: "Mentors International",
         organizationKey: "mentors-international",
@@ -211,6 +213,18 @@ async function buildMIJourneyPackage(): Promise<JourneyPackage> {
           "lesson-28", // Mi Propósito (final lesson)
         ],
         requiredDimensionKeys: ["comprehension"],
+      },
+      dashboard: {
+        // Array order is render order. No dimension_trend: MI's tracked
+        // dimensions are comprehension / engagement / emotional-state — revenue
+        // is not a dimension, it reaches the dashboard via FinancialSnapshot
+        // through the financial_snapshots panel.
+        panels: [
+          { type: "lesson_progress" },
+          { type: "assessment_scores" },
+          { type: "weekly_summary" },
+          { type: "financial_snapshots" },
+        ],
       },
     },
 
@@ -355,7 +369,7 @@ async function main() {
 The 28 MI lessons are now stored in the database:
   - ContentCollection: mi-colombia-curriculum
   - 28 ContentLesson rows with LessonVersion.body containing full lesson data
-  - ProgramVersion v1.0.0 is PUBLISHED and active
+  - ProgramVersion v1.1.0 is PUBLISHED and active
 
 Next steps:
   1. Update AI prompts to read from LessonVersion rows instead of data.ts

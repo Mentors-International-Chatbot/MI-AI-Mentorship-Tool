@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import { cookies } from 'next/headers';
-import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
+import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
 import { DashboardLangProvider } from './DashboardLangContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { LogoutButton } from './LogoutButton';
@@ -11,9 +10,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const rawLang = cookieStore.get('dashboard_lang')?.value ?? 'en';
-  const lang: SupportedLanguage = isSupportedLanguage(rawLang) ? rawLang : 'en';
+  const lang = await resolveDashboardLanguage();
   const t = getDashboardStrings(lang);
 
   return (
@@ -27,13 +24,13 @@ export default async function DashboardLayout({
                 href="/chat"
                 className="text-sm text-gray-300 hover:text-white transition-colors"
               >
-                Web chat
+                {t.navWebChat}
               </Link>
               <Link
                 href="/admin"
                 className="text-sm text-gray-300 hover:text-white transition-colors"
               >
-                Admin
+                {t.navAdmin}
               </Link>
               <LanguageSwitcher />
               <span className="text-sm text-gray-300">Mentors International</span>

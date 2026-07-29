@@ -1,22 +1,25 @@
 export const dynamic = 'force-dynamic';
 
-import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { repo } from '@/lib/repo';
+import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { verifySession } from '@/lib/auth/session';
-import { prisma } from '@/lib/db';
-import { computeSocioHealth } from '@/lib/health';
-import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/languages';
+import { computeSocioHealth, formatHealthReason } from '@/lib/health';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
+import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
+import { resolveDashboardPanels } from '@/lib/journey-package/dashboard-panels';
+import { resolveLocalized } from '@/lib/courses/course-meta';
+import { loadPanelData } from './panelData';
 import { ChatHistory } from './ChatHistory';
 import { SendMessageForm } from './SendMessageForm';
-import { AiToggleButton } from './AiToggleButton';
 import { SliderPanel } from './SliderPanel';
 import { FlagsPanel } from './FlagsPanel';
 import { LessonProgressPanel } from './LessonProgressPanel';
 import { SummaryPanel } from './SummaryPanel';
 import { RevenueChart } from './RevenueChart';
+import { DimensionTrendPanel } from './DimensionTrendPanel';
+import { AssessmentScoresPanel } from './AssessmentScoresPanel';
 
 const STATUS_COLORS: Record<string, string> = {
   RED: 'bg-red-500',
@@ -36,9 +39,7 @@ export default async function SocioDetailPage({
     redirect('/login');
   }
 
-  const cookieStore = await cookies();
-  const rawLang = cookieStore.get('dashboard_lang')?.value ?? 'en';
-  const lang: SupportedLanguage = isSupportedLanguage(rawLang) ? rawLang : 'en';
+  const lang = await resolveDashboardLanguage();
   const t = getDashboardStrings(lang);
 
   const socio = await repo.getSocioById(id);
@@ -49,37 +50,30 @@ export default async function SocioDetailPage({
     notFound();
   }
 
-  const [health, progress, flags, lessonProgress, messages, summaries, financialRows, latestFeedback] =
-    await Promise.all([
-      computeSocioHealth(id),
-      repo.getSocioProgress(id),
-      repo.getFlags(id),
-      repo.getLessonProgressAll(id),
-      repo.getMessages(id, 50),
-      prisma.summary.findMany({
-        where: { socioId: id },
-        orderBy: { weekStartDate: 'desc' },
-        take: 8,
-      }),
-      prisma.financialSnapshot.findMany({
-        where: { socioId: id },
-        orderBy: { weekStartDate: 'desc' },
-        take: 20,
-      }),
-      prisma.socioFeedback.findFirst({
-        where: { socioId: id },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
+  // Collection slugs are only unique within an organization, so the course
+  // lookup must be org-scoped. Resolved once here and shared with the panel
+  // data loader rather than resolved twice per render. The resolution *source*
+  // matters too: a default-org fallback is not a tenant identification, and
+  // resolveDashboardPanels refuses to read a collection on that basis.
+  const org = await tenantPrismaRepo.resolveOrganizationForSocio(id);
 
-  const serializedFinancials = [...financialRows]
-    .reverse()
-    .map((f) => ({
-      id: f.id,
-      revenue: f.revenue,
-      netProfit: f.netProfit,
-      weekStartDate: f.weekStartDate.toISOString(),
-    }));
+  // Panels are declared by the socio's course, so resolve them before loading
+  // any panel data — an undeclared panel is never queried.
+  const { panels: panelConfig, lessonCount } = await resolveDashboardPanels(
+    { ...org, socioId: id },
+    socio.curriculumCollectionKey,
+  );
+
+  const [health, progress, flags, messages, feedback, panels] = await Promise.all([
+    computeSocioHealth(id),
+    repo.getSocioProgress(id),
+    repo.getFlags(id),
+    repo.getMessages(id, 50),
+    repo.getFeedback(id),
+    loadPanelData(id, org.organizationId, panelConfig),
+  ]);
+
+  const latestFeedback = feedback[0] ?? null;
 
   const overrides = (socio.promptOverrides ?? {}) as Record<string, number | string | undefined>;
 
@@ -95,34 +89,6 @@ export default async function SocioDetailPage({
     source: f.source,
     resolvedAt: f.resolvedAt?.toISOString() ?? null,
     createdAt: f.createdAt.toISOString(),
-  }));
-
-  const serializedLessonProgress = lessonProgress.map(lp => ({
-    ...lp,
-    completedAt: lp.completedAt?.toISOString() ?? null,
-    createdAt: lp.createdAt.toISOString(),
-    updatedAt: lp.updatedAt.toISOString(),
-  }));
-
-  const serializedSummaries = summaries.map((s) => ({
-    id: s.id,
-    weekStartDate: s.weekStartDate.toISOString(),
-    content: s.content,
-    flags: s.flags as {
-      risks: string[];
-      achievements: string[];
-      recommendedAction: string;
-      overallHealth: 'green' | 'yellow' | 'red';
-    } | null,
-    metrics: s.metrics as {
-      messageCount: number;
-      lessonsCompleted: number;
-      avgConfusion: number;
-      avgFrustration: number;
-      currentLesson: number;
-      activeFlagCount: number;
-    } | null,
-    createdAt: s.createdAt.toISOString(),
   }));
 
   return (
@@ -149,7 +115,7 @@ export default async function SocioDetailPage({
         </div>
         <div className="mt-1 text-sm text-gray-500">
           {health.reasons.map((r, i) => (
-            <span key={i} className="mr-3">{r}</span>
+            <span key={i} className="mr-3">{formatHealthReason(r, t)}</span>
           ))}
         </div>
       </div>
@@ -161,8 +127,9 @@ export default async function SocioDetailPage({
           <SendMessageForm socioId={id} initialAiPaused={socio.aiPaused} />
         </div>
 
-        {/* Right column: Panels */}
+        {/* Right column: mentor tooling, then the course's declared panels */}
         <div className="space-y-6">
+          {/* Not panels — mentor controls that apply to every course. */}
           <SliderPanel
             socioId={id}
             initialComplexity={(overrides.complexity as number) ?? 0.5}
@@ -170,9 +137,54 @@ export default async function SocioDetailPage({
             initialPositivity={(overrides.positivity as number) ?? 0.5}
           />
           <FlagsPanel flags={serializedFlags} socioId={id} />
-          <LessonProgressPanel lessonProgress={serializedLessonProgress} />
-          <SummaryPanel socioId={id} summaries={serializedSummaries} />
-          <RevenueChart data={serializedFinancials} />
+
+          {panels.map((panel, i) => {
+            switch (panel.type) {
+              case 'lesson_progress':
+                return (
+                  <LessonProgressPanel
+                    key={`${panel.type}-${i}`}
+                    lessonProgress={panel.lessonProgress}
+                    lessonCount={lessonCount}
+                  />
+                );
+              case 'assessment_scores':
+                return (
+                  <AssessmentScoresPanel
+                    key={`${panel.type}-${i}`}
+                    title={
+                      panel.title
+                        ? resolveLocalized(panel.title, lang)
+                        : t.assessmentScoresTitle
+                    }
+                    rows={panel.rows}
+                  />
+                );
+              case 'weekly_summary':
+                return (
+                  <SummaryPanel
+                    key={`${panel.type}-${i}`}
+                    socioId={id}
+                    summaries={panel.summaries}
+                  />
+                );
+              case 'financial_snapshots':
+                return <RevenueChart key={`${panel.type}-${i}`} data={panel.points} />;
+              case 'dimension_trend':
+                return (
+                  <DimensionTrendPanel
+                    key={`${panel.type}-${panel.dimensionKey}-${i}`}
+                    title={
+                      panel.title
+                        ? resolveLocalized(panel.title, lang)
+                        : t.dimensionTrendTitle(panel.label)
+                    }
+                    points={panel.points}
+                    scale={panel.scale}
+                  />
+                );
+            }
+          })}
         </div>
       </div>
     </div>

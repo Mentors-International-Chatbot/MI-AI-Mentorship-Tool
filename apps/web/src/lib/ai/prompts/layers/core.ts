@@ -4,6 +4,10 @@ import { DEFAULT_LANGUAGE, getLanguageDirective, type SupportedLanguage } from '
 import { repo } from '@/lib/repo';
 // getChatbotDisplayName removed - mentor name now comes from course metadata only
 import { getCourseMeta, resolveLocalized, type CourseMeta } from '@/lib/courses/course-meta';
+import { formatDbPromptVersion, type PromptVersionSink } from '../loadPrompt';
+
+/** Bump whenever the Layer 1 prompt text changes. Recorded on every AiInvocation. */
+export const CORE_PROMPT_VERSION = 'v1';
 
 // ─── Conciseness Mapping ────────────────────────────────────────────
 
@@ -29,11 +33,19 @@ export function getConcisivenessInstruction(level?: ConcisivenessLevel): string 
 //   2. Fallback: generic template using course metadata
 // The MI-specific prompt lives in the DB as core:mi-colombia-curriculum
 
-async function loadScopedPrompt(collectionKey: string): Promise<string | null> {
+async function loadScopedPrompt(
+  collectionKey: string,
+  sink?: PromptVersionSink,
+): Promise<string | null> {
   try {
     // Try course-scoped prompt first
     const scopedPrompt = await repo.getActivePrompt(`core:${collectionKey}`);
-    if (scopedPrompt?.content) return scopedPrompt.content;
+    if (scopedPrompt?.content) {
+      // Record the DB row's version so traces show what actually shipped, not
+      // CORE_PROMPT_VERSION (which never moves when the row is edited in /admin).
+      if (sink) sink.core = formatDbPromptVersion(scopedPrompt);
+      return scopedPrompt.content;
+    }
     return null;
   } catch {
     return null;
@@ -356,6 +368,8 @@ export async function buildCorePrompt(
   collectionKey: string,
   overrides?: PromptOverrides,
   language?: SupportedLanguage,
+  /** Trace-only: receives `core` when a DB-backed prompt overrode the template. */
+  sink?: PromptVersionSink,
 ): Promise<string> {
   const lang = language ?? DEFAULT_LANGUAGE;
 
@@ -369,7 +383,7 @@ export async function buildCorePrompt(
     : undefined;
 
   // Resolution: DB scoped prompt → generic template
-  const dbPrompt = await loadScopedPrompt(collectionKey);
+  const dbPrompt = await loadScopedPrompt(collectionKey, sink);
   let prompt: string;
 
   if (dbPrompt) {

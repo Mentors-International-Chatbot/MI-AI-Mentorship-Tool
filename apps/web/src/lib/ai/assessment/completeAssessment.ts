@@ -19,6 +19,21 @@ import type { TenantRepo, AssessmentSession, MetricObservation, ObservationSourc
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import { evaluateAlerts } from '@/lib/alerts/evaluateAlerts';
 import { repo as socioRepo } from '@/lib/repo';
+import {
+  ASSESSMENT_SENSING_MODEL,
+  ASSESSMENT_SENSING_PROMPT_VERSION,
+} from './senseAssessmentTurn';
+import { ASSESSMENT_EVALUATOR_PROMPT_VERSION } from './buildAssessmentPrompt';
+
+/**
+ * Provenance stamped on every observation this file writes: which model graded
+ * the teach-back and which prompt versions produced the scores. Same version
+ * strings the matching ai_invocations rows carry.
+ */
+const OBSERVATION_PROMPT_VERSION = JSON.stringify({
+  evaluator: ASSESSMENT_EVALUATOR_PROMPT_VERSION,
+  assessment_sensing: ASSESSMENT_SENSING_PROMPT_VERSION,
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -162,8 +177,8 @@ async function writeObservations(params: {
         evidence: dimState.evidence,
         trend: dimState.trend,
       },
-      modelVersion: 'assessment-v1',
-      promptVersion: null,
+      modelVersion: ASSESSMENT_SENSING_MODEL,
+      promptVersion: OBSERVATION_PROMPT_VERSION,
       verificationStatus: null,
       source: 'ai_inferred' as ObservationSource,
       observedAt: now,

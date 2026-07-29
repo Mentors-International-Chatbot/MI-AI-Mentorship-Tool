@@ -1,11 +1,10 @@
 export const dynamic = 'force-dynamic';
 
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { repo } from '@/lib/repo';
 import { computeSocioHealth, type SocioHealth } from '@/lib/health';
-import { isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
+import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
 import { verifySession } from '@/lib/auth/session';
 import { SocioListTable } from './SocioListTable';
 import { Prisma } from '@prisma/client';
@@ -42,9 +41,7 @@ export default async function SociosPage() {
     redirect('/login');
   }
 
-  const cookieStore = await cookies();
-  const rawLang = cookieStore.get('dashboard_lang')?.value ?? 'en';
-  const lang: SupportedLanguage = isSupportedLanguage(rawLang) ? rawLang : 'en';
+  const lang = await resolveDashboardLanguage();
   const t = getDashboardStrings(lang);
 
   let socios;

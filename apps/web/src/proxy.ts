@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const COOKIE_NAME = 'mi_session';
-const SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || 'dev-secret-change-in-production',
-);
+import {
+  COOKIE_NAME,
+  sessionCookieOptions,
+  sessionMaxAge,
+  shouldRefresh,
+  signSession,
+  verifyToken,
+  type VerifiedSession,
+} from '@/lib/auth/sessionConfig';
 
 // Routes that don't require authentication
 const PUBLIC_PATHS = [
@@ -22,21 +25,40 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 }
 
-type SessionPayload = {
-  userId: string;
-  role: 'socio' | 'mentor' | 'admin';
-  name: string;
-};
-
-async function getSession(req: NextRequest): Promise<SessionPayload | null> {
+async function getSession(req: NextRequest): Promise<VerifiedSession | null> {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
+  return verifyToken(token);
+}
+
+/**
+ * Re-issue a session that is past the halfway point of its lifetime, so an
+ * actively-used session never expires out from under the user. Re-signing
+ * failures are non-fatal: the existing cookie is still valid.
+ */
+async function withRefreshedSession(
+  res: NextResponse,
+  session: VerifiedSession,
+): Promise<NextResponse> {
+  if (!shouldRefresh(session, Math.floor(Date.now() / 1000))) return res;
+
   try {
-    const { payload } = await jwtVerify(token, SECRET);
-    return payload as unknown as SessionPayload;
+    const maxAge = sessionMaxAge(session.rememberMe);
+    const token = await signSession(
+      {
+        userId: session.userId,
+        role: session.role,
+        name: session.name,
+        rememberMe: session.rememberMe,
+      },
+      maxAge,
+    );
+    res.cookies.set(COOKIE_NAME, token, sessionCookieOptions(maxAge));
   } catch {
-    return null;
+    // Keep serving the request on the current cookie.
   }
+
+  return res;
 }
 
 export async function proxy(req: NextRequest) {
@@ -86,7 +108,7 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return withRefreshedSession(NextResponse.next(), session);
 }
 
 export const config = {

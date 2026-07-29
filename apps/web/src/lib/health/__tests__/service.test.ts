@@ -1,5 +1,13 @@
 import { computeHealthFromData } from '@/lib/health/service';
+import type { HealthReason } from '@/lib/health/service';
+import { formatHealthReason } from '@/lib/health/format';
+import { getDashboardStrings } from '@/lib/i18n/dashboard';
 import type { SocioFlag, SocioProgress } from '@/lib/repo/types';
+
+// Reasons are structured now; these assertions render them in Spanish, which
+// keeps the original expectations meaningful AND pins the Spanish wording.
+const es = getDashboardStrings('es');
+const renderEs = (reason: HealthReason) => formatHealthReason(reason, es);
 
 function makeProgress(overrides: Partial<SocioProgress> = {}): SocioProgress {
   return {
@@ -37,14 +45,14 @@ describe('computeHealthFromData', () => {
   it('returns GREEN with no flags and recent activity', () => {
     const result = computeHealthFromData([], makeProgress());
     expect(result.status).toBe('GREEN');
-    expect(result.reasons).toContain('Sin alertas');
+    expect(result.reasons.map(renderEs)).toContain('Sin alertas');
   });
 
   it('returns RED with unresolved RED flag', () => {
     const flags = [makeFlag({ level: 'RED', resolved: false })];
     const result = computeHealthFromData(flags, makeProgress());
     expect(result.status).toBe('RED');
-    expect(result.reasons[0]).toMatch(/1 alerta\(s\) roja\(s\)/);
+    expect(renderEs(result.reasons[0])).toMatch(/1 alerta\(s\) roja\(s\)/);
   });
 
   it('returns RED with multiple unresolved RED flags', () => {
@@ -54,7 +62,7 @@ describe('computeHealthFromData', () => {
     ];
     const result = computeHealthFromData(flags, makeProgress());
     expect(result.status).toBe('RED');
-    expect(result.reasons[0]).toMatch(/2 alerta\(s\) roja\(s\)/);
+    expect(renderEs(result.reasons[0])).toMatch(/2 alerta\(s\) roja\(s\)/);
   });
 
   it('ignores resolved RED flags', () => {
@@ -67,13 +75,13 @@ describe('computeHealthFromData', () => {
     const lastInteraction = new Date(Date.now() - 25 * 24 * 60 * 60 * 1000);
     const result = computeHealthFromData([], makeProgress({ lastInteractionAt: lastInteraction }));
     expect(result.status).toBe('RED');
-    expect(result.reasons[0]).toMatch(/Inactivo por 25 días/);
+    expect(renderEs(result.reasons[0])).toMatch(/Inactivo por 25 días/);
   });
 
   it('returns RED when understanding <= 4', () => {
     const result = computeHealthFromData([], makeProgress({ weeklyUnderstanding: 3 }));
     expect(result.status).toBe('RED');
-    expect(result.reasons[0]).toMatch(/Comprensión baja: 3\/10/);
+    expect(renderEs(result.reasons[0])).toMatch(/Comprensión baja: 3\/10/);
   });
 
   it('returns RED when understanding is exactly 4', () => {
@@ -85,20 +93,20 @@ describe('computeHealthFromData', () => {
     const flags = [makeFlag({ level: 'YELLOW', resolved: false })];
     const result = computeHealthFromData(flags, makeProgress());
     expect(result.status).toBe('YELLOW');
-    expect(result.reasons[0]).toMatch(/1 alerta\(s\) amarilla\(s\)/);
+    expect(renderEs(result.reasons[0])).toMatch(/1 alerta\(s\) amarilla\(s\)/);
   });
 
   it('returns YELLOW when inactive 7-21 days', () => {
     const lastInteraction = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     const result = computeHealthFromData([], makeProgress({ lastInteractionAt: lastInteraction }));
     expect(result.status).toBe('YELLOW');
-    expect(result.reasons[0]).toMatch(/Inactivo por 10 días/);
+    expect(renderEs(result.reasons[0])).toMatch(/Inactivo por 10 días/);
   });
 
   it('returns YELLOW when understanding is 5-6', () => {
     const result = computeHealthFromData([], makeProgress({ weeklyUnderstanding: 5 }));
     expect(result.status).toBe('YELLOW');
-    expect(result.reasons[0]).toMatch(/Comprensión moderada: 5\/10/);
+    expect(renderEs(result.reasons[0])).toMatch(/Comprensión moderada: 5\/10/);
   });
 
   it('RED flag takes priority over YELLOW conditions', () => {
@@ -109,8 +117,8 @@ describe('computeHealthFromData', () => {
     const result = computeHealthFromData(flags, makeProgress({ weeklyUnderstanding: 5 }));
     expect(result.status).toBe('RED');
     // YELLOW reasons should not appear when RED
-    expect(result.reasons.every((r) => !r.includes('amarilla'))).toBe(true);
-    expect(result.reasons.every((r) => !r.includes('moderada'))).toBe(true);
+    expect(result.reasons.map(renderEs).every((r) => !r.includes('amarilla'))).toBe(true);
+    expect(result.reasons.map(renderEs).every((r) => !r.includes('moderada'))).toBe(true);
   });
 
   it('accumulates multiple RED reasons', () => {

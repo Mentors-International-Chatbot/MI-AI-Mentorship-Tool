@@ -24,6 +24,7 @@ import { z } from "zod";
 import {
   trackedDimensionSchema,
   passingSchema,
+  dashboardSchema,
   configSchema as journeyPackageConfigSchema,
 } from "./journey-package.schema";
 
@@ -157,6 +158,12 @@ export const programVersionConfigSchema = z.object({
       blocking: z.boolean().default(true),
     })
     .optional(),
+
+  /**
+   * Mentor-dashboard panels for this course, in render order.
+   * Absent → the course-agnostic default set, never another course's panels.
+   */
+  dashboard: dashboardSchema.optional(),
 
   // ─── Org-Level Fields (not from JourneyPackage) ─────────────────────────────
   /** Visual branding (logo, colors). Inherited from org or overridden. */

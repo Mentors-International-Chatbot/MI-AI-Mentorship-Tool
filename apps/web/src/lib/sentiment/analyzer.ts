@@ -1,6 +1,10 @@
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
-import { loadActivePrompt } from '@/lib/ai/prompts/loadPrompt';
-import { createOpenRouterChat } from '@/lib/ai/openrouter';
+import { loadActivePrompt, type PromptVersionSink } from '@/lib/ai/prompts/loadPrompt';
+import { createOpenRouterChat, resolveOpenRouterModel } from '@/lib/ai/openrouter';
+import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
+
+/** Bump whenever SENTIMENT_SYSTEM_PROMPT_DEFAULT changes. Recorded on every AiInvocation. */
+export const SENTIMENT_PROMPT_VERSION = 'v1';
 
 export interface SentimentResult {
   confusion: number;    // 0-10
@@ -41,11 +45,20 @@ const DEFAULT_RESULT: SentimentResult = {
   topics: ['other'],
 };
 
-export async function analyzeSentiment(message: string): Promise<SentimentResult> {
+export async function analyzeSentiment(
+  message: string,
+  /** Trace-only: attaches this call to a socio in ai_invocations. */
+  socioId?: string,
+): Promise<SentimentResult> {
   try {
+    // The sentiment prompt is DB-overridable, so the trace reports the active
+    // row's version when one exists; SENTIMENT_PROMPT_VERSION is the fallback.
+    const dbPromptVersions: PromptVersionSink = {};
     const systemPromptText = await loadActivePrompt(
       'sentiment',
       SENTIMENT_SYSTEM_PROMPT_DEFAULT,
+      dbPromptVersions,
+      'sentiment',
     );
 
     const chat = createOpenRouterChat({
@@ -53,10 +66,17 @@ export async function analyzeSentiment(message: string): Promise<SentimentResult
       maxTokens: 150,
     });
 
-    const response = await chat.invoke([
-      new SystemMessage(systemPromptText),
-      new HumanMessage(message),
-    ]);
+    const response = await invokeTraced({
+      operation: 'sentiment',
+      model: resolveOpenRouterModel(),
+      promptVersion: { sentiment: dbPromptVersions.sentiment ?? SENTIMENT_PROMPT_VERSION },
+      systemPrompt: systemPromptText,
+      socioId,
+      invoke: () => chat.invoke([
+        new SystemMessage(systemPromptText),
+        new HumanMessage(message),
+      ]),
+    });
 
     const raw = typeof response.content === 'string'
       ? response.content

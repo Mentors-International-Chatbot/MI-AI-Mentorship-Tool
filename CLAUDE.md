@@ -57,6 +57,7 @@ META_VERIFY_TOKEN       # Webhook verification token
 META_APP_SECRET         # App Secret — required in production for WhatsApp webhook HMAC (X-Hub-Signature-256)
 OPENROUTER_API_KEY      # Required for AI responses
 OPENROUTER_MODEL        # Optional (default: anthropic/claude-3.5-haiku)
+AI_TRACE                # Optional — set to `full` to store the assembled prompt text in ai_invocations.promptText; any other value (or unset) stores only its sha256 hash
 ```
 
 ## Current State

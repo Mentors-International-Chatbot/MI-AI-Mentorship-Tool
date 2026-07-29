@@ -14,7 +14,12 @@
       "Bash(mkdir -p /tmp/gen-test)",
       "Read(//tmp/gen-test/**)",
       "Read(//private/tmp/**)",
-      "Bash(awk 'NR>=250 && NR<=300 && \\(/try {/ || /catch/\\)' src/lib/messaging/handler.ts)"
+      "Bash(awk 'NR>=250 && NR<=300 && \\(/try {/ || /catch/\\)' src/lib/messaging/handler.ts)",
+      "Bash(rm src/lib/dashboard/panels.ts)",
+      "Bash(rmdir src/lib/dashboard)",
+      "Bash(git -C \"/Users/michaelbertoldo/Desktop/OCI winter 2026\" show HEAD:apps/web/scripts/migrate-mi-content.ts)",
+      "Bash(sed -n '/export interface LessonDeliveryState/,/^}/p;/export interface ReteachState/,/^}/p;/export interface RouterResult/,/^}/p' src/lib/ai/prompts/types.ts)",
+      "Bash(sed -n '/export type SystemPrompt/,/^}/p' src/lib/repo/types.ts)"
     ]
   }
 }

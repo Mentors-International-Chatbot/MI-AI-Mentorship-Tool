@@ -20,7 +20,13 @@ import {
 } from './sensing';
 
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
-import { createOpenRouterChat } from '@/lib/ai/openrouter';
+import { createOpenRouterChat, resolveOpenRouterModel } from '@/lib/ai/openrouter';
+import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
+import { CORE_PROMPT_VERSION } from './prompts/layers/core';
+import { CONTEXT_PROMPT_VERSION } from './prompts/layers/context';
+import { TASK_PROMPT_VERSION } from './prompts/layers/task';
+import { getContentIdentity } from './prompts/layers/content';
+import type { PromptVersionSink } from './prompts/loadPrompt';
 
 
 const AI_TIMEOUT_MS = 30000; // 30 seconds max per request
@@ -72,6 +78,32 @@ async function invokeWithRetry(
     }
 
     throw lastError ?? new Error('AI invoke failed');
+}
+
+/**
+ * Assembles the promptVersion map recorded on a lesson-delivery trace row.
+ *
+ * Each layer reports the most specific identity available:
+ * - core/task: the active SystemPrompt row's version when the DB overrode the
+ *   code default (`db:1.0`), else the code constant. A constant that never
+ *   moves when someone edits the prompt in /admin is worse than useless.
+ * - content: the lesson identity, because Layer 4 is different text per lesson.
+ *   Omitted for modes that inject no content block.
+ * - context: a plain constant — that layer is assembled entirely in code.
+ */
+export function buildLessonPromptVersion(params: {
+    dbVersions: PromptVersionSink;
+    contentIdentity: string | null;
+    language: SupportedLanguage;
+}): Record<string, string> {
+    const { dbVersions, contentIdentity, language } = params;
+    return {
+        core: dbVersions.core ?? CORE_PROMPT_VERSION,
+        context: CONTEXT_PROMPT_VERSION,
+        task: dbVersions.task ?? TASK_PROMPT_VERSION,
+        ...(contentIdentity ? { content: contentIdentity } : {}),
+        language,
+    };
 }
 
 export interface AIResponse {
@@ -131,6 +163,7 @@ export async function generateAIResponse(
             incomingText,
             priorState: stateAtDispatch,
             lessonContext,
+            socioId: socio.id,
         }).then((sensed) => {
             // Trivial message: no LLM call ran and there is nothing to fold in,
             // so the prior state carries forward untouched.
@@ -185,14 +218,18 @@ export async function generateAIResponse(
         };
     }
 
-    // 2. Assemble 4-layer system prompt with real progress + dimension state
+    // 2. Assemble 4-layer system prompt with real progress + dimension state.
+    //    dbPromptVersions collects the versions of any DB-backed layers the
+    //    build actually used — no extra queries, it rides along the existing ones.
     const promptStart = performance.now();
+    const dbPromptVersions: PromptVersionSink = {};
     const systemPrompt = await buildSystemPrompt(
         socio,
         modeResult.routerResult,
         modeResult.progress,
         collectionKey,
         priorState,
+        dbPromptVersions,
     );
     timings.buildPrompt = performance.now() - promptStart;
 
@@ -218,7 +255,23 @@ export async function generateAIResponse(
     // 4. Call LLM with retry
     try {
         const invokeStart = performance.now();
-        const rawContent = await invokeWithRetry(chat, messages);
+        // One trace row per logical turn: retries inside invokeWithRetry are part
+        // of the same traced call, so latencyMs covers the whole attempt chain.
+        const { content: rawContent } = await invokeTraced({
+            operation: 'lesson_delivery',
+            model: resolveOpenRouterModel(),
+            promptVersion: buildLessonPromptVersion({
+                dbVersions: dbPromptVersions,
+                contentIdentity: getContentIdentity(modeResult.routerResult, collectionKey),
+                language: (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage,
+            }),
+            systemPrompt,
+            socioId: socio.id,
+            // The exact router mode (RETEACH, FREEFORM_QUESTION, ...) lives here;
+            // operation stays coarse so the whole chat path is queryable as one.
+            mode: modeResult.routerResult.mode,
+            invoke: async () => ({ content: await invokeWithRetry(chat, messages) }),
+        });
         timings.llmInvoke = performance.now() - invokeStart;
 
         // 4b. Join the concurrent sensing pass. By now it has usually already

@@ -11,6 +11,13 @@
 
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 
+/**
+ * Bump whenever any evaluator prompt text in this file changes (probe, passed
+ * closing, max-turns closing). Recorded on every AiInvocation so grader-tuning
+ * rounds are comparable instead of anonymous.
+ */
+export const ASSESSMENT_EVALUATOR_PROMPT_VERSION = 'v1';
+
 export interface AssessmentPromptParams {
   /** The teach_back block's prompt - the opening question */
   teachBackPrompt: string;

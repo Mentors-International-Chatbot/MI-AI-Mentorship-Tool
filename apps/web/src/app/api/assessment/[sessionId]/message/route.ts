@@ -113,6 +113,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       priorState,
       turnCount: newTurnCount,
       config: turnConfig,
+      trace: { socioId, organizationId, assessmentSessionId: sessionId },
     });
 
     // ─── Handle outcome ─────────────────────────────────────────────────────
