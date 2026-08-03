@@ -76,12 +76,23 @@ function exportFilename(scope: 'all' | 'filtered'): string {
 export default function AdminFeedbackPage() {
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [denied, setDenied] = useState(false);
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
     fetch('/api/feedback')
-      .then((r) => r.json())
-      .then(setFeedback)
+      .then(async (r) => {
+        // Mentors can reach /admin but the feedback API is admin-only, so a
+        // 403 here is expected rather than an error. Guard the array shape too:
+        // an error body would otherwise blow up the .map below.
+        if (!r.ok) {
+          setDenied(true);
+          return;
+        }
+        const data = await r.json();
+        setFeedback(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setDenied(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -89,6 +100,17 @@ export default function AdminFeedbackPage() {
   const filtered = filter === 'all' ? feedback : feedback.filter((f) => f.page === filter);
 
   if (loading) return <p className="text-gray-500">Loading feedback...</p>;
+
+  if (denied) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Beta Feedback</h2>
+        <p className="text-sm text-gray-500 mt-2">
+          Feedback submissions are visible to admins only.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>

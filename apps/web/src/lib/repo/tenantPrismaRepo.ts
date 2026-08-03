@@ -27,6 +27,7 @@ import type {
   AssessmentMessage,
   ResolvedOrganization,
 } from './tenantRepo.types';
+import type { Socio } from './types';
 import type {
   Organization as PrismaOrganization,
   OrganizationMembership as PrismaOrganizationMembership,
@@ -48,6 +49,7 @@ import type {
   AlertReview as PrismaAlertReview,
   AssessmentSession as PrismaAssessmentSession,
   Message as PrismaMessage,
+  Socio as PrismaSocio,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 
@@ -304,6 +306,26 @@ function toAssessmentSession(p: PrismaAssessmentSession): AssessmentSession {
     passedAt: p.passedAt,
     completedAt: p.completedAt,
     configSnapshot: p.configSnapshot as Record<string, unknown> | null,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  };
+}
+
+function toSocio(p: PrismaSocio): Socio {
+  return {
+    id: p.id,
+    whatsappPhoneNumber: p.whatsappPhoneNumber,
+    channelType: p.channelType,
+    externalId: p.externalId,
+    language: p.language,
+    name: p.name,
+    businessName: p.businessName,
+    businessDescription: p.businessDescription,
+    status: p.status,
+    promptOverrides: p.promptOverrides as Record<string, unknown> | null,
+    aiPaused: p.aiPaused,
+    mentorId: p.mentorId,
+    curriculumCollectionKey: p.curriculumCollectionKey,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -722,6 +744,14 @@ export const tenantPrismaRepo: TenantRepo = {
     return participant?.organizationId ?? null;
   },
 
+  async getOrganizationIdByMentorId(mentorId) {
+    const profile = await prisma.mentorProfile.findUnique({
+      where: { mentorId },
+      select: { organizationId: true },
+    });
+    return profile?.organizationId ?? null;
+  },
+
   /**
    * Resolve organizationId for a socio with fallback chain:
    * 1. ParticipantProfile path (enrolled socios)
@@ -1094,13 +1124,59 @@ export const tenantPrismaRepo: TenantRepo = {
   },
 
   async createParticipant(ctx, data) {
-    const participant = await prisma.participantProfile.create({
-      data: {
+    // `socioId` is the natural key (unique, nullable). When present, upsert on
+    // it so repeated calls for the same socio are idempotent — course selection
+    // can run more than once and must never produce a duplicate or a P2002.
+    // With no socioId there is nothing to key on, so a plain create is all that
+    // is available.
+    if (data.socioId === null) {
+      const participant = await prisma.participantProfile.create({
+        data: {
+          organizationId: ctx.organizationId,
+          socioId: null,
+          displayName: data.displayName,
+          preferredLang: data.preferredLang,
+          metadata: (data.metadata as object) ?? undefined,
+        },
+      });
+      return toParticipantProfile(participant);
+    }
+
+    // A profile already anchored to another tenant is not ours to re-home.
+    // Silently rewriting organizationId would move a participant across tenants,
+    // so refuse the same way every other cross-tenant access here does.
+    const existing = await prisma.participantProfile.findUnique({
+      where: { socioId: data.socioId },
+      select: { id: true, organizationId: true },
+    });
+    if (existing && existing.organizationId !== ctx.organizationId) {
+      throw new TenantIsolationError('Cross-tenant access denied', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: existing.organizationId,
+        resourceType: 'ParticipantProfile',
+        resourceId: existing.id,
+      });
+    }
+
+    const participant = await prisma.participantProfile.upsert({
+      where: { socioId: data.socioId },
+      create: {
         organizationId: ctx.organizationId,
         socioId: data.socioId,
         displayName: data.displayName,
         preferredLang: data.preferredLang,
         metadata: (data.metadata as object) ?? undefined,
+      },
+      // organizationId is deliberately absent: the tenant anchor is set once at
+      // creation and the cross-tenant guard above has already established that
+      // any existing row is in this org.
+      // Nullable fields are written only when the caller actually supplies one,
+      // so a re-run that knows less than the original create cannot blank out
+      // what is already there. preferredLang is non-nullable and always known.
+      update: {
+        ...(data.displayName !== null && { displayName: data.displayName }),
+        preferredLang: data.preferredLang,
+        ...(data.metadata !== null && { metadata: data.metadata as object }),
       },
     });
     return toParticipantProfile(participant);
@@ -1117,6 +1193,30 @@ export const tenantPrismaRepo: TenantRepo = {
       },
     });
     return toParticipantProfile(participant);
+  },
+
+  // ─── Socios (legacy model, org-scoped through ParticipantProfile) ─────────
+  async getSociosForOrganization(organizationId) {
+    const socios = await prisma.socio.findMany({
+      where: {
+        status: 'ACTIVE',
+        participantProfile: { organizationId },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return socios.map(toSocio);
+  },
+
+  async getSociosForMentor(organizationId, mentorId) {
+    const socios = await prisma.socio.findMany({
+      where: {
+        status: 'ACTIVE',
+        mentorId,
+        participantProfile: { organizationId },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return socios.map(toSocio);
   },
 
   // ─── Mentor Profiles ───────────────────────────────────────────────────────

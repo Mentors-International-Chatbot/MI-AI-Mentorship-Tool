@@ -66,6 +66,9 @@ topics: Array de 1-3 de: "finances", "business", "personal", "family", "loan", "
 
 IMPORTANTE: Considera contexto cultural colombiano. "Ay no, pena" puede ser frustración leve. "Estoy desesperado" es urgencia alta. Lenguaje informal no implica frustración.`;
 
+/** Same natural key backfill-phase1.ts upserts on, so the two converge. */
+const MI_ORG_SLUG = 'mentors-international';
+
 const NAME_EXTRACTION_PROMPT_DEFAULT =
   "Extract only the person's name from this message. Return just the name, nothing else. If no name is found, return exactly NONE.";
 
@@ -209,6 +212,35 @@ async function main() {
   }
   console.log(`ProgramConfig: ${created} created, ${skipped} already existed.`);
 
+  // ── Seed the organization ──
+  // Every org-scoped query filters on ParticipantProfile.organizationId, so a
+  // seeded socio with no profile is invisible to every mentor dashboard. The
+  // profile needs a real org, and organizationId is non-nullable.
+  //
+  // Upserted on the same natural key backfill-phase1.ts uses (MI_ORG_SLUG), so
+  // the two converge on one row and either script can be re-run safely. Not read
+  // from DEFAULT_ORGANIZATION_ID: the seed's job is a self-contained dev world,
+  // and an unset env var would fail it in a way that reads as a bug.
+  const org = await prisma.organization.upsert({
+    where: { slug: MI_ORG_SLUG },
+    update: {},
+    create: {
+      slug: MI_ORG_SLUG,
+      name: 'Mentors International',
+      settings: {
+        terminology: {
+          participant: 'socio',
+          participants: 'socios',
+          mentor: 'mentor',
+          mentors: 'mentores',
+        },
+        defaultLang: 'es',
+        region: 'CO',
+      },
+    },
+  });
+  console.log(`Organization: ${org.name} (${org.id})`);
+
   // ── Seed test accounts ──
   const DEFAULT_PASSWORD = await bcrypt.hash('pilot2026', 10);
 
@@ -260,8 +292,9 @@ async function main() {
   const socioExists = await prisma.socio.findFirst({
     where: { whatsappPhoneNumber: '573001234567' },
   });
+  let socio = socioExists;
   if (!socioExists) {
-    await prisma.socio.create({
+    socio = await prisma.socio.create({
       data: {
         whatsappPhoneNumber: '573001234567',
         channelType: 'whatsapp',
@@ -274,13 +307,34 @@ async function main() {
     });
     console.log('Created test socio: 573001234567 / pilot2026');
   } else if (!socioExists.passwordHash) {
-    await prisma.socio.update({
+    socio = await prisma.socio.update({
       where: { id: socioExists.id },
       data: { passwordHash: DEFAULT_PASSWORD },
     });
     console.log('Updated test socio with password hash.');
   } else {
     console.log('Test socio already exists. Skipping.');
+  }
+
+  // ── Anchor the test socio to the organization ──
+  // Without this the seeded socio has no ParticipantProfile, and a fresh dev
+  // seed produces a socio that no org-scoped mentor query can see. Upserted on
+  // the unique socioId so re-seeding never duplicates.
+  if (socio) {
+    await prisma.participantProfile.upsert({
+      where: { socioId: socio.id },
+      update: {
+        displayName: socio.name,
+        preferredLang: socio.language,
+      },
+      create: {
+        organizationId: org.id,
+        socioId: socio.id,
+        displayName: socio.name,
+        preferredLang: socio.language,
+      },
+    });
+    console.log(`ParticipantProfile for test socio anchored to ${org.slug}.`);
   }
 }
 

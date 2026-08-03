@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
-import { repo } from '@/lib/repo';
+import { repo, tenantRepo } from '@/lib/repo';
 import { computeSocioHealth, type SocioHealth } from '@/lib/health';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
 import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
@@ -46,9 +46,18 @@ export default async function SociosPage() {
 
   let socios;
   try {
-    socios = session.role === 'admin'
-      ? await repo.getAllSocios()
-      : await repo.getSociosByMentor(session.userId);
+    if (session.role === 'admin') {
+      // Platform admin is the one legitimate cross-tenant reader.
+      socios = await repo.getSociosAcrossAllOrganizations();
+    } else {
+      // Mentors are scoped to their own organization. A mentor with no
+      // MentorProfile has no resolvable tenant, so they see nothing — never
+      // an unscoped fallback.
+      const organizationId = await tenantRepo.getOrganizationIdByMentorId(session.userId);
+      socios = organizationId
+        ? await tenantRepo.getSociosForMentor(organizationId, session.userId)
+        : [];
+    }
   } catch (err) {
     const isSchemaError =
       err instanceof Prisma.PrismaClientKnownRequestError &&

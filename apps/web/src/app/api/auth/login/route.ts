@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth/password';
-import { createSession, type SessionPayload } from '@/lib/auth/session';
+import { createSession, type SessionIdentity } from '@/lib/auth/session';
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let session: SessionPayload | null = null;
+    let session: SessionIdentity | null = null;
 
     if (userType === 'socio') {
       const socio = await prisma.socio.findFirst({

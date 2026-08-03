@@ -192,6 +192,15 @@ export async function DELETE(request: NextRequest) {
       prisma.financialSnapshot.deleteMany({ where: { socioId: { in: ids } } }),
       prisma.socioFeedback.deleteMany({ where: { socioId: { in: ids } } }),
       prisma.socioContext.deleteMany({ where: { socioId: { in: ids } } }),
+      // assessment_sessions_socio_id_fkey is ON DELETE RESTRICT — without this
+      // the socio delete fails outright with P2003.
+      prisma.assessmentSession.deleteMany({ where: { socioId: { in: ids } } }),
+      // participant_profiles_socio_id_fkey is ON DELETE SET NULL, so this does
+      // not block the delete — it silently orphans the profile instead, leaving
+      // a row with socioId NULL that still counts toward the org's participants
+      // and can never be matched back to anyone. Enrollments and mentoring
+      // relationships cascade off the profile, so removing it is safe.
+      prisma.participantProfile.deleteMany({ where: { socioId: { in: ids } } }),
       prisma.socio.deleteMany({ where: { id: { in: ids } } }),
     ]);
 
@@ -225,6 +234,10 @@ export async function DELETE(request: NextRequest) {
     prisma.financialSnapshot.deleteMany({ where: { socioId } }),
     prisma.socioFeedback.deleteMany({ where: { socioId } }),
     prisma.socioContext.deleteMany({ where: { socioId } }),
+    // See the batch branch above for why these two are required: RESTRICT blocks
+    // the delete, SET NULL silently orphans the profile.
+    prisma.assessmentSession.deleteMany({ where: { socioId } }),
+    prisma.participantProfile.deleteMany({ where: { socioId } }),
     prisma.socio.delete({ where: { id: socioId } }),
   ]);
 

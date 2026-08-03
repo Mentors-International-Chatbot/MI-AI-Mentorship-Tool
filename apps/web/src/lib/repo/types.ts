@@ -190,8 +190,19 @@ export interface Repo {
     touchInteraction(socioId: string): Promise<SocioProgress>;
 
     // Dashboard methods
-    getAllSocios(): Promise<Socio[]>;
-    getSociosByMentor(mentorId: string): Promise<Socio[]>;
+    /**
+     * Every active socio on the platform, across every organization.
+     *
+     * Deliberately NOT tenant-scoped, and platform-admin-only. This is the one
+     * legitimate cross-tenant socio read: platform admin needs the whole-fleet
+     * view, and scoping it would hide exactly the rows that view exists for.
+     * Same posture as GET /api/feedback.
+     *
+     * Anything acting on behalf of a single organization — mentors, and
+     * org-level admins once they ship — must use
+     * `tenantRepo.getSociosForOrganization` / `getSociosForMentor` instead.
+     */
+    getSociosAcrossAllOrganizations(): Promise<Socio[]>;
     getSocioById(socioId: string): Promise<Socio | null>;
     createFlag(data: { socioId: string; level: string; reason: string; source?: string; messageId?: string }): Promise<SocioFlag>;
     getFlags(socioId: string): Promise<SocioFlag[]>;

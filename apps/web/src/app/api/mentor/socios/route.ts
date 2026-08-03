@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { repo } from '@/lib/repo';
+import { repo, tenantRepo } from '@/lib/repo';
 import { computeSocioHealth } from '@/lib/health';
 import { verifyMentorOrAdmin } from '@/lib/auth/ownership';
 
@@ -9,9 +9,19 @@ export async function GET(request: NextRequest) {
     const auth = await verifyMentorOrAdmin();
     if (!auth.authorized) return auth.response;
 
-    const socios = auth.session.role === 'admin'
-      ? await repo.getAllSocios()
-      : await repo.getSociosByMentor(auth.session.userId);
+    let socios;
+    if (auth.session.role === 'admin') {
+        // Platform admin is the one legitimate cross-tenant reader.
+        socios = await repo.getSociosAcrossAllOrganizations();
+    } else {
+        // Mentors are scoped to their own organization. A mentor with no
+        // MentorProfile has no resolvable tenant, so they see nothing — never
+        // an unscoped fallback.
+        const organizationId = await tenantRepo.getOrganizationIdByMentorId(auth.session.userId);
+        socios = organizationId
+            ? await tenantRepo.getSociosForMentor(organizationId, auth.session.userId)
+            : [];
+    }
 
     const results = await Promise.all(
         socios.map(async (socio) => {

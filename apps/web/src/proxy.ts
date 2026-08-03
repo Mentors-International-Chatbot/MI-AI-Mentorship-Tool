@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   COOKIE_NAME,
-  sessionCookieOptions,
+  cookieOptions,
+  isPastAbsoluteCap,
+  refreshedPayload,
   sessionMaxAge,
   shouldRefresh,
-  signSession,
+  signSessionToken,
   verifyToken,
   type VerifiedSession,
-} from '@/lib/auth/sessionConfig';
+} from '@/lib/auth/token';
 
 // Routes that don't require authentication
 const PUBLIC_PATHS = [
@@ -33,27 +35,29 @@ async function getSession(req: NextRequest): Promise<VerifiedSession | null> {
 
 /**
  * Re-issue a session that is past the halfway point of its lifetime, so an
- * actively-used session never expires out from under the user. Re-signing
+ * actively-used session never expires out from under the user. Stops at the
+ * absolute cap (measured from `sessionStart`, which refresh never resets), so
+ * the session eventually expires and forces a real re-login. Re-signing
  * failures are non-fatal: the existing cookie is still valid.
+ *
+ * Middleware cannot use `cookies()` from next/headers — the cookie is set on
+ * the outgoing NextResponse.
  */
 async function withRefreshedSession(
   res: NextResponse,
   session: VerifiedSession,
 ): Promise<NextResponse> {
-  if (!shouldRefresh(session, Math.floor(Date.now() / 1000))) return res;
+  const now = Math.floor(Date.now() / 1000);
+  if (!shouldRefresh(session, now)) return res;
+  if (isPastAbsoluteCap(session, now)) return res;
 
   try {
-    const maxAge = sessionMaxAge(session.rememberMe);
-    const token = await signSession(
-      {
-        userId: session.userId,
-        role: session.role,
-        name: session.name,
-        rememberMe: session.rememberMe,
-      },
-      maxAge,
+    const token = await signSessionToken(refreshedPayload(session));
+    res.cookies.set(
+      COOKIE_NAME,
+      token,
+      cookieOptions(sessionMaxAge(session.rememberMe)),
     );
-    res.cookies.set(COOKIE_NAME, token, sessionCookieOptions(maxAge));
   } catch {
     // Keep serving the request on the current cookie.
   }

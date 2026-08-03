@@ -189,13 +189,9 @@ export const inMemoryRepo: Repo = {
         return progress;
     },
 
-    async getAllSocios() {
+    /** Cross-tenant by design — platform admin only. See RepoInterface docs. */
+    async getSociosAcrossAllOrganizations() {
         return Array.from(sociosById.values()).filter(s => s.status === 'ACTIVE');
-    },
-
-    async getSociosByMentor(mentorId: string) {
-        return Array.from(sociosById.values())
-            .filter(s => s.status === 'ACTIVE' && s.mentorId === mentorId);
     },
 
     async getSocioById(socioId) {

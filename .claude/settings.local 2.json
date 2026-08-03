@@ -20,19 +20,7 @@
       "Bash(git -C \"/Users/michaelbertoldo/Desktop/OCI winter 2026\" show HEAD:apps/web/scripts/migrate-mi-content.ts)",
       "Bash(sed -n '/export interface LessonDeliveryState/,/^}/p;/export interface ReteachState/,/^}/p;/export interface RouterResult/,/^}/p' src/lib/ai/prompts/types.ts)",
       "Bash(sed -n '/export type SystemPrompt/,/^}/p' src/lib/repo/types.ts)",
-      "Bash(git rm *)",
-      "Bash(git stash *)",
-      "Bash(mkdir -p prisma/migrations/20260729_add_feedback_attribution)",
-      "Bash(npx prisma *)",
-      "Bash(git mv *)",
-      "Bash(rm scripts/tmp/mig.ts)",
-      "Bash(rmdir scripts/tmp)",
-      "Bash(rm -f scripts/tmp/aa.ts scripts/tmp/rowcounts.ts)",
-      "Bash(rm -f scripts/tmp/diag.ts)",
-      "Bash(npx tsx *)",
-      "Read(//tmp/**)",
-      "Bash(rm -f scripts/tmp/probe.ts scripts/tmp/hello.ts /tmp/probe.out)",
-      "Bash(sort -u -t: -k2)"
+      "Bash(git rm *)"
     ]
   }
 }

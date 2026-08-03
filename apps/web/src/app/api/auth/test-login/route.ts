@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, type SessionPayload } from '@/lib/auth/session';
+import { createSession, type SessionIdentity } from '@/lib/auth/session';
 
 /**
  * POST /api/auth/test-login
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   try {
     const { role } = (await req.json()) as { role: string };
 
-    const sessions: Record<string, SessionPayload> = {
+    const sessions: Record<string, SessionIdentity> = {
       socio: { userId: 'test-socio-001', role: 'socio', name: 'Test Socio' },
       mentor: { userId: 'test-mentor-001', role: 'mentor', name: 'Test Mentor' },
       admin: { userId: 'test-admin-001', role: 'admin', name: 'Test Admin' },

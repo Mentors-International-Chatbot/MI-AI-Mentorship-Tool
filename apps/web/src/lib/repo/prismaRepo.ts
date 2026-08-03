@@ -421,17 +421,10 @@ export const prismaRepo: Repo = {
         return toSocioProgress(progress);
     },
 
-    async getAllSocios() {
+    /** Cross-tenant by design — platform admin only. See RepoInterface docs. */
+    async getSociosAcrossAllOrganizations() {
         const socios = await prisma.socio.findMany({
             where: { status: 'ACTIVE' },
-            orderBy: { updatedAt: 'desc' },
-        });
-        return socios.map(toSocio);
-    },
-
-    async getSociosByMentor(mentorId: string) {
-        const socios = await prisma.socio.findMany({
-            where: { status: 'ACTIVE', mentorId },
             orderBy: { updatedAt: 'desc' },
         });
         return socios.map(toSocio);

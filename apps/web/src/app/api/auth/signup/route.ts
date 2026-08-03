@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
-import { createSession, type SessionPayload } from '@/lib/auth/session';
+import { createSession, type SessionIdentity } from '@/lib/auth/session';
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     const hashed = await hashPassword(password);
-    let session: SessionPayload;
+    let session: SessionIdentity;
 
     if (userType === 'socio') {
       const existing = await prisma.socio.findFirst({
@@ -107,7 +107,10 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    await createSession(session, rememberMe ?? false);
+    // Fresh signups default to remembered: the user just proved intent, and this
+    // is exactly the population that re-registers rather than re-logging-in when
+    // bounced to the login screen.
+    await createSession(session, rememberMe ?? true);
 
     return NextResponse.json({
       success: true,

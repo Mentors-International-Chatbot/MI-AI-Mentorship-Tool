@@ -2,14 +2,17 @@ import { cookies } from 'next/headers';
 import {
   COOKIE_NAME,
   SECRET,
-  sessionCookieOptions,
+  cookieOptions,
+  nowSeconds,
   sessionMaxAge,
-  signSession,
+  signSessionToken,
   verifyToken,
+  type SessionIdentity,
   type SessionPayload,
-} from './sessionConfig';
+  type VerifiedSession,
+} from './token';
 
-export type { SessionPayload };
+export type { SessionIdentity, SessionPayload, VerifiedSession };
 
 /** Post-login landing path for each role (dashboard, admin, or socio chat). */
 export function homePathForRole(role: SessionPayload['role']): string {
@@ -19,19 +22,23 @@ export function homePathForRole(role: SessionPayload['role']): string {
 }
 
 export async function createSession(
-  payload: SessionPayload,
+  identity: SessionIdentity,
   rememberMe: boolean = false,
 ): Promise<string> {
-  const maxAge = sessionMaxAge(rememberMe);
-  const token = await signSession({ ...payload, rememberMe }, maxAge);
+  const payload: SessionPayload = {
+    ...identity,
+    rememberMe,
+    sessionStart: nowSeconds(),
+  };
+  const token = await signSessionToken(payload);
 
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, token, sessionCookieOptions(maxAge));
+  cookieStore.set(COOKIE_NAME, token, cookieOptions(sessionMaxAge(rememberMe)));
 
   return token;
 }
 
-export async function verifySession(): Promise<SessionPayload | null> {
+export async function verifySession(): Promise<VerifiedSession | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;

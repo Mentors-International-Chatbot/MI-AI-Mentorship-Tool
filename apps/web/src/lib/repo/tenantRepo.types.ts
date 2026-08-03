@@ -1,4 +1,5 @@
 import type { TenantContext } from './tenantContext';
+import type { Socio } from './types';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Tenant-Scoped Entity Types (matching Prisma models from Phase 1)
@@ -271,6 +272,18 @@ export interface TenantRepo {
   /** Bootstrap method: looks up org ID from socioId (for auth, before tenant context exists) */
   getOrganizationIdBySocioId(socioId: string): Promise<string | null>;
   /**
+   * Bootstrap method: looks up org ID from a legacy `Mentor.id` (for auth,
+   * before tenant context exists).
+   *
+   * The legacy `Mentor` model carries no organizationId — the anchor is
+   * `MentorProfile.organizationId`, linked back by the unique `mentorId`.
+   * backfill-phase1 creates a profile for every mentor, so this resolves for
+   * backfilled mentors; a mentor created after backfill without a profile
+   * returns null. Unlike the socio chain there is no tiered fallback: it either
+   * resolves authoritatively or it does not.
+   */
+  getOrganizationIdByMentorId(mentorId: string): Promise<string | null>;
+  /**
    * Resolve organizationId for a socio with fallback chain (never returns null):
    * 1. ParticipantProfile path (enrolled socios)
    * 2. Curriculum collection → organization (course-based resolution)
@@ -331,8 +344,40 @@ export interface TenantRepo {
   getParticipants(ctx: TenantContext): Promise<ParticipantProfile[]>;
   getParticipantById(ctx: TenantContext, participantId: string): Promise<ParticipantProfile | null>;
   getParticipantBySocioId(ctx: TenantContext, socioId: string): Promise<ParticipantProfile | null>;
+  /**
+   * Create or update the profile for a socio.
+   *
+   * Idempotent when `data.socioId` is set: the profile is upserted on that
+   * unique key, so callers on a repeatable path (course selection, seeding) can
+   * run more than once without duplicating or colliding. A null `socioId` has no
+   * natural key and falls back to a plain create.
+   *
+   * `organizationId` comes from `ctx` and is written only on creation — an
+   * existing profile in a different org throws {@link TenantIsolationError}
+   * rather than being re-homed.
+   */
   createParticipant(ctx: TenantContext, data: Omit<ParticipantProfile, 'id' | 'organizationId' | 'createdAt' | 'updatedAt'>): Promise<ParticipantProfile>;
   updateParticipant(ctx: TenantContext, participantId: string, data: Partial<Pick<ParticipantProfile, 'displayName' | 'preferredLang' | 'metadata'>>): Promise<ParticipantProfile>;
+
+  // ─── Socios (legacy model, org-scoped through ParticipantProfile) ─────────
+  /**
+   * Active socios belonging to one organization.
+   *
+   * Scoped through `participantProfile.organizationId` — the Socio row itself
+   * carries no organizationId, so the profile is the tenancy anchor. Socios
+   * without a ParticipantProfile are therefore NOT returned; that is deliberate,
+   * an unanchored socio has no tenant and must not leak into a tenant's list.
+   */
+  getSociosForOrganization(organizationId: string): Promise<Socio[]>;
+  /**
+   * Active socios in one organization that are assigned to one mentor.
+   *
+   * `mentorId` alone is an ownership convention, not a tenancy boundary —
+   * nothing in the schema stops `Socio.mentorId` from pointing at a mentor in a
+   * different organization. Both filters are applied: the org scope is the
+   * boundary, the mentor assignment narrows within it.
+   */
+  getSociosForMentor(organizationId: string, mentorId: string): Promise<Socio[]>;
 
   // ─── Mentor Profiles ───────────────────────────────────────────────────────
   getMentorProfiles(ctx: TenantContext): Promise<MentorProfile[]>;

@@ -151,11 +151,21 @@ model AuditLog {
 
 model Feedback {
   id        String   @id @default(uuid())
-  page      String   // which page the feedback is about
+  page      String   // which page the feedback is about (user-selected)
+  pagePath  String?  @map("page_path") // actual URL path, derived from Referer
   subject   String   // short subject line
   body      String   // full feedback text
+  // Attribution is opportunistic: the feedback widget is deliberately available
+  // logged-out, so all three are null for an anonymous report.
+  userId    String?  @map("user_id")
+  role      String?  // "socio" | "mentor" | "admin" — snapshot at submit time
+  // Null unless the submitter is a socio whose org resolved at tier 1 or 2.
+  // A tier-3 (DEFAULT_ORGANIZATION_ID) resolution writes null rather than
+  // stamping a guess — same fail-closed rule as resolveDashboardPanels.
+  organizationId String? @map("organization_id")
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([organizationId, createdAt])
   @@map("feedback")
 }
 

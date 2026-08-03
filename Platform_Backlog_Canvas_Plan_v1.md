@@ -12,6 +12,7 @@ Six items captured **2026-07-27**. Ordered by dependency and value, not arrival.
 | 4 | Mentor dashboard hardcoded Spanish → per-user language | M | Bucket 3 / i18n |
 | 5 | Dashboard panels (revenue trends, weekly summaries, dimensions) configurable per course | M | Bucket 3 / config |
 | 6 | Canvas integration (LTI 1.3 launch + REST API grade sync) | L | New integration |
+| 7 | Enrollment guard — course selection can drift from the socio's anchored org | XS–S | Multi-tenancy |
 
 ## 1. Password visibility toggle (bug)
 
@@ -178,3 +179,35 @@ OCI displays embedded in Canvas's iframe (the default LTI placement). Three engi
 1. What does the BYU course actually need first — students launching from Canvas (→ LTI-A) or just grades appearing in Canvas (→ could shortcut with REST-only, but you lose the login win)? **Recommend LTI-A regardless.**
 2. Canvas test environment: does BYU IT give you a sandbox, or start on a free Canvas instance? (Registration needs admin access to some Canvas.)
 3. Instructor launch → mentor dashboard mapping: is a Canvas "Teacher" an OCI mentor, a Course Lead, or both?
+
+## 7. Enrollment guard — course selection can drift from the socio's anchored org
+
+Captured **2026-08-02**, alongside the ParticipantProfile creation work.
+
+`POST /api/auth/curriculum` now creates a `ParticipantProfile` at course selection — that profile is the tenancy anchor every org-scoped query filters on. The gap it leaves:
+
+- `resolveOrgWithSource` tier 1 short-circuits on an existing profile, so **a socio's organization is fixed permanently at their first course selection**.
+- `Socio.curriculumCollectionKey` stays mutable — re-selecting a course rewrites it freely.
+
+So a socio can end up anchored to org A while their curriculum key points at org B's collection. They appear on org A's mentor dashboards while taking org B's course, and org B's mentors cannot see them at all. Silent, permanent, and decided by a course picker.
+
+**Zero impact today** — one organization exists and both collections belong to it. This is recorded, not urgent.
+
+**The fix is not re-resolving on course change** (that would let a course picker move a socio between tenants, which is worse). It is a guard: if the socio already has a `ParticipantProfile`, verify the selected collection belongs to that same org and reject the selection if it does not. Small, and it lives in `apps/web/src/app/api/auth/curriculum/route.ts` next to `anchorParticipantProfile`.
+
+**Do it when either lands:**
+1. A second organization — the moment the collision becomes reachable.
+2. `LmsCourseLink` (§6). **This is the direct collision:** §6 step 4 resolves org through the LTI integration as "a fourth, strongest tier." A tier that outranks tier 1 meets a profile already anchored by a course picker, and the two will disagree. Whoever builds the fourth tier must decide which wins — settle it there rather than discovering it in production.
+
+### 7a. Sub-note: the two socio-creation paths disagree on default language
+
+Recording only, no code change.
+
+| Path | Sets `language` | Result |
+|---|---|---|
+| `prismaRepo.createSocio` (`apps/web/src/lib/repo/prismaRepo.ts:248`) | explicitly `DEFAULT_LANGUAGE` (`i18n/languages.ts` = `'en'`) | English |
+| `POST /api/auth/signup` (`signup/route.ts`) | not set — DB default applies (`schema.prisma` = `@default("es")`) | Spanish |
+
+Invisible today because the web join flow's language picker `PATCH`es `/api/auth/me` and overwrites both before it matters.
+
+It stops being invisible at **§6 step 5**: LTI auto-provision is a third socio-creation path, and it has no picker in the flow. Whoever builds it has to choose a language deliberately — from the LTI launch claim's locale, most likely — rather than rediscovering that the two existing paths disagree and inheriting whichever they happened to read first.
