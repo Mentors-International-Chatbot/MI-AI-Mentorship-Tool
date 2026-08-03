@@ -31,6 +31,23 @@ export type SocioRow = {
   unresolvedYellow: number;
 };
 
+/**
+ * The only fields a rollup actually reads.
+ *
+ * Narrower than {@link SocioRow} on purpose: the admin overview computes
+ * rollups from a batched server query that never builds a `SocioHealth`, and
+ * should not have to invent one to reuse this. `SocioRow` satisfies it
+ * structurally, so the mentor dashboard passes its rows straight through.
+ */
+export type CourseRollupInput = Pick<
+  SocioRow,
+  | 'curriculumCollectionKey'
+  | 'currentLesson'
+  | 'lastInteractionAt'
+  | 'unresolvedRed'
+  | 'unresolvedYellow'
+>;
+
 export type CourseRollup = {
   /** null identifies the unassigned bucket, which is not a course. */
   collectionKey: string | null;
@@ -62,7 +79,7 @@ export const UNASSIGNED_COURSE_KEY = '__unassigned__';
  * is always last.
  */
 export function buildCourseRollups(
-  rows: readonly SocioRow[],
+  rows: readonly CourseRollupInput[],
   courses: readonly CourseSummary[],
 ): CourseRollup[] {
   const summaryByKey = new Map(courses.map((c) => [c.collectionKey, c]));

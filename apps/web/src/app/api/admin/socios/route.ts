@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
+import { buildSocioWhere } from './filters';
 
 const SOCIO_LIST_INCLUDE = {
   progress: true,
@@ -34,59 +35,11 @@ function mapSocioLatestRating(s: SocioListRow) {
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const status = params.get('status');
-  const search = params.get('search');
-  const mentorId = params.get('mentorId');
-  const activeWithin = params.get('activeWithin'); // e.g. "7d"
-  const flagLevel = params.get('flagLevel'); // "RED" or "YELLOW"
-  const completedLesson = params.get('completedLesson'); // lesson number
-  const lessonNumber = params.get('lessonNumber'); // lesson number
   const sortBy = params.get('sortBy'); // "messagesThisWeek"
   const page = Math.max(1, Number(params.get('page') ?? 1));
   const pageSize = Math.min(100, Math.max(1, Number(params.get('pageSize') ?? 50)));
 
-  const where: Prisma.SocioWhereInput = {};
-
-  if (status) {
-    where.status = status as Prisma.SocioWhereInput['status'];
-  }
-  if (mentorId) {
-    where.mentorId = mentorId === 'unassigned' ? null : mentorId;
-  }
-  if (search) {
-    where.OR = [
-      { name: { contains: search, mode: 'insensitive' } },
-      { businessName: { contains: search, mode: 'insensitive' } },
-      { businessDescription: { contains: search, mode: 'insensitive' } },
-      { externalId: { contains: search, mode: 'insensitive' } },
-    ];
-  }
-  if (activeWithin) {
-    const days = parseInt(activeWithin.replace('d', ''), 10);
-    if (!isNaN(days)) {
-      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-      where.progress = { lastInteractionAt: { gte: since } };
-    }
-  }
-  if (flagLevel) {
-    where.flags = { some: { level: flagLevel, resolved: false } };
-  }
-  if (completedLesson) {
-    const num = parseInt(completedLesson, 10);
-    if (!isNaN(num)) {
-      where.lessonProgress = {
-        some: { lessonNumber: num, completedAt: { not: null } },
-      };
-    }
-  }
-  if (lessonNumber) {
-    const num = parseInt(lessonNumber, 10);
-    if (!isNaN(num)) {
-      where.lessonProgress = {
-        some: { lessonNumber: num },
-      };
-    }
-  }
+  const where = buildSocioWhere(params);
 
   // For messagesThisWeek sort, we need a raw approach
   if (sortBy === 'messagesThisWeek') {

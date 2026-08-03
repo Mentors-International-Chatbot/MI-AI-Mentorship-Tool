@@ -2,6 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { CourseCardGrid } from '@/app/dashboard/socios/CourseCardGrid';
+import type { CourseRollup } from '@/app/dashboard/socios/courseRollup';
+import { getDashboardStrings } from '@/lib/i18n/dashboard';
+
+// The admin surface has no dashboard language provider — every label on it is
+// English. Pinning the card chrome to the same language keeps the page
+// coherent; the strings still come from the table, not from string literals,
+// so wiring real language resolution here later changes only this line.
+const ADMIN_LANG = 'en' as const;
+const adminStrings = getDashboardStrings(ADMIN_LANG);
 
 type SocioRow = {
   id: string;
@@ -52,13 +62,19 @@ export default function AdminSociosPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [mentorFilter, setMentorFilter] = useState('');
+  const [courseFilter, setCourseFilter] = useState('ALL');
+  const [rollups, setRollups] = useState<CourseRollup[]>([]);
+
+  // Everything except pagination — the rollups share these so the cards always
+  // describe the same set the table is drawn from.
+  const filterQuery = `${search ? `&search=${encodeURIComponent(search)}` : ''}${
+    statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : ''
+  }${mentorFilter ? `&mentorId=${encodeURIComponent(mentorFilter)}` : ''}${
+    courseFilter !== 'ALL' ? `&collectionKey=${encodeURIComponent(courseFilter)}` : ''
+  }`;
 
   useEffect(() => {
-    fetch(`/api/admin/socios?page=${page}&pageSize=50${
-      search ? `&search=${encodeURIComponent(search)}` : ''
-    }${statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : ''}${
-      mentorFilter ? `&mentorId=${encodeURIComponent(mentorFilter)}` : ''
-    }`)
+    fetch(`/api/admin/socios?page=${page}&pageSize=50${filterQuery}`)
       .then((r) => r.json())
       .then((data) => {
         setSocios(data.socios);
@@ -66,7 +82,20 @@ export default function AdminSociosPage() {
         setTotalPages(data.totalPages);
       })
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter, mentorFilter, refreshTick]);
+  }, [page, filterQuery, refreshTick]);
+
+  // Course selection is not applied to the rollups themselves: selecting a card
+  // should narrow the table, not collapse the grid to the one card you clicked.
+  const rollupQuery = `${search ? `&search=${encodeURIComponent(search)}` : ''}${
+    statusFilter ? `&status=${encodeURIComponent(statusFilter)}` : ''
+  }${mentorFilter ? `&mentorId=${encodeURIComponent(mentorFilter)}` : ''}`;
+
+  useEffect(() => {
+    fetch(`/api/admin/socios/rollups?${rollupQuery}`)
+      .then((r) => r.json())
+      .then((data) => setRollups(data.rollups ?? []))
+      .catch(() => setRollups([]));
+  }, [rollupQuery, refreshTick]);
 
   useEffect(() => {
     fetch('/api/admin/mentors')
@@ -160,6 +189,20 @@ export default function AdminSociosPage() {
         >
           Delete selected ({selectedIds.length})
         </button>
+      </div>
+
+      <div className="mb-4">
+        <CourseCardGrid
+          rollups={rollups}
+          selectedKey={courseFilter}
+          onSelect={(key) => {
+            setLoading(true);
+            setCourseFilter((current) => (current === key ? 'ALL' : key));
+            setPage(1);
+          }}
+          t={adminStrings}
+          lang={ADMIN_LANG}
+        />
       </div>
 
       {/* Filters */}

@@ -37,24 +37,25 @@ export default async function SociosPage() {
   const lang = await resolveDashboardLanguage();
   const t = getDashboardStrings(lang);
 
+  // This is the mentor dashboard: it shows the socios assigned to whoever is
+  // looking, and nothing else. The program-wide view is a different surface —
+  // an admin asking for it belongs on /admin/socios, not on a page that would
+  // silently mean something different depending on who opened it.
+  if (session.role === 'admin') {
+    redirect('/admin/socios');
+  }
+
   let socios;
-  // Set only on a tenant-scoped read. Left undefined for the platform admin so
-  // course names resolve cross-tenant, matching the list they annotate.
   let scopedOrganizationId: string | undefined;
   try {
-    if (session.role === 'admin') {
-      // Platform admin is the one legitimate cross-tenant reader.
-      socios = await repo.getSociosAcrossAllOrganizations();
-    } else {
-      // Mentors are scoped to their own organization. A mentor with no
-      // MentorProfile has no resolvable tenant, so they see nothing — never
-      // an unscoped fallback.
-      const organizationId = await tenantRepo.getOrganizationIdByMentorId(session.userId);
-      scopedOrganizationId = organizationId ?? undefined;
-      socios = organizationId
-        ? await tenantRepo.getSociosForMentor(organizationId, session.userId)
-        : [];
-    }
+    // Mentors are scoped to their own organization. A mentor with no
+    // MentorProfile has no resolvable tenant, so they see nothing — never
+    // an unscoped fallback.
+    const organizationId = await tenantRepo.getOrganizationIdByMentorId(session.userId);
+    scopedOrganizationId = organizationId ?? undefined;
+    socios = organizationId
+      ? await tenantRepo.getSociosForMentor(organizationId, session.userId)
+      : [];
   } catch (err) {
     const isSchemaError =
       err instanceof Prisma.PrismaClientKnownRequestError &&
