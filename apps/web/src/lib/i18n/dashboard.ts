@@ -26,10 +26,22 @@ export interface DashboardStrings {
   thStatus: string;
   thName: string;
   thChannel: string;
+  thCourse: string;
   thLesson: string;
   thLastInteraction: string;
   noName: string;
   never: string;
+  // Course rollup (socios list). Course *names* come from ContentCollection.name
+  // — data, not this table. Only the chrome around them is translated.
+  courseFilterAll: string;
+  /** Bucket for socios with no curriculumCollectionKey. Not a course. */
+  courseUnassigned: string;
+  courseParticipants: (count: number) => string;
+  courseAvgProgress: (current: number, total: number) => string;
+  /** Same, for a collection whose lesson count could not be resolved. */
+  courseAvgProgressNoTotal: (current: number) => string;
+  courseLastActivity: string;
+  coursePlaceholder: string;
   // Detail header
   backToSocios: string;
   channel: string;
@@ -144,10 +156,18 @@ const es: DashboardStrings = {
   thStatus: 'Estado',
   thName: 'Nombre',
   thChannel: 'Canal',
+  thCourse: 'Curso',
   thLesson: 'Lección',
   thLastInteraction: 'Última interacción',
   noName: 'Sin nombre',
   never: 'Nunca',
+  courseFilterAll: 'Todos los cursos',
+  courseUnassigned: 'Sin curso',
+  courseParticipants: (count) => (count === 1 ? '1 participante' : `${count} participantes`),
+  courseAvgProgress: (current, total) => `Progreso promedio · lección ${current} de ${total}`,
+  courseAvgProgressNoTotal: (current) => `Progreso promedio · lección ${current}`,
+  courseLastActivity: 'Última actividad',
+  coursePlaceholder: 'Un curso nuevo aparece aquí como configuración, sin código.',
   backToSocios: 'Volver a socios',
   channel: 'Canal',
   language: 'Idioma',
@@ -254,10 +274,18 @@ const en: DashboardStrings = {
   thStatus: 'Status',
   thName: 'Name',
   thChannel: 'Channel',
+  thCourse: 'Course',
   thLesson: 'Lesson',
   thLastInteraction: 'Last interaction',
   noName: 'No name',
   never: 'Never',
+  courseFilterAll: 'All courses',
+  courseUnassigned: 'Unassigned',
+  courseParticipants: (count) => (count === 1 ? '1 participant' : `${count} participants`),
+  courseAvgProgress: (current, total) => `Avg progress · lesson ${current} of ${total}`,
+  courseAvgProgressNoTotal: (current) => `Avg progress · lesson ${current}`,
+  courseLastActivity: 'Last activity',
+  coursePlaceholder: 'A new course appears here as configuration, no code.',
   backToSocios: 'Back to socios',
   channel: 'Channel',
   language: 'Language',
@@ -363,10 +391,18 @@ const pt: DashboardStrings = {
   thStatus: 'Status',
   thName: 'Nome',
   thChannel: 'Canal',
+  thCourse: 'Curso',
   thLesson: 'Lição',
   thLastInteraction: 'Última interação',
   noName: 'Sem nome',
   never: 'Nunca',
+  courseFilterAll: 'Todos os cursos',
+  courseUnassigned: 'Sem curso',
+  courseParticipants: (count) => (count === 1 ? '1 participante' : `${count} participantes`),
+  courseAvgProgress: (current, total) => `Progresso médio · lição ${current} de ${total}`,
+  courseAvgProgressNoTotal: (current) => `Progresso médio · lição ${current}`,
+  courseLastActivity: 'Última atividade',
+  coursePlaceholder: 'Um curso novo aparece aqui como configuração, sem código.',
   backToSocios: 'Voltar aos sócios',
   channel: 'Canal',
   language: 'Idioma',
