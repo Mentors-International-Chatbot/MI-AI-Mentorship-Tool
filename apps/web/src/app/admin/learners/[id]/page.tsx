@@ -112,8 +112,8 @@ export default async function AdminSocioDetailPage({
 
   return (
     <div>
-      <Link href="/admin/socios" className="text-sm text-blue-600 hover:underline">
-        &larr; Back to socios
+      <Link href="/admin/learners" className="text-sm text-blue-600 hover:underline">
+        &larr; Back to learners
       </Link>
 
       {/* Header */}
@@ -276,7 +276,7 @@ export default async function AdminSocioDetailPage({
                 }`}
               >
                 <div className="text-xs font-medium opacity-60 mb-0.5">
-                  {m.role === 'user' ? 'Socio' : m.role === 'assistant' ? 'AI' : m.role}
+                  {m.role === 'user' ? 'Learner' : m.role === 'assistant' ? 'AI' : m.role}
                   {' - '}
                   {new Date(m.createdAt).toLocaleString()}
                 </div>

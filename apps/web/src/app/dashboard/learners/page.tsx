@@ -39,10 +39,10 @@ export default async function SociosPage() {
 
   // This is the mentor dashboard: it shows the socios assigned to whoever is
   // looking, and nothing else. The program-wide view is a different surface —
-  // an admin asking for it belongs on /admin/socios, not on a page that would
+  // an admin asking for it belongs on /admin/learners, not on a page that would
   // silently mean something different depending on who opened it.
   if (session.role === 'admin') {
-    redirect('/admin/socios');
+    redirect('/admin/learners');
   }
 
   let socios;

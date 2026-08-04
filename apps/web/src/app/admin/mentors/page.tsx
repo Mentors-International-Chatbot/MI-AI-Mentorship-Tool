@@ -27,7 +27,7 @@ export default function AdminMentorsPage() {
   }
 
   async function deleteMentor(id: string, name: string) {
-    if (!confirm(`Delete mentor "${name}"? Their socios will be unassigned.`)) return;
+    if (!confirm(`Delete mentor "${name}"? Their learners will be unassigned.`)) return;
     await fetch('/api/admin/mentors', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -62,7 +62,7 @@ export default function AdminMentorsPage() {
       selectedIds.length > 3 ? ` and ${selectedIds.length - 3} more` : '';
     if (
       !confirm(
-        `Delete ${selectedIds.length} mentors (${labels.join(', ')}${suffix})? Their socios will be unassigned.`,
+        `Delete ${selectedIds.length} mentors (${labels.join(', ')}${suffix})? Their learners will be unassigned.`,
       )
     ) {
       return;
@@ -151,7 +151,7 @@ export default function AdminMentorsPage() {
               </div>
 
               <div className="flex gap-6 text-center shrink-0">
-                <Stat label="Socios" value={m.socioCount} />
+                <Stat label="Learners" value={m.socioCount} />
                 <Stat
                   label="Flags"
                   value={m.unresolvedFlags}

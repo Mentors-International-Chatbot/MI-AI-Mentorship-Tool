@@ -11,7 +11,7 @@ type NavItem =
   | { label: string; key: string; children: NavChild[] };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/dashboard/socios', label: 'Mentor dashboard' },
+  { href: '/dashboard/learners', label: 'Mentor dashboard' },
   { href: '/chat', label: 'Web chat' },
   { href: '/admin', label: 'Overview' },
   {
@@ -30,10 +30,10 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/admin/feedback', label: 'Feedback' },
     ],
   },
-  { href: '/admin/socios', label: 'Socios' },
+  { href: '/admin/learners', label: 'Learners' },
   { href: '/admin/mentors', label: 'Mentors' },
   { href: '/admin/users', label: 'Users' },
-  { href: '/admin/socio-feedback', label: 'All satisfaction' },
+  { href: '/admin/learner-feedback', label: 'All satisfaction' },
 ];
 
 function isHrefActive(href: string, pathname: string) {

@@ -6,7 +6,7 @@
  * separately they would drift the first time a filter was added to one.
  */
 import { Prisma } from '@prisma/client';
-import { UNASSIGNED_COURSE_KEY } from '@/app/dashboard/socios/courseRollup';
+import { UNASSIGNED_COURSE_KEY } from '@/app/dashboard/learners/courseRollup';
 
 /**
  * Translates the list's query parameters into a Prisma `where`.

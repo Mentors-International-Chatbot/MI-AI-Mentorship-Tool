@@ -68,7 +68,7 @@ function buildQuery(key: string): string {
 }
 
 function buildViewAllHref(key: string): string {
-  const base = '/admin/socios';
+  const base = '/admin/learners';
   switch (key) {
     case 'totalSocios':
       return base;
@@ -143,14 +143,14 @@ export default function AdminOverviewPage() {
       {/* Top-level metrics row 1 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
         <MetricCard
-          label="Total Socios"
+          label="Total Learners"
           value={data.totalSocios}
           drillKey="totalSocios"
           expanded={expanded}
           onClick={toggle}
         />
         <MetricCard
-          label="Active Socios"
+          label="Active Learners"
           value={data.activeSocioCount}
           drillKey="activeSocios"
           expanded={expanded}
@@ -182,7 +182,7 @@ export default function AdminOverviewPage() {
       {/* Top-level metrics row 2 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2 mt-4">
         <MetricCard label="Total Messages" value={data.totalMessages} />
-        <MetricCard label="Avg Msgs/Socio/Week" value={data.avgMessagesPerSocio} />
+        <MetricCard label="Avg Msgs/Learner/Week" value={data.avgMessagesPerSocio} />
         <MetricCard
           label="Red Flags"
           value={redFlags}
@@ -207,11 +207,11 @@ export default function AdminOverviewPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        {/* Socios by Status */}
+        {/* Learners by Status */}
         <div className="bg-white rounded-lg border p-4">
-          <h3 className="font-semibold text-gray-900 mb-4">Socios by Status</h3>
+          <h3 className="font-semibold text-gray-900 mb-4">Learners by Status</h3>
           {data.sociosByStatus.length === 0 ? (
-            <p className="text-sm text-gray-500">No socios yet.</p>
+            <p className="text-sm text-gray-500">No learners yet.</p>
           ) : (
             <>
               <div className="relative h-[220px]">
@@ -241,7 +241,7 @@ export default function AdminOverviewPage() {
                         />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => [value, 'Socios']} />
+                    <Tooltip formatter={(value) => [value, 'Learners']} />
                     <Legend
                       formatter={(value: string) => <span className="text-xs text-gray-600">{value}</span>}
                     />
@@ -403,7 +403,7 @@ function FinancialChart({
   if (data.length === 0) {
     return (
       <div className="bg-white rounded-lg border p-4 lg:col-span-2">
-        <h3 className="font-semibold text-gray-900 mb-4">Weekly Financial Trend (All Socios)</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">Weekly Financial Trend (All Learners)</h3>
         <p className="text-sm text-gray-500">No financial data reported yet.</p>
       </div>
     );
@@ -419,7 +419,7 @@ function FinancialChart({
 
   return (
     <div className="bg-white rounded-lg border p-4 lg:col-span-2">
-      <h3 className="font-semibold text-gray-900 mb-4">Weekly Financial Trend (All Socios)</h3>
+      <h3 className="font-semibold text-gray-900 mb-4">Weekly Financial Trend (All Learners)</h3>
       <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
           <defs>
@@ -548,10 +548,10 @@ function DrillDownPanel({ drillKey, showMessages }: { drillKey: string; showMess
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
           </svg>
-          Loading socios…
+          Loading learners…
         </div>
       ) : socios.length === 0 ? (
-        <p className="text-sm text-gray-500 py-2">No socios found.</p>
+        <p className="text-sm text-gray-500 py-2">No learners found.</p>
       ) : (
         <>
           <table className="w-full text-sm">
@@ -583,7 +583,7 @@ function DrillDownPanel({ drillKey, showMessages }: { drillKey: string; showMess
                   <td className="py-2 text-gray-500">{relativeTime(s.progress?.lastInteractionAt)}</td>
                   <td className="py-2">
                     <a
-                      href={`/admin/socios/${s.id}`}
+                      href={`/admin/learners/${s.id}`}
                       className="text-blue-600 hover:underline text-xs font-medium"
                     >
                       View
@@ -599,7 +599,7 @@ function DrillDownPanel({ drillKey, showMessages }: { drillKey: string; showMess
                 href={buildViewAllHref(drillKey)}
                 className="text-sm text-blue-600 hover:underline font-medium"
               >
-                View all {total} socios →
+                View all {total} learners →
               </a>
             </div>
           )}

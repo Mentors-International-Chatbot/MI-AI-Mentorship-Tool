@@ -60,7 +60,7 @@ export function LoginClient() {
       } else if (data.role === 'admin') {
         router.push('/admin');
       } else {
-        router.push('/dashboard/socios');
+        router.push('/dashboard/learners');
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -119,7 +119,7 @@ export function LoginClient() {
                 userType === 'socio' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              Socio
+              Learner
             </button>
             <button
               type="button"

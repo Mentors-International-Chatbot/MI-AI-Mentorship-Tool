@@ -95,7 +95,7 @@ export default async function SocioDetailPage({
     <div>
       {/* Header */}
       <div className="mb-6">
-        <Link href="/dashboard/socios" className="text-sm text-[#1B2A4A] hover:underline">
+        <Link href="/dashboard/learners" className="text-sm text-[#1B2A4A] hover:underline">
           &larr; {t.backToSocios}
         </Link>
         <div className="flex items-center gap-3 mt-2">

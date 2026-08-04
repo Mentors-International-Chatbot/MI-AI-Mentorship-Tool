@@ -20,7 +20,7 @@ export default async function DashboardLayout({
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <h1 className="text-xl font-bold">{t.panelTitle}</h1>
             <div className="flex items-center gap-4">
-              {/* Additive: /dashboard/socios stays the landing page until the
+              {/* Additive: /dashboard/learners stays the landing page until the
                   signals view is proven. */}
               <Link
                 href="/dashboard/alerts"
@@ -29,7 +29,7 @@ export default async function DashboardLayout({
                 {t.signalsTitle}
               </Link>
               <Link
-                href="/dashboard/socios"
+                href="/dashboard/learners"
                 className="text-sm text-gray-300 hover:text-white transition-colors"
               >
                 {t.sociosTitle}

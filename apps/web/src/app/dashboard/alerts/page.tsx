@@ -16,10 +16,10 @@ import { AlertSnapshot, type AlertSnapshotSocio } from './AlertSnapshot';
 /**
  * Mentor alert snapshot.
  *
- * Signals, not roster — `/dashboard/socios` stays the roster and keeps the
+ * Signals, not roster — `/dashboard/learners` stays the roster and keeps the
  * course rollup cards. This page answers a different question: who needs me.
  *
- * Scoping mirrors `/dashboard/socios` exactly, for the same reason stated
+ * Scoping mirrors `/dashboard/learners` exactly, for the same reason stated
  * there: an admin opening a mentor-scoped page would see something silently
  * different from what a mentor sees, so admins go to the program-wide surface
  * instead.
@@ -30,7 +30,7 @@ export default async function AlertsPage() {
     redirect('/login');
   }
   if (session.role === 'admin') {
-    redirect('/admin/socios');
+    redirect('/admin/learners');
   }
 
   const lang = await resolveDashboardLanguage();

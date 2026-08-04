@@ -20,13 +20,13 @@ export default async function AdminSocioFeedbackPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">Socio satisfaction (all)</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">Learner satisfaction (all)</h2>
       <p className="text-sm text-gray-500 mb-4">
-        Aggregate view of all ratings. For each socio&apos;s latest score and full history, use{' '}
-        <Link href="/admin/socios" className="text-blue-600 hover:underline">
-          Admin → Socios
+        Aggregate view of all ratings. For each learner&apos;s latest score and full history, use{' '}
+        <Link href="/admin/learners" className="text-blue-600 hover:underline">
+          Admin → Learners
         </Link>{' '}
-        and open the socio detail page.
+        and open the learner detail page.
       </p>
       <div className="flex flex-wrap gap-6 mb-6 text-sm">
         <div>
@@ -53,7 +53,7 @@ export default async function AdminSocioFeedbackPage() {
             <thead className="bg-gray-50 text-gray-600 text-left">
               <tr>
                 <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Socio</th>
+                <th className="px-4 py-3">Learner</th>
                 <th className="px-4 py-3">Lesson #</th>
                 <th className="px-4 py-3">Rating</th>
                 <th className="px-4 py-3">Comment</th>
@@ -81,10 +81,10 @@ export default async function AdminSocioFeedbackPage() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <Link
-                      href={`/admin/socios/${r.socio.id}`}
+                      href={`/admin/learners/${r.socio.id}`}
                       className="text-blue-600 hover:underline text-xs"
                     >
-                      Socio detail
+                      Learner detail
                     </Link>
                   </td>
                 </tr>

@@ -89,7 +89,7 @@ export async function proxy(req: NextRequest) {
 
   // If logged in and visiting /login, redirect to appropriate home
   if (pathname === '/login') {
-    const home = session.role === 'socio' ? '/chat' : '/dashboard/socios';
+    const home = session.role === 'socio' ? '/chat' : '/dashboard/learners';
     return NextResponse.redirect(new URL(home, req.url));
   }
 
@@ -108,7 +108,7 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(new URL('/chat', req.url));
     }
     if (session.role !== 'admin' && session.role !== 'mentor') {
-      return NextResponse.redirect(new URL('/dashboard/socios', req.url));
+      return NextResponse.redirect(new URL('/dashboard/learners', req.url));
     }
   }
 

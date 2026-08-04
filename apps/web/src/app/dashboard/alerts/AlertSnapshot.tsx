@@ -209,7 +209,7 @@ function NeedsYouNowCard({
       <div className="mt-4 flex flex-wrap gap-2">
         <TakeOverButton socioId={socio.socioId} label={t.actionTakeOverChat} />
         <Link
-          href={`/dashboard/socios/${socio.socioId}`}
+          href={`/dashboard/learners/${socio.socioId}`}
           className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
           {t.actionReadTranscript}
@@ -241,7 +241,7 @@ function WatchingRow({
         <span className="ml-2 text-xs text-gray-400">{courseLine(socio, decoration, t)}</span>
       </div>
       <Link
-        href={`/dashboard/socios/${socio.socioId}`}
+        href={`/dashboard/learners/${socio.socioId}`}
         className="shrink-0 rounded-md border border-amber-300 px-3 py-1 text-sm font-medium text-amber-800 hover:bg-amber-50 transition-colors"
       >
         {t.actionStepIn}

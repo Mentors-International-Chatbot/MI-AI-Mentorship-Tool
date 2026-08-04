@@ -15,5 +15,5 @@ export default async function HomePage() {
   if (session.role === 'admin') {
     redirect('/admin');
   }
-  redirect('/dashboard/socios');
+  redirect('/dashboard/learners');
 }

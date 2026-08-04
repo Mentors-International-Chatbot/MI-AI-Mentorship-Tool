@@ -77,7 +77,7 @@ export function ForgotPasswordLink() {
                   Reset Password
                 </h3>
                 <p className="text-xs text-gray-500 mb-3">
-                  For mentor and admin accounts. Socios sign in with phone; contact your admin if you
+                  For mentor and admin accounts. Learners sign in with phone; contact your admin if you
                   need help.
                 </p>
                 <input

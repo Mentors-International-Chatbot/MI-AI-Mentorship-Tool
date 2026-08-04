@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CourseCardGrid } from '@/app/dashboard/socios/CourseCardGrid';
-import type { CourseRollup } from '@/app/dashboard/socios/courseRollup';
+import { CourseCardGrid } from '@/app/dashboard/learners/CourseCardGrid';
+import type { CourseRollup } from '@/app/dashboard/learners/courseRollup';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
 
 // The admin surface has no dashboard language provider — every label on it is
@@ -130,7 +130,7 @@ export default function AdminSociosPage() {
       selectedIds.length > 3 ? ` and ${selectedIds.length - 3} more` : '';
     if (
       !confirm(
-        `Delete ${selectedIds.length} socios (${labels.join(', ')}${suffix})? This will remove all their messages, flags, progress, and summaries.`,
+        `Delete ${selectedIds.length} learners (${labels.join(', ')}${suffix})? This will remove all their messages, flags, progress, and summaries.`,
       )
     ) {
       return;
@@ -146,7 +146,7 @@ export default function AdminSociosPage() {
   }
 
   async function deleteSocio(socioId: string, name: string | null) {
-    if (!confirm(`Delete socio "${name ?? 'unnamed'}"? This will remove all their messages, flags, progress, and summaries.`)) return;
+    if (!confirm(`Delete learner "${name ?? 'unnamed'}"? This will remove all their messages, flags, progress, and summaries.`)) return;
     await fetch('/api/admin/socios', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -179,7 +179,7 @@ export default function AdminSociosPage() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h2 className="text-2xl font-bold text-gray-900">
-          All Socios <span className="text-gray-400 font-normal text-lg">({total})</span>
+          All Learners <span className="text-gray-400 font-normal text-lg">({total})</span>
         </h2>
         <button
           type="button"
@@ -211,7 +211,7 @@ export default function AdminSociosPage() {
           value={search}
           onChange={(e) => { setLoading(true); setSearch(e.target.value); setPage(1); }}
           placeholder="Search by name, business, or phone..."
-          aria-label="Search socios by name, business, or phone"
+          aria-label="Search learners by name, business, or phone"
           className="flex-1 border rounded px-3 py-2 text-sm text-gray-900"
         />
         <select
@@ -256,7 +256,7 @@ export default function AdminSociosPage() {
                         socios.every((s) => selectedIds.includes(s.id))
                       }
                       onChange={toggleSelectAllOnPage}
-                      aria-label="Select all socios on this page"
+                      aria-label="Select all learners on this page"
                       className="rounded border-gray-300"
                     />
                   </th>
@@ -279,7 +279,7 @@ export default function AdminSociosPage() {
                         type="checkbox"
                         checked={selectedIds.includes(s.id)}
                         onChange={() => toggleSocioSelected(s.id)}
-                        aria-label={`Select socio ${s.name ?? s.id}`}
+                        aria-label={`Select learner ${s.name ?? s.id}`}
                         className="rounded border-gray-300"
                       />
                     </td>
@@ -344,7 +344,7 @@ export default function AdminSociosPage() {
                     </td>
                     <td className="px-4 py-3 flex gap-2">
                       <Link
-                        href={`/admin/socios/${s.id}`}
+                        href={`/admin/learners/${s.id}`}
                         className="text-blue-600 hover:underline text-xs"
                       >
                         Detail

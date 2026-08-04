@@ -19,7 +19,7 @@ import { prisma } from '@/lib/db';
 import {
   buildCourseRollups,
   type CourseRollupInput,
-} from '@/app/dashboard/socios/courseRollup';
+} from '@/app/dashboard/learners/courseRollup';
 import { getCourseSummaries } from '@/lib/journey-package/course-summaries';
 import { buildSocioWhere } from '../filters';
 

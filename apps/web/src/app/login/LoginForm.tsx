@@ -62,7 +62,7 @@ export default function LoginForm() {
       } else if (data.role === 'admin') {
         router.push('/admin');
       } else {
-        router.push('/dashboard/socios');
+        router.push('/dashboard/learners');
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -87,7 +87,7 @@ export default function LoginForm() {
       }
       if (data.role === 'socio') router.push('/chat');
       else if (data.role === 'admin') router.push('/admin');
-      else router.push('/dashboard/socios');
+      else router.push('/dashboard/learners');
     } catch {
       setError('Test login failed');
       setLoading(false);
@@ -153,7 +153,7 @@ export default function LoginForm() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              Socio
+              Learner
             </button>
             <button
               type="button"
@@ -341,7 +341,7 @@ export default function LoginForm() {
               disabled={loading}
               className="flex-1 py-2 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50"
             >
-              Test Socio
+              Test Learner
             </button>
             <button
               type="button"

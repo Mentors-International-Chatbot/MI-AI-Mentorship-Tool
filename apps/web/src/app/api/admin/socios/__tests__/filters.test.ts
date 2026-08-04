@@ -6,7 +6,7 @@
  * for the rollup cards, and the fact that pagination never leaks into it.
  */
 import { describe, it, expect } from 'vitest';
-import { UNASSIGNED_COURSE_KEY } from '@/app/dashboard/socios/courseRollup';
+import { UNASSIGNED_COURSE_KEY } from '@/app/dashboard/learners/courseRollup';
 import { buildSocioWhere } from '../filters';
 
 function where(query: string) {

@@ -18,7 +18,7 @@ export type { SessionIdentity, SessionPayload, VerifiedSession };
 export function homePathForRole(role: SessionPayload['role']): string {
   if (role === 'socio') return '/chat';
   if (role === 'admin') return '/admin';
-  return '/dashboard/socios';
+  return '/dashboard/learners';
 }
 
 export async function createSession(

@@ -34,7 +34,7 @@ export function TakeOverButton({ socioId, label }: { socioId: string; label: str
       // staleTimes.dynamic default of 0 would hide the bug, which is exactly
       // why this does not rely on it.
       router.refresh();
-      router.push(`/dashboard/socios/${socioId}`);
+      router.push(`/dashboard/learners/${socioId}`);
     } catch {
       // Staying on the page with the button re-enabled is the recoverable
       // outcome; navigating to a chat the AI still owns would not be.

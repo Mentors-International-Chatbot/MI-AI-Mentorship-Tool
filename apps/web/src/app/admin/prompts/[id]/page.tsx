@@ -157,7 +157,7 @@ export default function PromptEditorPage({ params }: { params: Promise<{ id: str
         <div className="border rounded-lg p-4 bg-gray-50">
           <h3 className="font-semibold text-gray-900 mb-3">Test Sandbox</h3>
           <div className="mb-3">
-            <label className="block text-sm text-gray-600 mb-1">Sample socio message:</label>
+            <label className="block text-sm text-gray-600 mb-1">Sample learner message:</label>
             <input
               value={testMessage}
               onChange={(e) => setTestMessage(e.target.value)}
