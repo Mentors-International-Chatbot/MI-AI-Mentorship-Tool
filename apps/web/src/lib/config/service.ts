@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { scopeTiers, scopeCacheKey, type ConfigScope } from '@/lib/ai/prompts/scope';
 
 // ─── Hardcoded defaults (fallback if DB unreachable) ─────────────────
 const DEFAULTS: Record<string, string> = {
@@ -25,24 +26,42 @@ const DEFAULTS: Record<string, string> = {
   CHATBOT_NAME: 'Martín',
 };
 
-// ─── In-memory cache (60s TTL) ──────────────────────────────────────
-let cache: Map<string, string> | null = null;
-let lastFetched = 0;
+// ─── In-memory cache (60s TTL), keyed by scope ──────────────────────
+// Keyed rather than global: a single shared map was correct only while every
+// course read the same values, and is exactly what made per-course config
+// impossible. One entry per scope, each with its own TTL.
+type CacheEntry = { map: Map<string, string>; fetchedAt: number };
+const cache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 60_000;
 
-async function loadAll(): Promise<Map<string, string>> {
+/**
+ * Effective config for a scope: platform rows overlaid by org rows, then by
+ * course rows. Applied least-specific first so the narrowest scope wins,
+ * matching the prompt resolution order exactly.
+ */
+async function loadAll(scope?: ConfigScope): Promise<Map<string, string>> {
+  const cacheKey = scopeCacheKey(scope);
   const now = Date.now();
-  if (cache && now - lastFetched < CACHE_TTL_MS) {
-    return cache;
-  }
+  const hit = cache.get(cacheKey);
+  if (hit && now - hit.fetchedAt < CACHE_TTL_MS) return hit.map;
+
   try {
-    const rows = await prisma.programConfig.findMany();
+    // One query for every tier, then overlay in reverse (broadest first).
+    const tiers = scopeTiers(scope);
+    const rows = await prisma.programConfig.findMany({
+      where: { OR: tiers.map((t) => ({ organizationId: t.organizationId, collectionKey: t.collectionKey })) },
+    });
+
     const map = new Map<string, string>();
-    for (const row of rows) {
-      map.set(row.key, row.value);
+    for (const tier of [...tiers].reverse()) {
+      for (const row of rows) {
+        if (row.organizationId !== tier.organizationId) continue;
+        if (row.collectionKey !== tier.collectionKey) continue;
+        map.set(row.key, row.value);
+      }
     }
-    cache = map;
-    lastFetched = now;
+
+    cache.set(cacheKey, { map, fetchedAt: now });
     return map;
   } catch (err) {
     console.error('[config] DB read failed, using defaults:', err);
@@ -50,47 +69,46 @@ async function loadAll(): Promise<Map<string, string>> {
   }
 }
 
-/** Invalidate cache after admin updates a config value. */
+/** Invalidate every scope's cache after a config write. */
 export function invalidateConfigCache(): void {
-  cache = null;
-  lastFetched = 0;
+  cache.clear();
 }
 
 /** Get a config value as a raw string. */
-export async function getConfigRaw(key: string): Promise<string> {
-  const map = await loadAll();
+export async function getConfigRaw(key: string, scope?: ConfigScope): Promise<string> {
+  const map = await loadAll(scope);
   return map.get(key) ?? DEFAULTS[key] ?? '';
 }
 
 /** Get a config value parsed as a number. */
-export async function getConfigNumber(key: string): Promise<number> {
-  const raw = await getConfigRaw(key);
+export async function getConfigNumber(key: string, scope?: ConfigScope): Promise<number> {
+  const raw = await getConfigRaw(key, scope);
   return Number(raw);
 }
 
 /** Get a config value parsed as a boolean. */
-export async function getConfigBool(key: string): Promise<boolean> {
-  const raw = await getConfigRaw(key);
+export async function getConfigBool(key: string, scope?: ConfigScope): Promise<boolean> {
+  const raw = await getConfigRaw(key, scope);
   return raw === 'true';
 }
 
 /** String config value (trimmed). Empty string falls back to `DEFAULTS[key]` via `getConfigRaw`. */
-export async function getConfigString(key: string): Promise<string> {
-  return (await getConfigRaw(key)).trim();
+export async function getConfigString(key: string, scope?: ConfigScope): Promise<string> {
+  return (await getConfigRaw(key, scope)).trim();
 }
 
 const FALLBACK_CHATBOT_DISPLAY_NAME = 'Mentor Virtual';
 
 /** Sanitized chatbot persona name for prompts and UI. */
-export async function getChatbotDisplayName(): Promise<string> {
-  const raw = await getConfigString('CHATBOT_NAME');
+export async function getChatbotDisplayName(scope?: ConfigScope): Promise<string> {
+  const raw = await getConfigString('CHATBOT_NAME', scope);
   const n = raw.slice(0, 80).replace(/[\r\n]/g, ' ').trim();
   return n || FALLBACK_CHATBOT_DISPLAY_NAME;
 }
 
 /** Get all config values as a key→value map. */
-export async function getAllConfig(): Promise<Record<string, string>> {
-  const map = await loadAll();
+export async function getAllConfig(scope?: ConfigScope): Promise<Record<string, string>> {
+  const map = await loadAll(scope);
   // Merge defaults for any missing keys
   const result: Record<string, string> = { ...DEFAULTS };
   for (const [k, v] of map) {

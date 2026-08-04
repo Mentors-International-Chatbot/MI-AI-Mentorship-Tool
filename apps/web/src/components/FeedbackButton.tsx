@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { SessionRole } from '@/lib/auth/token';
 
 const PAGE_OPTIONS = [
   { value: 'chat', label: 'Web Chat (/chat)' },
@@ -17,7 +18,7 @@ const PAGE_OPTIONS = [
 
 type FeedbackButtonProps = {
   /** When `socio`, page is fixed to `chat` and the page dropdown is hidden. */
-  userRole?: 'socio' | 'mentor' | 'admin' | null;
+  userRole?: SessionRole | null;
 };
 
 export default function FeedbackButton({ userRole }: FeedbackButtonProps) {

@@ -68,6 +68,8 @@ IMPORTANTE: Considera contexto cultural colombiano. "Ay no, pena" puede ser frus
 
 /** Same natural key backfill-phase1.ts upserts on, so the two converge. */
 const MI_ORG_SLUG = 'mentors-international';
+/** ContentCollection.slug for the MI curriculum; the scope of its core prompt. */
+const MI_COLLECTION_KEY = 'mi-colombia-curriculum';
 
 const NAME_EXTRACTION_PROMPT_DEFAULT =
   "Extract only the person's name from this message. Return just the name, nothing else. If no name is found, return exactly NONE.";
@@ -175,8 +177,11 @@ async function main() {
 
   // ── Seed MI-specific core prompt (course-scoped) ──
   // This allows the core identity to be course-specific while keeping safety rules generic
+  // Scope now lives in columns; `category` is a plain 'core'. The old
+  // `core:{collectionKey}` pseudo-category was promoted by migration
+  // 20260804000000, so this looks the row up by its new shape.
   const miCoreExisting = await prisma.systemPrompt.findFirst({
-    where: { version: '1.0', category: 'core:mi-colombia-curriculum' },
+    where: { version: '1.0', category: 'core', collectionKey: MI_COLLECTION_KEY },
   });
 
   if (miCoreExisting) {
@@ -186,23 +191,33 @@ async function main() {
     });
     console.log(`Updated core:mi-colombia-curriculum prompt v1.0 content (id: ${miCoreExisting.id}).`);
   } else {
+    const miOrg = await prisma.contentCollection.findFirst({
+      where: { slug: MI_COLLECTION_KEY },
+      select: { organizationId: true },
+    });
     const prompt = await prisma.systemPrompt.create({
       data: {
         version: '1.0',
-        category: 'core:mi-colombia-curriculum',
+        category: 'core',
         content: CORE_SYSTEM_PROMPT,
         active: true,
         authorId: 'seed',
+        organizationId: miOrg?.organizationId ?? null,
+        collectionKey: MI_COLLECTION_KEY,
       },
     });
-    console.log(`Created core:mi-colombia-curriculum prompt v1.0 (id: ${prompt.id})`);
+    console.log(`Created core prompt v1.0 for ${MI_COLLECTION_KEY} (id: ${prompt.id})`);
   }
 
   // ── Seed program config ──
   let created = 0;
   let skipped = 0;
   for (const cfg of CONFIG_SEEDS) {
-    const exists = await prisma.programConfig.findUnique({ where: { key: cfg.key } });
+    // Seeds populate the platform tier (both scope columns null). `findUnique`
+    // no longer works here: `key` alone stopped being unique when scoping landed.
+    const exists = await prisma.programConfig.findFirst({
+      where: { key: cfg.key, organizationId: null, collectionKey: null },
+    });
     if (exists) {
       skipped++;
       continue;

@@ -8,6 +8,7 @@ import { DEFAULT_LANGUAGE } from '@/lib/i18n/languages';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import type { PromptVersionSink } from './loadPrompt';
+import { resolvePromptScope } from './resolveScope';
 
 // ─── Prompt Builder ─────────────────────────────────────────────────
 // Assembles the 4-layer system prompt at runtime.
@@ -46,14 +47,19 @@ export async function buildSystemPrompt(
   );
   const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
 
+  // Resolved once and threaded into layers 1 and 3 rather than re-derived in
+  // each: both read DB-backed prompts, and two lookups per turn for the same
+  // answer is waste. Cached across turns inside resolvePromptScope.
+  const scope = await resolvePromptScope(collectionKey);
+
   // Layer 1: Core identity + tone override + sliders + language directive (DB-backed, course-scoped)
-  const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language, sink);
+  const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language, sink, scope);
 
   // Layer 2: Socio context (now async — fetches persistent SocioContext from DB)
   const layer2 = await buildContextPrompt(socio, progress, collectionKey, language);
 
   // Layer 3: Task context (mode-specific instructions + dimension state)
-  const layer3 = await buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState, language, sink);
+  const layer3 = await buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState, language, sink, scope);
 
   // Layer 4: Lesson content (only for teaching modes)
   const layer4 = await buildContentPrompt(routerResult, collectionKey, language);

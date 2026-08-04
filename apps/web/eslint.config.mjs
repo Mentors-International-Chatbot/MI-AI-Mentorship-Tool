@@ -27,6 +27,16 @@ const eslintConfig = defineConfig([
       "src/lib/journey-package/**",
       // Lesson service reads shared curriculum content (not tenant-scoped)
       "src/lib/lessons/db-lesson-service.ts",
+      // Resolves a course slug to its owning organization so prompts can be
+      // scoped. Reads content_collections only — the same shared-content
+      // category as the lesson service — and fails closed on an ambiguous slug
+      // rather than picking a tenant.
+      "src/lib/ai/prompts/resolveScope.ts",
+      // Decides which courses a caller may configure. Authorization has to read
+      // memberships and collections BEFORE a tenant context can exist, which is
+      // the same reason the auth routes are exempt: it is the code that
+      // establishes the scope, so it cannot be handed one.
+      "src/lib/auth/courseScope.ts",
       // Test files may mock prisma
       "src/**/__tests__/**",
       // Admin routes are system-wide operations (user mgmt, config, analytics, prompts)

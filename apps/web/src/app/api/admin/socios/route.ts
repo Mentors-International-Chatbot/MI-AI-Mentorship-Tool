@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { buildSocioWhere } from './filters';
+import { requireAdmin } from '@/lib/auth/adminGuard';
 
 const SOCIO_LIST_INCLUDE = {
   progress: true,
@@ -34,6 +35,9 @@ function mapSocioLatestRating(s: SocioListRow) {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const params = request.nextUrl.searchParams;
   const sortBy = params.get('sortBy'); // "messagesThisWeek"
   const page = Math.max(1, Number(params.get('page') ?? 1));
@@ -96,6 +100,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const body = await request.json();
   const { socioId, mentorId } = body as { socioId: string; mentorId: string | null };
 
@@ -124,6 +131,9 @@ export async function PATCH(request: NextRequest) {
 const BATCH_DELETE_MAX = 100;
 
 export async function DELETE(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const body = (await request.json()) as { socioId?: string; socioIds?: string[] };
 
   if (body.socioIds && Array.isArray(body.socioIds)) {

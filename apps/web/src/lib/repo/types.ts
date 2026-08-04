@@ -1,6 +1,7 @@
 import type { ChannelType } from '@/lib/delivery/types';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 import type { AssessmentSession } from './tenantRepo.types';
+import type { ConfigScope } from '@/lib/ai/prompts/scope';
 
 export type Role = "user" | "assistant" | "system" | "mentor";
 export type SocioStatus =
@@ -136,6 +137,10 @@ export type SystemPrompt = {
     category: string;
     active: boolean;
     authorId: string;
+    /** Null means the row applies beyond one organization. See ConfigScope. */
+    organizationId: string | null;
+    /** ContentCollection.slug. Null means the row applies beyond one course. */
+    collectionKey: string | null;
     createdAt: Date;
 };
 
@@ -240,7 +245,12 @@ export interface Repo {
     clearDimensionState(socioId: string): Promise<void>;
 
     // System prompt methods
-    getActivePrompt(category: string): Promise<SystemPrompt | null>;
+    /**
+     * Most specific active prompt for `category` within `scope`, walking
+     * (org, collection) → (org, null) → (null, null). Omitting `scope` reads
+     * the platform tier only, which is what every pre-scoping caller did.
+     */
+    getActivePrompt(category: string, scope?: ConfigScope): Promise<SystemPrompt | null>;
 
     // Summary methods
     createSummary(data: Omit<Summary, 'id' | 'createdAt'>): Promise<Summary>;

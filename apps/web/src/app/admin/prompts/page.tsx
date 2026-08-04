@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { PROMPT_CATEGORIES, getPromptCategoryMeta } from '@/lib/ai/prompts/categories';
 
 type Prompt = {
   id: string;
@@ -13,36 +14,44 @@ type Prompt = {
   createdAt: string;
 };
 
-const CATEGORIES = [
-  'core',
-  'onboarding',
-  'lesson_delivery',
-  'freeform',
-  'reteach',
-  'sentiment',
-  'name_extraction',
-];
+// Rendered from the registry, never a literal. The previous hardcoded list had
+// drifted: it offered `core` and `onboarding` (which nothing read) while hiding
+// lesson_start, checkin, reminder, mentor_handoff and post_mentor (which are read).
+const CATEGORIES = PROMPT_CATEGORIES.map((c) => c.category);
+
+type Course = {
+  organizationId: string;
+  collectionKey: string;
+  programId: string;
+  displayName: string;
+};
 
 export default function AdminPromptsPage() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('');
   const [showCreate, setShowCreate] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
 
   function loadPrompts() {
-    const url = filter
-      ? `/api/admin/prompts?category=${filter}`
-      : '/api/admin/prompts';
-    fetch(url)
+    const params = new URLSearchParams();
+    if (filter) params.set('category', filter);
+    if (selectedCourse) params.set('collectionKey', selectedCourse);
+    const qs = params.toString();
+    fetch(qs ? `/api/admin/prompts?${qs}` : '/api/admin/prompts')
       .then((r) => r.json())
-      .then(setPrompts)
+      .then((data) => {
+        setPrompts(data.prompts ?? []);
+        setCourses(data.courses ?? []);
+      })
       .finally(() => setLoading(false));
   }
 
   useEffect(() => {
     loadPrompts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, [filter, selectedCourse]);
 
   async function toggleActive(id: string, active: boolean) {
     await fetch('/api/admin/prompts', {
@@ -71,8 +80,32 @@ export default function AdminPromptsPage() {
         </button>
       </div>
 
+      <div className="mb-4 flex items-center gap-3">
+        <label htmlFor="prompt-course-scope" className="text-sm font-medium text-gray-700">
+          Course
+        </label>
+        <select
+          id="prompt-course-scope"
+          value={selectedCourse}
+          onChange={(e) => setSelectedCourse(e.target.value)}
+          className="border rounded px-3 py-1.5 text-sm text-gray-900 min-w-[16rem]"
+        >
+          <option value="">Platform defaults (all courses)</option>
+          {courses.map((c) => (
+            <option key={c.collectionKey} value={c.collectionKey}>
+              {c.displayName}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-gray-500">
+          {selectedCourse
+            ? 'Showing prompts that override the platform default for this course.'
+            : 'Showing platform defaults, inherited by every course without an override.'}
+        </span>
+      </div>
+
       {/* Category filter */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 flex-wrap">
         <button
           onClick={() => setFilter('')}
           className={`px-3 py-1 rounded text-sm ${
@@ -91,13 +124,14 @@ export default function AdminPromptsPage() {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {cat}
+            {getPromptCategoryMeta(cat)?.label ?? cat}
           </button>
         ))}
       </div>
 
       {showCreate && (
         <CreatePromptForm
+          collectionKey={selectedCourse}
           onCreated={() => { setShowCreate(false); loadPrompts(); }}
           onCancel={() => setShowCreate(false)}
         />
@@ -110,9 +144,21 @@ export default function AdminPromptsPage() {
       ) : (
         Object.entries(grouped).map(([category, items]) => (
           <div key={category} className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-700 mb-3 border-b pb-2 capitalize">
-              {category.replace(/_/g, ' ')}
-            </h3>
+            <div className="mb-3 border-b pb-2">
+              <h3 className="text-lg font-semibold text-gray-700">
+                {getPromptCategoryMeta(category)?.label ?? category.replace(/_/g, ' ')}
+                {getPromptCategoryMeta(category)?.scope === 'platform' && (
+                  <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-800">
+                    platform-wide &middot; admin only
+                  </span>
+                )}
+              </h3>
+              {getPromptCategoryMeta(category)?.description && (
+                <p className="mt-0.5 text-sm text-gray-500">
+                  {getPromptCategoryMeta(category)!.description}
+                </p>
+              )}
+            </div>
             <div className="grid gap-3">
               {items.map((p) => (
                 <div
@@ -172,9 +218,12 @@ export default function AdminPromptsPage() {
 function CreatePromptForm({
   onCreated,
   onCancel,
+  collectionKey,
 }: {
   onCreated: () => void;
   onCancel: () => void;
+  /** Empty string creates a platform default; a course key creates an override. */
+  collectionKey: string;
 }) {
   const [version, setVersion] = useState('');
   const [category, setCategory] = useState('core');
@@ -187,7 +236,7 @@ function CreatePromptForm({
     await fetch('/api/admin/prompts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ version, category, content }),
+      body: JSON.stringify({ version, category, content, collectionKey: collectionKey || null }),
     });
     setSaving(false);
     onCreated();
@@ -215,7 +264,9 @@ function CreatePromptForm({
             className="w-full border rounded px-3 py-2 text-gray-900"
           >
             {CATEGORIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <option key={c} value={c}>
+                {getPromptCategoryMeta(c)?.label ?? c}
+              </option>
             ))}
           </select>
         </div>

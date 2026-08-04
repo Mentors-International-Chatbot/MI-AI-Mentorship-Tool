@@ -43,7 +43,13 @@ export const SESSION_ABSOLUTE_CAP = 60 * 60 * 24 * 90; // 90 days
 /** Fraction of the lifetime that must elapse before a refresh is issued. */
 export const SESSION_REFRESH_THRESHOLD = 0.5;
 
-export type SessionRole = 'socio' | 'mentor' | 'admin';
+/**
+ * `course_lead` designs and configures one or more programs. Distinct from
+ * `mentor` (who works with learners but does not shape the course) and from
+ * `admin` (who is unscoped). A course lead's reach is defined by their
+ * ProgramMembership rows, never by the role alone.
+ */
+export type SessionRole = 'socio' | 'mentor' | 'admin' | 'course_lead';
 
 /** The caller-supplied half of a session — who the user is. */
 export type SessionIdentity = {

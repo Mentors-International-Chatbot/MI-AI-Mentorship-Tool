@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireAdmin } from '@/lib/auth/adminGuard';
 
 type UserRow = {
   id: string;
@@ -11,6 +12,9 @@ type UserRow = {
 };
 
 export async function GET() {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const [mentors, socios] = await Promise.all([
     prisma.mentor.findMany({
       orderBy: { createdAt: 'desc' },

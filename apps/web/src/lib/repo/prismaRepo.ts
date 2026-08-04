@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
+import { scopeTiers } from "@/lib/ai/prompts/scope";
 import { DEFAULT_LANGUAGE, isSupportedLanguage } from "@/lib/i18n/languages";
 import {
     Prisma,
@@ -171,6 +172,8 @@ function toSystemPrompt(p: PrismaSystemPrompt): SystemPrompt {
         category: p.category,
         active: p.active,
         authorId: p.authorId,
+        organizationId: p.organizationId,
+        collectionKey: p.collectionKey,
         createdAt: p.createdAt,
     };
 }
@@ -665,12 +668,25 @@ export const prismaRepo: Repo = {
 
     // ─── System Prompt Methods ───────────────────────────────────────────────────
 
-    async getActivePrompt(category) {
-        const prompt = await prisma.systemPrompt.findFirst({
-            where: { category, active: true },
-            orderBy: { createdAt: 'desc' },
-        });
-        return prompt ? toSystemPrompt(prompt) : null;
+    async getActivePrompt(category, scope) {
+        // One query per tier, most specific first, stopping at the first hit.
+        // Fetching all candidates and sorting in memory would be one round trip
+        // instead of up to three, but it would also silently return a row from
+        // another organization if the tier logic ever drifted. Losing the wrong
+        // tenant's prompt into a learner's chat is not a trade worth one query.
+        for (const tier of scopeTiers(scope)) {
+            const prompt = await prisma.systemPrompt.findFirst({
+                where: {
+                    category,
+                    active: true,
+                    organizationId: tier.organizationId,
+                    collectionKey: tier.collectionKey,
+                },
+                orderBy: { createdAt: 'desc' },
+            });
+            if (prompt) return toSystemPrompt(prompt);
+        }
+        return null;
     },
 
     // ─── Summary Methods ─────────────────────────────────────────────────────────

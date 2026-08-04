@@ -1,5 +1,6 @@
 import { repo } from '@/lib/repo';
 import type { SystemPrompt } from '@/lib/repo/types';
+import type { ConfigScope } from './scope';
 
 /**
  * Mutable accumulator for AI-trace prompt versions: layer key -> version string.
@@ -22,8 +23,17 @@ export function formatDbPromptVersion(prompt: SystemPrompt): string {
 }
 
 /**
- * Loads the active SystemPrompt for a given category from the DB.
- * Falls back to the provided fallback string if no active prompt exists.
+ * Loads the most specific active SystemPrompt for a category within `scope`,
+ * walking (org, collection) → (org, null) → (null, null). Falls back to the
+ * provided string when no tier matches.
+ *
+ * `category` must be a member of PROMPT_CATEGORIES
+ * (`src/lib/ai/prompts/categories.ts`) — that registry and these call sites are
+ * kept in sync by `__tests__/categories.test.ts`, which is what stops the admin
+ * UI from offering categories nothing reads.
+ *
+ * Omitting `scope` reads the platform tier only, which is exactly what every
+ * caller did before scoping existed.
  *
  * When `sink` and `sinkKey` are supplied, the resolved DB version is recorded
  * for AI tracing. Nothing is recorded on the fallback path.
@@ -31,11 +41,12 @@ export function formatDbPromptVersion(prompt: SystemPrompt): string {
 export async function loadActivePrompt(
   category: string,
   fallback: string,
+  scope?: ConfigScope,
   sink?: PromptVersionSink,
   sinkKey?: string,
 ): Promise<string> {
   try {
-    const prompt = await repo.getActivePrompt(category);
+    const prompt = await repo.getActivePrompt(category, scope);
     if (!prompt?.content) return fallback;
 
     if (sink && sinkKey) {

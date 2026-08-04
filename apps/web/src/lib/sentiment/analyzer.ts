@@ -57,6 +57,10 @@ export async function analyzeSentiment(
     const systemPromptText = await loadActivePrompt(
       'sentiment',
       SENTIMENT_SYSTEM_PROMPT_DEFAULT,
+      // Platform-scoped on purpose (see PROMPT_CATEGORIES): this prompt's output
+      // is parsed as a fixed JSON contract that drives auto-flagging, so a course
+      // lead editing it could silently disable flagging for their learners.
+      undefined,
       dbPromptVersions,
       'sentiment',
     );

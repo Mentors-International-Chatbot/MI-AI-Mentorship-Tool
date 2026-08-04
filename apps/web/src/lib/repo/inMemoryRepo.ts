@@ -1,5 +1,6 @@
 import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
+import { scopeTiers } from "@/lib/ai/prompts/scope";
 import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 
 const sociosByKey = new Map<string, Socio>();
@@ -12,6 +13,20 @@ const sentimentsByMessage = new Map<string, MessageSentimentRecord>();
 const contextBySocio = new Map<string, SocioContext>();
 const dimensionStateBySocio = new Map<string, Map<string, SocioDimensionState>>();
 const systemPrompts = new Map<string, SystemPrompt[]>();
+
+/**
+ * Test seam: nothing else writes `systemPrompts`, so without this
+ * `getActivePrompt` could only ever return null and the scope precedence it
+ * implements would be untestable through real repo code.
+ */
+export function __seedSystemPrompts(prompts: SystemPrompt[]): void {
+    systemPrompts.clear();
+    for (const p of prompts) {
+        const list = systemPrompts.get(p.category) ?? [];
+        list.push(p);
+        systemPrompts.set(p.category, list);
+    }
+}
 const summariesBySocio = new Map<string, Summary[]>();
 const financialsBySocio = new Map<string, FinancialSnapshot[]>();
 const feedbackBySocio = new Map<string, SocioFeedback[]>();
@@ -401,10 +416,20 @@ export const inMemoryRepo: Repo = {
         dimensionStateBySocio.delete(socioId);
     },
 
-    async getActivePrompt(category) {
+    async getActivePrompt(category, scope) {
         const prompts = systemPrompts.get(category) ?? [];
-        const active = prompts.find(p => p.active);
-        return active ?? null;
+        // Same tier walk as prismaRepo, so tests exercise the real precedence
+        // rather than a simplification that would hide an ordering bug.
+        for (const tier of scopeTiers(scope)) {
+            const match = prompts.find(
+                (p) =>
+                    p.active &&
+                    (p.organizationId ?? null) === tier.organizationId &&
+                    (p.collectionKey ?? null) === tier.collectionKey,
+            );
+            if (match) return match;
+        }
+        return null;
     },
 
     async createSummary(data) {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireAdmin } from '@/lib/auth/adminGuard';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +8,9 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const { id } = await params;
 
   const snapshots = await prisma.financialSnapshot.findMany({

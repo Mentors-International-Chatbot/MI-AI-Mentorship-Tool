@@ -39,6 +39,8 @@ function promptRow(version: string) {
     category: 'lesson_delivery',
     active: true,
     authorId: 'admin-1',
+    organizationId: null,
+    collectionKey: null,
     createdAt: CREATED_AT,
   };
 }
@@ -66,7 +68,7 @@ describe('loadActivePrompt version sink', () => {
     mockRepo.getActivePrompt.mockResolvedValue(promptRow('1.0'));
     const sink: PromptVersionSink = {};
 
-    const text = await loadActivePrompt('lesson_delivery', 'FALLBACK', sink, 'task');
+    const text = await loadActivePrompt('lesson_delivery', 'FALLBACK', undefined, sink, 'task');
 
     expect(text).toBe('DB PROMPT TEXT');
     expect(sink.task).toBe('db:1.0');
@@ -76,7 +78,7 @@ describe('loadActivePrompt version sink', () => {
     mockRepo.getActivePrompt.mockResolvedValue(null);
     const sink: PromptVersionSink = {};
 
-    const text = await loadActivePrompt('lesson_delivery', 'FALLBACK', sink, 'task');
+    const text = await loadActivePrompt('lesson_delivery', 'FALLBACK', undefined, sink, 'task');
 
     expect(text).toBe('FALLBACK');
     expect(sink).toEqual({});
@@ -86,7 +88,7 @@ describe('loadActivePrompt version sink', () => {
     mockRepo.getActivePrompt.mockRejectedValue(new Error('db down'));
     const sink: PromptVersionSink = {};
 
-    const text = await loadActivePrompt('lesson_delivery', 'FALLBACK', sink, 'task');
+    const text = await loadActivePrompt('lesson_delivery', 'FALLBACK', undefined, sink, 'task');
 
     expect(text).toBe('FALLBACK');
     expect(sink).toEqual({});

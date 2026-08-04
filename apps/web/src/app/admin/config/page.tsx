@@ -10,6 +10,15 @@ type ConfigRow = {
   label: string;
   description: string | null;
   category: string;
+  /** True when the value comes from the platform tier, not this course. */
+  inherited: boolean;
+};
+
+type Course = {
+  organizationId: string;
+  collectionKey: string;
+  programId: string;
+  displayName: string;
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -30,16 +39,30 @@ const SUMMARY_LANGUAGE_OPTIONS: { value: string; label: string }[] = [
 
 export default function AdminConfigPage() {
   const [configs, setConfigs] = useState<ConfigRow[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selected, setSelected] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/admin/config')
+  function load(collectionKey: string) {
+    setLoading(true);
+    const url = collectionKey
+      ? `/api/admin/config?collectionKey=${encodeURIComponent(collectionKey)}`
+      : '/api/admin/config';
+    fetch(url)
       .then((r) => r.json())
-      .then(setConfigs)
+      .then((data) => {
+        setConfigs(data.rows ?? []);
+        setCourses(data.courses ?? []);
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(() => {
+    load(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
 
   async function handleChange(key: string, value: string) {
     setConfigs((prev) =>
@@ -53,11 +76,28 @@ export default function AdminConfigPage() {
     await fetch('/api/admin/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, value }),
+      body: JSON.stringify({ key, value, collectionKey: selected || null }),
     });
     setSaving(null);
     setSaved(key);
+    // Saving a course value turns an inherited row into an override; reflect
+    // that immediately rather than waiting for the next page load.
+    setConfigs((prev) =>
+      prev.map((c) => (c.key === key && selected ? { ...c, inherited: false } : c)),
+    );
     setTimeout(() => setSaved((s) => (s === key ? null : s)), 2000);
+  }
+
+  /** Drops the course override so the setting inherits the platform value again. */
+  async function handleRevert(key: string) {
+    if (!selected) return;
+    setSaving(key);
+    await fetch(
+      `/api/admin/config?key=${encodeURIComponent(key)}&collectionKey=${encodeURIComponent(selected)}`,
+      { method: 'DELETE' },
+    );
+    setSaving(null);
+    load(selected);
   }
 
   // Group by category
@@ -91,7 +131,31 @@ export default function AdminConfigPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Program Configuration</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-1">Program Configuration</h2>
+      <p className="text-sm text-gray-600 mb-4">
+        {selected
+          ? 'Values you change here apply to this course only. Settings marked “inherited” are using the platform default.'
+          : 'Editing platform defaults. Every course inherits these unless it sets its own value.'}
+      </p>
+
+      <div className="mb-6 flex items-center gap-3">
+        <label htmlFor="course-scope" className="text-sm font-medium text-gray-700">
+          Course
+        </label>
+        <select
+          id="course-scope"
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          className="border rounded px-3 py-1.5 text-sm text-gray-900 min-w-[16rem]"
+        >
+          <option value="">Platform defaults (all courses)</option>
+          {courses.map((c) => (
+            <option key={c.collectionKey} value={c.collectionKey}>
+              {c.displayName}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {Object.entries(grouped).map(([category, rows]) => (
         <div key={category} className="mb-8">
@@ -105,6 +169,7 @@ export default function AdminConfigPage() {
                 config={cfg}
                 onChange={handleChange}
                 onSave={handleSave}
+                onRevert={selected ? handleRevert : undefined}
                 isSaving={saving === cfg.key}
                 isSaved={saved === cfg.key}
               />
@@ -120,21 +185,36 @@ function ConfigField({
   config,
   onChange,
   onSave,
+  onRevert,
   isSaving,
   isSaved,
 }: {
   config: ConfigRow;
   onChange: (key: string, value: string) => void;
   onSave: (key: string, value: string) => void;
+  /** Present only when a course is selected — there is nothing to revert to at the platform tier. */
+  onRevert?: (key: string) => void;
   isSaving: boolean;
   isSaved: boolean;
 }) {
-  const { key, value, type, label, description } = config;
+  const { key, value, type, label, description, inherited } = config;
 
   return (
     <div className="bg-white rounded-lg border p-4 flex items-center gap-4">
       <div className="flex-1 min-w-0">
-        <div className="font-medium text-gray-900">{label}</div>
+        <div className="font-medium text-gray-900">
+          {label}
+          {onRevert && inherited && (
+            <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
+              inherited
+            </span>
+          )}
+          {onRevert && !inherited && (
+            <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-normal text-blue-700">
+              course override
+            </span>
+          )}
+        </div>
         {description && (
           <div className="text-sm text-gray-500 mt-0.5">{description}</div>
         )}
@@ -193,6 +273,16 @@ function ConfigField({
               placeholder={label}
             />
           </>
+        )}
+
+        {onRevert && !inherited && (
+          <button
+            type="button"
+            onClick={() => onRevert(key)}
+            className="text-xs text-gray-500 hover:text-gray-800 underline"
+          >
+            Reset
+          </button>
         )}
 
         {isSaving && (

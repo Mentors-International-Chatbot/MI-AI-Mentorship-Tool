@@ -5,6 +5,8 @@ import { repo } from '@/lib/repo';
 // getChatbotDisplayName removed - mentor name now comes from course metadata only
 import { getCourseMeta, resolveLocalized, type CourseMeta } from '@/lib/courses/course-meta';
 import { formatDbPromptVersion, type PromptVersionSink } from '../loadPrompt';
+import type { ConfigScope } from '../scope';
+import { resolvePromptScope } from '../resolveScope';
 
 /** Bump whenever the Layer 1 prompt text changes. Recorded on every AiInvocation. */
 export const CORE_PROMPT_VERSION = 'v1';
@@ -29,17 +31,20 @@ export function getConcisivenessInstruction(level?: ConcisivenessLevel): string 
 
 // ─── Layer 1: Core Identity (~350 tokens) — Always Sent ────────────
 // Resolution order:
-//   1. DB: core:{collectionKey} (course-specific)
+//   1. DB, scoped: (org, collection) → (org, null) → (null, null)
 //   2. Fallback: generic template using course metadata
-// The MI-specific prompt lives in the DB as core:mi-colombia-curriculum
+// MI's prompt is the (org, mi-colombia-curriculum) row.
 
 async function loadScopedPrompt(
-  collectionKey: string,
+  scope: ConfigScope,
   sink?: PromptVersionSink,
 ): Promise<string | null> {
   try {
-    // Try course-scoped prompt first
-    const scopedPrompt = await repo.getActivePrompt(`core:${collectionKey}`);
+    // Walks (org, collection) → (org, null) → (null, null). Before scoping this
+    // read the pseudo-category `core:{collectionKey}`; the migration promoted
+    // those rows to real columns, and deactivated the unscoped duplicate that
+    // would otherwise have become a platform-wide default.
+    const scopedPrompt = await repo.getActivePrompt('core', scope);
     if (scopedPrompt?.content) {
       // Record the DB row's version so traces show what actually shipped, not
       // CORE_PROMPT_VERSION (which never moves when the row is edited in /admin).
@@ -370,8 +375,11 @@ export async function buildCorePrompt(
   language?: SupportedLanguage,
   /** Trace-only: receives `core` when a DB-backed prompt overrode the template. */
   sink?: PromptVersionSink,
+  /** Resolved once per turn by the builder; omitted callers resolve it here. */
+  scope?: ConfigScope,
 ): Promise<string> {
   const lang = language ?? DEFAULT_LANGUAGE;
+  const resolvedScope = scope ?? (await resolvePromptScope(collectionKey));
 
   // ALWAYS get course metadata - it's the single source of truth for mentor name
   const meta = await getCourseMeta(collectionKey);
@@ -383,7 +391,7 @@ export async function buildCorePrompt(
     : undefined;
 
   // Resolution: DB scoped prompt → generic template
-  const dbPrompt = await loadScopedPrompt(collectionKey, sink);
+  const dbPrompt = await loadScopedPrompt(resolvedScope, sink);
   let prompt: string;
 
   if (dbPrompt) {

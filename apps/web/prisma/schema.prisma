@@ -10,12 +10,21 @@ model SystemPrompt {
   id        String   @id @default(uuid())
   version   String   // e.g., "1.0", "1.1-beta"
   content   String
-  category  String   // e.g., "onboarding", "mentor_support"
+  // One of PROMPT_CATEGORIES in src/lib/ai/prompts/categories.ts
+  category  String
   active    Boolean  @default(false)
   authorId  String   @map("author_id")
+  // Scope: null means "applies more broadly". Resolution walks
+  //   (org, collection) -> (org, null) -> (null, null) -> code constant
+  // so an unscoped row keeps behaving exactly as it did before scoping existed.
+  organizationId String? @map("organization_id")
+  // ContentCollection.slug, matching Socio.curriculumCollectionKey. Replaces
+  // the old `category = "core:{collectionKey}"` string-namespacing hack.
+  collectionKey  String? @map("collection_key")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([category, active])
+  @@index([organizationId, collectionKey, category, active])
   @@map("system_prompts")
 }
 
@@ -123,15 +132,22 @@ model PasswordResetToken {
 
 model ProgramConfig {
   id          String   @id @default(uuid())
-  key         String   @unique
+  key         String
   value       String   // JSON-encoded
   type        String   // "number", "boolean", "string", "json"
   label       String   // Human-readable label for the UI
   description String?
   category    String   // "lesson_pacing", "ai_behavior", "flagging", "reminders", "onboarding"
+  // Scope: null means "applies more broadly", same three-tier walk as
+  // SystemPrompt. `key` was globally unique before this, which is precisely
+  // why two courses could not hold different values for it.
+  organizationId String? @map("organization_id")
+  collectionKey  String? @map("collection_key")
   updatedBy   String?  @map("updated_by")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@unique([organizationId, collectionKey, key], map: "program_config_scope_key")
+  @@index([organizationId, collectionKey])
   @@map("program_config")
 }
 
@@ -392,10 +408,33 @@ model Program {
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   versions     ProgramVersion[]
   cohorts      Cohort[]
+  memberships  ProgramMembership[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
   @@map("programs")
+}
+
+/// Binds a user to a single program they may configure.
+///
+/// Program-level rather than collection-level on purpose: a program owns its
+/// version lineage, while one ContentCollection can be referenced by several
+/// ProgramVersions (live data has an archived 1.0.0 and a published 1.1.0
+/// sharing a collection). Binding to the collection would make "which version
+/// may this person publish" ambiguous.
+model ProgramMembership {
+  id        String   @id @default(uuid())
+  programId String   @map("program_id")
+  userId    String   @map("user_id") // references Mentor.id, as OrganizationMembership does
+  role      String   // "course_lead"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, userId])
+  @@index([userId])
+  @@index([programId])
+  @@map("program_memberships")
 }
 
 model ProgramVersion {

@@ -22,8 +22,12 @@ import {
 } from '@/app/dashboard/learners/courseRollup';
 import { getCourseSummaries } from '@/lib/journey-package/course-summaries';
 import { buildSocioWhere } from '../filters';
+import { requireAdmin } from '@/lib/auth/adminGuard';
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const where = buildSocioWhere(request.nextUrl.searchParams);
 
   const socios = await prisma.socio.findMany({

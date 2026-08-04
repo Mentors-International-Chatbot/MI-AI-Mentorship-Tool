@@ -103,12 +103,30 @@ export async function proxy(req: NextRequest) {
   }
 
   // /admin: admins plus mentors (MVP: mentor signups are staff; tighten with DB role if needed)
+  // and course leads, who are limited to the configuration pages below.
   if (pathname.startsWith('/admin')) {
     if (session.role === 'socio') {
       return NextResponse.redirect(new URL('/chat', req.url));
     }
-    if (session.role !== 'admin' && session.role !== 'mentor') {
+    if (
+      session.role !== 'admin' &&
+      session.role !== 'mentor' &&
+      session.role !== 'course_lead'
+    ) {
       return NextResponse.redirect(new URL('/dashboard/learners', req.url));
+    }
+    // A course lead configures courses; they are not a platform administrator.
+    // Learner records, mentor management and user accounts stay admin-only.
+    //
+    // This is defence in depth, not the enforcement point: middleware sees page
+    // paths, and the real guarantee lives in the route handlers themselves
+    // (`requireAdmin` / `requireCourseConfigurer` in src/lib/auth/adminGuard.ts),
+    // because /api/* never matches these prefixes.
+    if (session.role === 'course_lead') {
+      const allowed = ['/admin/config', '/admin/prompts'];
+      if (!allowed.some((p) => pathname.startsWith(p))) {
+        return NextResponse.redirect(new URL('/admin/config', req.url));
+      }
     }
   }
 

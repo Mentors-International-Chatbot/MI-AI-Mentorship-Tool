@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
+import { requireAdmin } from '@/lib/auth/adminGuard';
 
 export async function GET() {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const mentors = await prisma.mentor.findMany({
     include: {
       _count: { select: { socios: true } },
@@ -49,6 +53,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const body = await request.json();
   const { name, email, role, password } = body as {
     name: string;
@@ -79,6 +86,9 @@ export async function POST(request: NextRequest) {
 const BATCH_DELETE_MAX = 100;
 
 export async function DELETE(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) return auth.response;
+
   const body = (await request.json()) as { id?: string; ids?: string[] };
 
   if (body.ids && Array.isArray(body.ids)) {
