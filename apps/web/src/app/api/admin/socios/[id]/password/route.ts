@@ -26,5 +26,23 @@ export async function PUT(
     data: { passwordHash: hash },
   });
 
+  // An action that can take over an account must leave a trace. Before this,
+  // a successful password change wrote nothing to audit_log and nothing to any
+  // other durable store, so the only record was Vercel function logs and their
+  // retention window — which is exactly why "was this endpoint ever abused
+  // while it was unguarded?" is a question nobody can now answer.
+  //
+  // Never log the password or its hash: the point is who did what to whom and
+  // when, not the credential itself.
+  await prisma.auditLog.create({
+    data: {
+      actorId: auth.session.userId,
+      action: 'changed_socio_password',
+      targetType: 'socio',
+      targetId: socio.id,
+      metadata: { actorRole: auth.session.role },
+    },
+  });
+
   return NextResponse.json({ success: true, socioId: socio.id });
 }

@@ -329,7 +329,12 @@ export default function LoginForm() {
           </p>
         </div>
 
-        {/* Test Bypass Buttons */}
+        {/* Test bypass buttons. The endpoint they call refuses in production
+            regardless of this flag — hiding them only stops a production login
+            page from advertising a control that would 404. NEXT_PUBLIC_* is
+            inlined at build time, so this is evaluated during the build, not
+            from a client-controlled value. */}
+        {process.env.NEXT_PUBLIC_ENABLE_TEST_LOGIN === 'true' && (
         <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
           <p className="text-xs font-medium text-amber-700 mb-3 text-center">
             Demo / Testing Quick Access
@@ -361,6 +366,7 @@ export default function LoginForm() {
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
