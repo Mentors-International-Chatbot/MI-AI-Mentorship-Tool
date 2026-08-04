@@ -94,7 +94,9 @@ const COURSE_CONFIGS: Record<string, CourseConfig> = {
       displayName: 'Mentors International',
     },
     terminology: {
-      participant: { en: 'partner', es: 'socio' },
+      // pt is present so a Portuguese-reading mentor does not silently fall
+      // back to the English noun via resolveLocalized.
+      participant: { en: 'partner', es: 'socio', pt: 'sócio' },
     },
     learnerContext: {
       label: {

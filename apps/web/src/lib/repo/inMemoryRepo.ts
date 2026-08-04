@@ -101,6 +101,14 @@ export const inMemoryRepo: Repo = {
         return arr;
     },
 
+    async getUserMessageDates(socioId) {
+        const arr = messagesBySocio.get(socioId) ?? [];
+        return arr
+            .filter((m) => m.role === 'user')
+            .map((m) => m.createdAt)
+            .sort((a, b) => a.getTime() - b.getTime());
+    },
+
     async initProgress(socioId) {
         const progress = makeDefaultProgress(socioId);
         progressBySocio.set(socioId, progress);

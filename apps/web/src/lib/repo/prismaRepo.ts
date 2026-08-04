@@ -298,6 +298,15 @@ export const prismaRepo: Repo = {
         return messages.reverse().map(toMessage);
     },
 
+    async getUserMessageDates(socioId) {
+        const rows = await prisma.message.findMany({
+            where: { socioId, role: 'user', assessmentSessionId: null },
+            select: { createdAt: true },
+            orderBy: { createdAt: 'asc' },
+        });
+        return rows.map((r) => r.createdAt);
+    },
+
     async getMessagesWithSentiment(socioId, opts) {
         const messages = await prisma.message.findMany({
             where: {

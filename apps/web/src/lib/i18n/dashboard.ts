@@ -133,6 +133,40 @@ export interface DashboardStrings {
   assessmentNotPassed: string;
   assessmentInProgress: string;
   assessmentAttempts: (n: number) => string;
+  // ── Alert snapshot (/dashboard/alerts) ────────────────────────────────────
+  // Zone headings and empty states must stay course-neutral: a university
+  // course has students, not socios. Where a participant noun is unavoidable,
+  // these use a neutral plural; the per-card noun is resolved from
+  // CourseMeta.terminology instead, so a single page can name two courses'
+  // participants differently.
+  signalsTitle: string;
+  signalsSubtitle: string;
+  tileNeedsYouNow: string;
+  tileWatching: string;
+  tileGoodNews: string;
+  zoneNeedsYouNowTitle: string;
+  /**
+   * Zone 2. Never "AI is handling" — the AI does not see these flags at all.
+   * See the ZoneKey docblock in `src/lib/signals/zones.ts`.
+   */
+  zoneWatchingTitle: string;
+  zoneGoodNewsTitle: string;
+  /** Empty states read as good news, not as a blank panel. */
+  zoneNeedsYouNowEmpty: string;
+  zoneWatchingEmpty: string;
+  zoneGoodNewsEmpty: string;
+  signalsCount: (count: number) => string;
+  signalsLessonProgress: (current: number, total: number) => string;
+  signalsLessonProgressNoTotal: (current: number) => string;
+  signalsNoCourse: string;
+  actionTakeOverChat: string;
+  actionReadTranscript: string;
+  actionStepIn: string;
+  // Positive signals — one per PositiveSignal kind.
+  positiveGatePassedFirstTry: (lessonKey: string) => string;
+  positiveLessonCompleted: (lessonNumber: number) => string;
+  positiveReturnedAfterQuiet: (days: number) => string;
+  positiveSustainedSentiment: (count: number) => string;
 }
 
 const es: DashboardStrings = {
@@ -248,6 +282,28 @@ const es: DashboardStrings = {
   assessmentNotPassed: 'No aprobada',
   assessmentInProgress: 'En curso',
   assessmentAttempts: (n) => (n === 1 ? '1 intento' : `${n} intentos`),
+  signalsTitle: 'Señales',
+  signalsSubtitle: 'Quién necesita tu atención hoy, y quién va bien.',
+  tileNeedsYouNow: 'Te necesitan ahora',
+  tileWatching: 'En observación',
+  tileGoodNews: 'Buenas noticias',
+  zoneNeedsYouNowTitle: 'Te necesitan ahora',
+  zoneWatchingTitle: 'En observación',
+  zoneGoodNewsTitle: 'Buenas noticias',
+  zoneNeedsYouNowEmpty: 'Nadie necesita atención urgente. Todo en orden por ahora.',
+  zoneWatchingEmpty: 'Nadie en observación ahora mismo.',
+  zoneGoodNewsEmpty: 'Aún no hay avances que destacar esta semana. Aparecerán aquí cuando alguien complete una lección o apruebe una evaluación.',
+  signalsCount: (count) => (count === 1 ? '1 señal' : `${count} señales`),
+  signalsLessonProgress: (current, total) => `Lección ${current} de ${total}`,
+  signalsLessonProgressNoTotal: (current) => `Lección ${current}`,
+  signalsNoCourse: 'Sin curso',
+  actionTakeOverChat: 'Tomar la conversación',
+  actionReadTranscript: 'Leer conversación',
+  actionStepIn: 'Intervenir',
+  positiveGatePassedFirstTry: (lessonKey) => `Aprobó la evaluación de "${lessonKey}" al primer intento`,
+  positiveLessonCompleted: (lessonNumber) => `Completó la lección ${lessonNumber} esta semana`,
+  positiveReturnedAfterQuiet: (days) => `Volvió a escribir después de ${days} días en silencio`,
+  positiveSustainedSentiment: (count) => `Ánimo positivo sostenido (${count} mensajes, sin señales negativas)`,
 };
 
 const en: DashboardStrings = {
@@ -366,6 +422,29 @@ const en: DashboardStrings = {
   assessmentNotPassed: 'Not passed',
   assessmentInProgress: 'In progress',
   assessmentAttempts: (n) => (n === 1 ? '1 attempt' : `${n} attempts`),
+  signalsTitle: 'Signals',
+  signalsSubtitle: 'Who needs you today, and who is doing well.',
+  tileNeedsYouNow: 'Needs you now',
+  tileWatching: 'Watching',
+  tileGoodNews: 'Good news',
+  zoneNeedsYouNowTitle: 'Needs you now',
+  zoneWatchingTitle: 'Watching',
+  zoneGoodNewsTitle: 'Good news',
+  zoneNeedsYouNowEmpty: 'Nobody needs urgent attention. All clear for now.',
+  zoneWatchingEmpty: 'Nobody on the watch list right now.',
+  zoneGoodNewsEmpty: 'No wins to report yet this week. They show up here when someone completes a lesson or passes an assessment.',
+  signalsCount: (count) => (count === 1 ? '1 signal' : `${count} signals`),
+  signalsLessonProgress: (current, total) => `Lesson ${current} of ${total}`,
+  signalsLessonProgressNoTotal: (current) => `Lesson ${current}`,
+  signalsNoCourse: 'No course',
+  actionTakeOverChat: 'Take over chat',
+  actionReadTranscript: 'Read transcript',
+  actionStepIn: 'Step in',
+  positiveGatePassedFirstTry: (lessonKey) => `Passed the "${lessonKey}" gate on the first try`,
+  positiveLessonCompleted: (lessonNumber) => `Completed lesson ${lessonNumber} this week`,
+  positiveReturnedAfterQuiet: (days) =>
+    days === 1 ? 'Messaged again after 1 day quiet' : `Messaged again after ${days} days quiet`,
+  positiveSustainedSentiment: (count) => `Sustained positive mood (${count} messages, no negative signals)`,
 };
 
 const pt: DashboardStrings = {
@@ -483,6 +562,29 @@ const pt: DashboardStrings = {
   assessmentNotPassed: 'Não aprovada',
   assessmentInProgress: 'Em andamento',
   assessmentAttempts: (n) => (n === 1 ? '1 tentativa' : `${n} tentativas`),
+  signalsTitle: 'Sinais',
+  signalsSubtitle: 'Quem precisa de você hoje, e quem está indo bem.',
+  tileNeedsYouNow: 'Precisam de você agora',
+  tileWatching: 'Em observação',
+  tileGoodNews: 'Boas notícias',
+  zoneNeedsYouNowTitle: 'Precisam de você agora',
+  zoneWatchingTitle: 'Em observação',
+  zoneGoodNewsTitle: 'Boas notícias',
+  zoneNeedsYouNowEmpty: 'Ninguém precisa de atenção urgente. Tudo em ordem por enquanto.',
+  zoneWatchingEmpty: 'Ninguém em observação no momento.',
+  zoneGoodNewsEmpty: 'Ainda não há avanços para destacar esta semana. Eles aparecem aqui quando alguém conclui uma lição ou é aprovado numa avaliação.',
+  signalsCount: (count) => (count === 1 ? '1 sinal' : `${count} sinais`),
+  signalsLessonProgress: (current, total) => `Lição ${current} de ${total}`,
+  signalsLessonProgressNoTotal: (current) => `Lição ${current}`,
+  signalsNoCourse: 'Sem curso',
+  actionTakeOverChat: 'Assumir a conversa',
+  actionReadTranscript: 'Ler conversa',
+  actionStepIn: 'Intervir',
+  positiveGatePassedFirstTry: (lessonKey) => `Foi aprovado na avaliação de "${lessonKey}" na primeira tentativa`,
+  positiveLessonCompleted: (lessonNumber) => `Concluiu a lição ${lessonNumber} esta semana`,
+  positiveReturnedAfterQuiet: (days) =>
+    days === 1 ? 'Voltou a escrever após 1 dia em silêncio' : `Voltou a escrever após ${days} dias em silêncio`,
+  positiveSustainedSentiment: (count) => `Ânimo positivo sustentado (${count} mensagens, sem sinais negativos)`,
 };
 
 const DASHBOARD_STRINGS: Record<SupportedLanguage, DashboardStrings> = { es, en, pt };

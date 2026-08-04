@@ -176,6 +176,12 @@ export interface Repo {
     addMessage(data: Omit<Message, "id" | "createdAt">): Promise<Message>;
     getMessages(socioId: string, limit?: number): Promise<Message[]>;
     getMessagesWithSentiment(socioId: string, opts?: { limit?: number; since?: Date }): Promise<(Message & { sentiment?: { confusion: number; frustration: number; urgency: number; sentiment: string } })[]>;
+    /**
+     * Timestamps of the socio's own messages, ascending. Deliberately narrow:
+     * the quiet-return signal only needs to find gaps between messages, and
+     * `getMessages` would pull every message body to do it.
+     */
+    getUserMessageDates(socioId: string): Promise<Date[]>;
 
     initProgress(socioId: string): Promise<SocioProgress>;
     getSocioProgress(socioId: string): Promise<SocioProgress>;
