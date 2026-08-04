@@ -102,17 +102,26 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  // /admin: admins plus mentors (MVP: mentor signups are staff; tighten with DB role if needed)
-  // and course leads, who are limited to the configuration pages below.
+  // /admin: administrators, plus course leads limited to the configuration
+  // pages below.
+  //
+  // Mentors are NOT admitted. They were, on the comment "MVP: mentor signups are
+  // staff" — an assumption nobody explicitly chose, and one that stopped being
+  // survivable once every /api/admin route began enforcing its own role. A
+  // mentor could still open /admin, and then every fetch on the page returned
+  // 403 and they saw a broken shell. A page a role can open must be a page that
+  // role can use, so the two now agree: this list mirrors the guards in
+  // src/lib/auth/adminGuard.ts exactly.
+  //
+  // Self-service mentor signup is still open (POST /api/auth/signup accepts
+  // userType: 'mentor'), which is the other reason not to hand mentors the
+  // admin surface. Invite-based creation via EnrollmentInvitation is the real
+  // fix for that.
   if (pathname.startsWith('/admin')) {
     if (session.role === 'socio') {
       return NextResponse.redirect(new URL('/chat', req.url));
     }
-    if (
-      session.role !== 'admin' &&
-      session.role !== 'mentor' &&
-      session.role !== 'course_lead'
-    ) {
+    if (session.role !== 'admin' && session.role !== 'course_lead') {
       return NextResponse.redirect(new URL('/dashboard/learners', req.url));
     }
     // A course lead configures courses; they are not a platform administrator.

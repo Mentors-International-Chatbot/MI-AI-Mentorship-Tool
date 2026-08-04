@@ -4,6 +4,7 @@ import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
 import { DashboardLangProvider } from './DashboardLangContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { LogoutButton } from './LogoutButton';
+import { verifySession } from '@/lib/auth/session';
 
 export default async function DashboardLayout({
   children,
@@ -12,6 +13,11 @@ export default async function DashboardLayout({
 }) {
   const lang = await resolveDashboardLanguage();
   const t = getDashboardStrings(lang);
+
+  // Mentors no longer reach /admin, so offering them the link would only render
+  // a door that redirects. Mirrors the role list in src/proxy.ts.
+  const session = await verifySession();
+  const canOpenAdmin = session?.role === 'admin' || session?.role === 'course_lead';
 
   return (
     <DashboardLangProvider lang={lang}>
@@ -40,12 +46,14 @@ export default async function DashboardLayout({
               >
                 {t.navWebChat}
               </Link>
-              <Link
-                href="/admin"
-                className="text-sm text-gray-300 hover:text-white transition-colors"
-              >
-                {t.navAdmin}
-              </Link>
+              {canOpenAdmin && (
+                <Link
+                  href="/admin"
+                  className="text-sm text-gray-300 hover:text-white transition-colors"
+                >
+                  {t.navAdmin}
+                </Link>
+              )}
               <LanguageSwitcher />
               <span className="text-sm text-gray-300">Mentors International</span>
               <LogoutButton />
