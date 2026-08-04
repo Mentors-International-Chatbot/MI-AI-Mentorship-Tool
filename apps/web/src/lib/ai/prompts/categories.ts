@@ -124,3 +124,45 @@ export function getPromptCategoryMeta(category: string): PromptCategoryMeta | un
 export function courseEditableCategories(): PromptCategoryMeta[] {
   return PROMPT_CATEGORIES.filter((c) => c.scope === 'course');
 }
+
+/**
+ * Whether a category may be stored at the given scope.
+ *
+ * This is the rule that keeps the platform tier empty of course content, and it
+ * is enforced rather than documented on purpose. The original bug was not that
+ * someone scoped a prompt wrongly — it was that an unscoped row was *accepted*
+ * and silently became every course's default. A `core` row written without a
+ * collectionKey was one tier walk away from telling every learner on the
+ * platform they were talking to Mentors International.
+ *
+ * So: a course-scoped category REQUIRES a collectionKey, and a platform-scoped
+ * category REFUSES one. Neither mistake is expressible rather than merely
+ * discouraged — the same reasoning as using `migrate diff` over `migrate dev`,
+ * or the import guard refusing to overwrite a published version.
+ *
+ * @returns null when the pairing is valid, otherwise a message for the caller
+ */
+export function validateCategoryScope(
+  category: string,
+  collectionKey: string | null | undefined,
+): string | null {
+  const meta = getPromptCategoryMeta(category);
+  if (!meta) return `Unknown prompt category: ${category}`;
+
+  if (meta.scope === 'course' && !collectionKey) {
+    return (
+      `"${meta.label}" is course-specific and must be saved against a course. ` +
+      `A prompt with no course becomes the default for every course on the platform, ` +
+      `which is how one programme's content reaches another programme's learners.`
+    );
+  }
+
+  if (meta.scope === 'platform' && collectionKey) {
+    return (
+      `"${meta.label}" is platform-wide and cannot be scoped to a single course. ` +
+      `Its output is parsed as structured data, so every course must share one contract.`
+    );
+  }
+
+  return null;
+}

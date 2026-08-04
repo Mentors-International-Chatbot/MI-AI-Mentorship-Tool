@@ -152,26 +152,71 @@ async function buildLessonStartPrompt(
     : '';
 
   // Only emit intake prompt when learnerContext is defined
-  let intakeNote = '';
-  if (meta.learnerContext && !socio.businessDescription?.trim()) {
-    const intakeQuestion = resolveLocalized(meta.learnerContext.intakeQuestion, language);
-    intakeNote = `\n- Si no conoces aún el contexto del ${participantNoun}, ${intakeQuestion}`;
-  }
-
-  const dynamicContext = `CONTEXTO DE ESTA SESIÓN:
+  // Localized like every other task default. These are the last of the code
+  // fallbacks that were Spanish-only, which mattered once the platform prompt
+  // tier stopped holding one tenant's content: a course with no scoped prompt
+  // falls through to here, so a Spanish-only floor would simply have moved the
+  // leak from the database into the code.
+  const sessionContextTemplates: Record<SupportedLanguage, (intake: string) => string> = {
+    es: (intake) => `CONTEXTO DE ESTA SESIÓN:
 - Estás comenzando la Lección ${lesson.lessonNumber}: "${lesson.lessonTitleEs}".
 - Categoría: ${lesson.lessonCategory}
 - Este es el mensaje 1 de ${lesson.totalMessages}.
-${prev ? `- Transición desde la lección anterior:${prev}` : ''}${intakeNote}`;
+${prev ? `- Transición desde la lección anterior:${prev}` : ''}${intake}`,
+    en: (intake) => `CONTEXT FOR THIS SESSION:
+- You are starting Lesson ${lesson.lessonNumber}: "${lesson.lessonTitleEs}".
+- Category: ${lesson.lessonCategory}
+- This is message 1 of ${lesson.totalMessages}.
+${prev ? `- Transition from the previous lesson:${prev}` : ''}${intake}`,
+    pt: (intake) => `CONTEXTO DESTA SESSÃO:
+- Você está começando a Lição ${lesson.lessonNumber}: "${lesson.lessonTitleEs}".
+- Categoria: ${lesson.lessonCategory}
+- Esta é a mensagem 1 de ${lesson.totalMessages}.
+${prev ? `- Transição da lição anterior:${prev}` : ''}${intake}`,
+  };
 
-  const defaultInstructions = `TAREA ACTUAL: Iniciar lección nueva
+  const intakeTemplates: Record<SupportedLanguage, (q: string) => string> = {
+    es: (q) => `\n- Si no conoces aún el contexto del ${participantNoun}, ${q}`,
+    en: (q) => `\n- If you do not yet know the ${participantNoun}'s context, ${q}`,
+    pt: (q) => `\n- Se ainda não conhece o contexto do ${participantNoun}, ${q}`,
+  };
+
+  let intakeNote = '';
+  if (meta.learnerContext && !socio.businessDescription?.trim()) {
+    const intakeQuestion = resolveLocalized(meta.learnerContext.intakeQuestion, language);
+    intakeNote = (intakeTemplates[language] ?? intakeTemplates['en'])(intakeQuestion);
+  }
+
+  const dynamicContext = (sessionContextTemplates[language] ?? sessionContextTemplates['en'])(intakeNote);
+
+  const instructionTemplates: Record<SupportedLanguage, string> = {
+    es: `TAREA ACTUAL: Iniciar lección nueva
 
 INSTRUCCIONES:
 - IMPORTANTE: Comienza tu respuesta anunciando claramente el número y título de la lección. Ejemplo: "📚 Lección 3: Cómo manejar tus gastos". Luego da una breve introducción antes de entrar en el contenido.
 - Empieza con una transición natural desde la lección anterior si aplica.
 - Introduce el tema con un escenario cotidiano que el ${participantNoun} pueda reconocer.
 - Haz que suene como una conversación, no como una clase formal.
-- Termina con una pregunta abierta para que el ${participantNoun} se enganche.`;
+- Termina con una pregunta abierta para que el ${participantNoun} se enganche.`,
+    en: `CURRENT TASK: Start a new lesson
+
+INSTRUCTIONS:
+- IMPORTANT: Begin your reply by clearly announcing the lesson number and title. Example: "📚 Lesson 3: How to manage your expenses". Then give a short introduction before going into the content.
+- Open with a natural transition from the previous lesson if there is one.
+- Introduce the topic with an everyday scenario the ${participantNoun} will recognise.
+- Make it sound like a conversation, not a formal class.
+- End with an open question so the ${participantNoun} engages.`,
+    pt: `TAREFA ATUAL: Iniciar uma lição nova
+
+INSTRUÇÕES:
+- IMPORTANTE: Comece sua resposta anunciando claramente o número e o título da lição. Exemplo: "📚 Lição 3: Como administrar seus gastos". Depois faça uma breve introdução antes de entrar no conteúdo.
+- Comece com uma transição natural da lição anterior, se houver.
+- Introduza o tema com um cenário cotidiano que o ${participantNoun} reconheça.
+- Faça soar como uma conversa, não como uma aula formal.
+- Termine com uma pergunta aberta para que o ${participantNoun} se envolva.`,
+  };
+
+  const defaultInstructions = instructionTemplates[language] ?? instructionTemplates['en'];
 
   const instructions = await loadActivePrompt('lesson_start', defaultInstructions, scope, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;
@@ -310,7 +355,9 @@ async function buildFreeformPrompt(
   collectionKey: string,
   meta: Awaited<ReturnType<typeof getCourseMeta>>,
   participantNoun: string,
-  _language: SupportedLanguage,
+  // Was `_language`: this builder's fallback was Spanish-only, so it had no use
+  // for the viewer's language. It does now.
+  language: SupportedLanguage,
   sink?: PromptVersionSink,
   scope?: ConfigScope,
 ): Promise<string> {
@@ -318,17 +365,41 @@ async function buildFreeformPrompt(
   const currentNum = progress?.currentLessonNumber ?? 1;
   const currentTitle = getLessonTitle(collectionKey, currentNum);
 
+  const noneLabels: Record<SupportedLanguage, string> = {
+    es: 'Ninguna',
+    en: 'None',
+    pt: 'Nenhuma',
+  };
+
   const completedList = completed.length > 0
     ? completed.map((n) => `${n}: ${getLessonTitle(collectionKey, n)}`).join('\n')
-    : 'Ninguna';
+    : (noneLabels[language] ?? noneLabels['en']);
 
-  const dynamicContext = `LECCIONES YA COMPLETADAS POR EL ESTUDIANTE:
+  const contextTemplates: Record<SupportedLanguage, string> = {
+    es: `LECCIONES YA COMPLETADAS POR EL ESTUDIANTE:
 ${completedList}
 
 LECCIÓN ACTUAL:
-${currentNum}: ${currentTitle}`;
+${currentNum}: ${currentTitle}`,
+    en: `LESSONS THE STUDENT HAS ALREADY COMPLETED:
+${completedList}
 
-  const defaultInstructions = `TAREA ACTUAL: Responder pregunta del estudiante
+CURRENT LESSON:
+${currentNum}: ${currentTitle}`,
+    pt: `LIÇÕES QUE O ESTUDANTE JÁ CONCLUIU:
+${completedList}
+
+LIÇÃO ATUAL:
+${currentNum}: ${currentTitle}`,
+  };
+
+  const dynamicContext = contextTemplates[language] ?? contextTemplates['en'];
+
+  // `meta.courseName` rather than a hardcoded programme name: this is the
+  // fallback every course lands on when it has no prompt of its own, so it must
+  // name the course the learner is actually taking.
+  const instructionTemplates: Record<SupportedLanguage, string> = {
+    es: `TAREA ACTUAL: Responder pregunta del estudiante
 
 El estudiante hizo una pregunta por su cuenta, fuera de una lección o check-in.
 
@@ -339,7 +410,34 @@ INSTRUCCIONES:
 - Si la pregunta se relaciona con una lección FUTURA, da una respuesta breve y menciona que profundizarán después: "¡Buena pregunta! Vamos a ver eso más a fondo pronto, pero por ahora te cuento lo básico..."
 - Si la pregunta NO está cubierta por ninguna lección del currículo, sé honesto: "Eso es algo que no cubre nuestro programa."
 - NO inventes información. Si no está en el currículo, no lo digas.
-- Mantén la respuesta en máximo 2-3 mensajes cortos.`;
+- Mantén la respuesta en máximo 2-3 mensajes cortos.`,
+    en: `CURRENT TASK: Answer the student's question
+
+The student asked a question on their own, outside a lesson or check-in.
+
+INSTRUCTIONS:
+- Answer using ONLY information from the ${meta.courseName} curriculum.
+- Use the curriculum reference provided below to ground your answer.
+- If the question relates to a lesson the student has ALREADY completed, refer back to it: "Remember when we talked about [topic] in Lesson [X]? This connects to that..."
+- If the question relates to a FUTURE lesson, give a brief answer and mention you will go deeper later: "Great question! We'll cover that in more depth soon, but here's the short version..."
+- If the question is NOT covered by any lesson in the curriculum, be honest: "That's something our programme doesn't cover."
+- Do NOT invent information. If it is not in the curriculum, do not say it.
+- Keep the answer to 2-3 short messages at most.`,
+    pt: `TAREFA ATUAL: Responder à pergunta do estudante
+
+O estudante fez uma pergunta por conta própria, fora de uma lição ou check-in.
+
+INSTRUÇÕES:
+- Responda usando APENAS informação do currículo de ${meta.courseName}.
+- Use a referência curricular fornecida abaixo para fundamentar sua resposta.
+- Se a pergunta se relaciona a uma lição que o estudante JÁ concluiu, faça referência: "Lembra quando falamos sobre [tema] na Lição [X]? Isto se conecta com aquilo..."
+- Se a pergunta se relaciona a uma lição FUTURA, dê uma resposta breve e mencione que aprofundarão depois: "Boa pergunta! Vamos ver isso com mais detalhe em breve, mas por ora aqui vai o básico..."
+- Se a pergunta NÃO está coberta por nenhuma lição do currículo, seja honesto: "Isso é algo que nosso programa não cobre."
+- NÃO invente informação. Se não está no currículo, não diga.
+- Mantenha a resposta em no máximo 2-3 mensagens curtas.`,
+  };
+
+  const defaultInstructions = instructionTemplates[language] ?? instructionTemplates['en'];
 
   const instructions = await loadActivePrompt('freeform', defaultInstructions, scope, sink, 'task');
   return `${instructions}\n\n${dynamicContext.trim()}`;

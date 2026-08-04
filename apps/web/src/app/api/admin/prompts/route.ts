@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireCourseConfigurer } from '@/lib/auth/adminGuard';
 import { canWriteScope, writableScopesFor } from '@/lib/auth/courseScope';
-import { PROMPT_CATEGORY_KEYS, getPromptCategoryMeta } from '@/lib/ai/prompts/categories';
+import { PROMPT_CATEGORY_KEYS, getPromptCategoryMeta, validateCategoryScope } from '@/lib/ai/prompts/categories';
 import type { SessionPayload } from '@/lib/auth/session';
 
 /**
@@ -105,6 +105,14 @@ export async function POST(request: NextRequest) {
 
   const target = await resolveTargetScope(auth.session, collectionKey);
   if (!target.ok) return target.response;
+
+  // Refuse the shape that caused the leak: a course-specific prompt saved with
+  // no course silently becomes every course's default. Enforced even for
+  // admins, who are the only ones who could previously create one.
+  const scopeError = validateCategoryScope(category, target.collectionKey);
+  if (scopeError) {
+    return NextResponse.json({ error: scopeError }, { status: 400 });
+  }
 
   const prompt = await prisma.systemPrompt.create({
     data: {

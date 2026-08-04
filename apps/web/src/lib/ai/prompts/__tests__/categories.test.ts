@@ -5,6 +5,7 @@ import {
   PROMPT_CATEGORIES,
   PROMPT_CATEGORY_KEYS,
   courseEditableCategories,
+  validateCategoryScope,
 } from '@/lib/ai/prompts/categories';
 
 /**
@@ -83,6 +84,40 @@ describe('prompt category registry', () => {
       expect(c.label.length, `${c.category} label`).toBeGreaterThan(0);
       expect(c.description.length, `${c.category} description`).toBeGreaterThan(0);
     }
+  });
+
+  it('refuses a course-specific prompt saved with no course', () => {
+    // The exact shape that caused the leak. An unscoped `core` row was one tier
+    // walk away from telling every learner they were talking to Mentors
+    // International, and nothing rejected it at write time.
+    for (const c of courseEditableCategories()) {
+      expect(validateCategoryScope(c.category, null), c.category).toBeTruthy();
+      expect(validateCategoryScope(c.category, ''), c.category).toBeTruthy();
+      expect(validateCategoryScope(c.category, 'some-course'), c.category).toBeNull();
+    }
+  });
+
+  it('refuses a platform-wide prompt scoped to one course', () => {
+    // Their output is parsed as a fixed contract; per-course variants would mean
+    // flagging works for one course and silently not for another.
+    const platform = PROMPT_CATEGORIES.filter((c) => c.scope === 'platform');
+    expect(platform.length).toBeGreaterThan(0);
+    for (const c of platform) {
+      expect(validateCategoryScope(c.category, 'some-course'), c.category).toBeTruthy();
+      expect(validateCategoryScope(c.category, null), c.category).toBeNull();
+    }
+  });
+
+  it('refuses an unknown category at any scope', () => {
+    expect(validateCategoryScope('not_a_category', 'course-a')).toBeTruthy();
+    expect(validateCategoryScope('not_a_category', null)).toBeTruthy();
+  });
+
+  it('explains why, not just that it refused', () => {
+    // An author who hits this needs to understand the consequence, or they will
+    // reach for whatever makes the error go away.
+    const msg = validateCategoryScope('lesson_delivery', null) ?? '';
+    expect(msg).toMatch(/every course/i);
   });
 
   it('keeps the structured-output prompts platform-scoped', () => {
