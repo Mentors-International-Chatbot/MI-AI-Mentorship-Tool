@@ -97,6 +97,7 @@ function toProgramVersion(p: PrismaProgramVersion): ProgramVersion {
     version: p.version,
     config: p.config as Record<string, unknown>,
     active: p.active,
+    primaryLang: p.primaryLang,
     publishedAt: p.publishedAt,
     createdAt: p.createdAt,
   };

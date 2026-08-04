@@ -38,6 +38,13 @@ export type ProgramVersion = {
   version: string;
   config: Record<string, unknown>;
   active: boolean;
+  /**
+   * The language this version's content is authored in. Distinct from a
+   * learner's own language: it is what `config.aiBehavior.languageInstruction`
+   * is written about, so that instruction only applies to a learner reading in
+   * this language.
+   */
+  primaryLang: string;
   publishedAt: Date | null;
   createdAt: Date;
 };

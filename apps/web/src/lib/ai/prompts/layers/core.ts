@@ -7,9 +7,15 @@ import { getCourseMeta, resolveLocalized, type CourseMeta } from '@/lib/courses/
 import { formatDbPromptVersion, type PromptVersionSink } from '../loadPrompt';
 import type { ConfigScope } from '../scope';
 import { resolvePromptScope } from '../resolveScope';
+import { resolveCourseAiBehavior, buildCourseBehaviorSnippet } from '../courseBehavior';
 
 /** Bump whenever the Layer 1 prompt text changes. Recorded on every AiInvocation. */
-export const CORE_PROMPT_VERSION = 'v1';
+/**
+ * Bumped to v2 when ProgramVersion.config.aiBehavior started reaching Layer 1.
+ * The assembled text changed, so traces must not keep claiming v1 — that is the
+ * whole point of recording a version in ai_invocations.
+ */
+export const CORE_PROMPT_VERSION = 'v2';
 
 // ─── Conciseness Mapping ────────────────────────────────────────────
 
@@ -419,6 +425,13 @@ export async function buildCorePrompt(
     const defaultLine = `Máximo ${MAX_SENTENCES_PER_MESSAGE} oraciones por mensaje. WhatsApp es un medio rápido.`;
     prompt = prompt.replace(defaultLine, getConcisivenessInstruction(overrides.conciseness));
   }
+
+  // Course-level behaviour from ProgramVersion.config, before the per-socio
+  // adjustments below. Ordering is the point: a mentor's tone override and the
+  // sliders are set for one learner and must be able to bend the course default,
+  // so they come after it.
+  const behavior = await resolveCourseAiBehavior(resolvedScope);
+  prompt += buildCourseBehaviorSnippet(behavior, lang);
 
   // Apply tone override with dynamic snippets
   const toneOverride = overrides?.toneOverride;
