@@ -430,7 +430,11 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             await repo.createFlag({
                 socioId: socio.id,
                 level: 'RED',
+                // Legacy fallback text; the rendered line comes from reasonCode.
                 reason: `Solicitud de escalación: ${reason}`,
+                reasonCode: 'escalation.requested',
+                // The socio's own words, verbatim — never translated.
+                reasonParams: { requestReason: reason },
                 source: 'ai_marker',
             });
             console.log(`[Escalation Persisted] socio=${socio.id} reason=${reason}`);

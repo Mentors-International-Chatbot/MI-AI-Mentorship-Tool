@@ -21,7 +21,20 @@ export {
   type DimensionCategory,
 } from './constants';
 export {
+  resolveStance,
+  buildStanceBlock,
+  hasPassedCurrentLessonGates,
+  hasActiveDistress,
+  readStanceDetour,
+  TUTOR_DETOUR_TURNS,
+  STANCE_DETOUR_KEY,
+} from './stance';
+export {
   InteractionMode,
+  ROUTABLE_MODES,
+  type Stance,
+  type StanceDecision,
+  type StanceReason,
   type SocioProgress,
   type RouterResult,
   type ParsedMarkers,

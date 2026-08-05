@@ -89,7 +89,12 @@ export function ChatHistory({
           <p className="text-gray-400 text-sm text-center py-8">{t.noMessages}</p>
         )}
         {messages.map((msg) => (
-          <div key={msg.id} className={`max-w-[80%] rounded-lg px-4 py-2 ${ROLE_STYLES[msg.role] ?? ROLE_STYLES.system}`}>
+          // `msg-<id>` is the scroll target for a flag's "View message" link.
+          <div
+            key={msg.id}
+            id={`msg-${msg.id}`}
+            className={`max-w-[80%] rounded-lg px-4 py-2 scroll-mt-4 transition-shadow duration-300 ${ROLE_STYLES[msg.role] ?? ROLE_STYLES.system}`}
+          >
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-semibold opacity-75">{roleLabels[msg.role] ?? msg.role}</span>
               <span className="text-xs opacity-50">{formatTime(msg.createdAt)}</span>

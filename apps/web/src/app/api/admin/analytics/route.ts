@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth/adminGuard';
+import { activeFlagWhere } from '@/lib/flags/active';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,7 +65,7 @@ export async function GET() {
     // Flag counts by level (unresolved)
     prisma.socioFlag.groupBy({
       by: ['level'],
-      where: { resolved: false },
+      where: activeFlagWhere(),
       _count: { id: true },
     }),
 

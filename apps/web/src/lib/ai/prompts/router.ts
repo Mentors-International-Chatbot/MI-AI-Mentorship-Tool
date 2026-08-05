@@ -1,7 +1,7 @@
 import { repo } from '@/lib/repo';
-import { Socio } from '@/lib/repo/types';
+import { Socio, SocioFlag } from '@/lib/repo/types';
 import { SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
-import { getLessonData, hasLessonData, getGateAtPosition } from '@/lib/lessons/db-lesson-service';
+import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 import {
   RETEACH_THRESHOLD,
   MAX_LESSON_NUMBER,
@@ -18,6 +18,7 @@ import {
   GatedAssessmentState,
 } from './types';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
+import { resolveStance, type StanceDecision } from './stance';
 
 // ─── Mode Router ────────────────────────────────────────────────────
 // Inspects the socio's state and returns the correct InteractionMode.
@@ -142,6 +143,12 @@ export interface DetermineModeResult {
   repoProgress: RepoSocioProgress;
   /** True if reteach was triggered by dimension state (continuous sensing) */
   reteachFromDimension?: boolean;
+  /**
+   * Active (unresolved, un-snoozed, not auto-closed) flags for this socio,
+   * fetched once here so stance selection and Layer 2 share one query instead
+   * of each running their own.
+   */
+  activeFlags?: SocioFlag[];
 }
 
 /**
@@ -158,7 +165,57 @@ function shouldReteachFromDimensions(dimensionState?: DimensionStateMap): boolea
   return comprehension.level < RETEACH_LEVEL_THRESHOLD && comprehension.confidence >= 0.4;
 }
 
+/**
+ * Picks the turn type AND the stance, the two independent router axes.
+ *
+ * Mode selection is unchanged and lives in `determineTurnType`. Stance is
+ * layered on top rather than folded in, because the two answer different
+ * questions and their inputs barely overlap: mode reads lesson position, stance
+ * reads distress flags and gate results. Keeping them separate is also what
+ * lets the stance rules be read in one place.
+ */
 export async function determineMode(
+  socio: Socio,
+  incomingText: string,
+  collectionKey: string,
+  dimensionState?: DimensionStateMap,
+): Promise<DetermineModeResult> {
+  const core = await determineTurnType(socio, incomingText, collectionKey, dimensionState);
+
+  // GATED_ASSESSMENT never reaches Layer 3 — service.ts returns the gate prompt
+  // before buildSystemPrompt is called — so selecting a stance for it would be
+  // two queries spent on a prompt that is never assembled.
+  if (core.routerResult.mode === InteractionMode.GATED_ASSESSMENT) return core;
+
+  // One read, two consumers: stance rule (a) below and the "active flags" line
+  // in Layer 2, which asserted "None" unconditionally before this change.
+  let activeFlags: SocioFlag[] = [];
+  try {
+    activeFlags = await repo.getActiveFlags(socio.id);
+  } catch (error) {
+    // Failing closed here would mean silently treating a distressed learner as
+    // undistressed, so the failure is logged rather than swallowed. Stance then
+    // falls through to the gate rules, which is the pre-existing behaviour.
+    console.error(`[Router] Failed to read active flags for socio ${socio.id}:`, error);
+  }
+
+  const stance: StanceDecision = await resolveStance({
+    socioId: socio.id,
+    promptOverrides: socio.promptOverrides,
+    collectionKey,
+    currentLessonNumber: core.repoProgress.currentLessonNumber,
+    activeFlags,
+    reteachThisTurn: core.routerResult.mode === InteractionMode.RETEACH,
+  });
+
+  return {
+    ...core,
+    routerResult: { ...core.routerResult, stance },
+    activeFlags,
+  };
+}
+
+async function determineTurnType(
   socio: Socio,
   incomingText: string,
   collectionKey: string,

@@ -10,7 +10,15 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * MS_PER_DAY);
 
 function makeFlag(overrides: Partial<ZoneFlagInput> = {}): ZoneFlagInput {
-  return { level: 'RED', resolved: false, reason: 'reason', createdAt: NOW, ...overrides };
+  return {
+    level: 'RED',
+    resolved: false,
+    status: 'OPEN',
+    snoozedUntil: null,
+    reason: 'reason',
+    createdAt: NOW,
+    ...overrides,
+  };
 }
 
 function makeProgress(): SocioProgress {
@@ -45,6 +53,13 @@ function makeSocio(
     resolvedAt: null,
     messageId: null,
     createdAt: f.createdAt,
+    reasonCode: null,
+    reasonParams: null,
+    status: 'OPEN',
+    disposition: null,
+    snoozedUntil: null,
+    occurrenceCount: 1,
+    lastOccurredAt: null,
   }));
 
   return {

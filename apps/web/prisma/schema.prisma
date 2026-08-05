@@ -251,11 +251,41 @@ model SocioFlag {
   messageId  String?   @map("message_id")
   createdAt  DateTime  @default(now()) @map("created_at")
 
-  socio Socio @relation(fields: [socioId], references: [id])
+  // Lifecycle fields. `resolved` above stays the source of truth for now;
+  // `status` is written alongside it but not yet read.
+  reasonCode      String?   @map("reason_code")
+  reasonParams    Json?     @map("reason_params")
+  status          String    @default("OPEN") // FlagStatus
+  disposition     String?   // FlagDisposition
+  snoozedUntil    DateTime? @map("snoozed_until")
+  occurrenceCount Int       @default(1) @map("occurrence_count")
+  lastOccurredAt  DateTime? @map("last_occurred_at")
+
+  socio  Socio       @relation(fields: [socioId], references: [id])
+  events FlagEvent[]
 
   @@index([socioId, resolved])
   @@index([resolved, level, createdAt])
+  @@index([status, level, createdAt])
   @@map("socio_flags")
+}
+
+/// Append-only audit trail of everything that happens to a SocioFlag.
+model FlagEvent {
+  id              String   @id @default(uuid())
+  flagId          String   @map("flag_id")
+  actorId         String?  @map("actor_id")
+  actorType       String   @map("actor_type") // "mentor" | "ai" | "system"
+  eventType       String   @map("event_type")
+  disposition     String?
+  note            String?
+  linkedMessageId String?  @map("linked_message_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  flag SocioFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+
+  @@index([flagId, createdAt])
+  @@map("flag_events")
 }
 
 model LessonProgress {

@@ -3,10 +3,11 @@ import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { buildSocioWhere } from './filters';
 import { requireAdmin } from '@/lib/auth/adminGuard';
+import { activeFlagWhere } from '@/lib/flags/active';
 
 const SOCIO_LIST_INCLUDE = {
   progress: true,
-  flags: { where: { resolved: false } },
+  flags: { where: activeFlagWhere() },
   mentor: { select: { id: true, name: true } },
   feedback: {
     orderBy: { createdAt: 'desc' as const },

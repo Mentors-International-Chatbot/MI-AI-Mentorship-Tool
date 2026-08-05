@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { repo, tenantRepo } from '@/lib/repo';
 import { computeHealthFromData } from '@/lib/health';
+import { isFlagActive } from '@/lib/flags/active';
 import { getCourseSummaries } from '@/lib/journey-package/course-summaries';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
 import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
@@ -82,7 +83,7 @@ export default async function SociosPage() {
         repo.getFlags(socio.id),
         repo.getSocioProgress(socio.id),
       ]);
-      const unresolved = flags.filter((f) => !f.resolved);
+      const unresolved = flags.filter((f) => isFlagActive(f));
       return {
         id: socio.id,
         name: socio.name ?? null,

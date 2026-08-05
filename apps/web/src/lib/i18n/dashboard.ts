@@ -1,4 +1,57 @@
 import type { SupportedLanguage } from './languages';
+import type { FlagDisposition, FlagReasonCode, FlagReasonParams } from '@/lib/repo/types';
+
+/** Renders one short line for a structured flag reason. */
+export type FlagReasonRenderer = (params: FlagReasonParams) => string;
+
+/** Analyzer topic keys → display label. Falls back to the raw key. */
+type TopicLabels = Record<string, string>;
+
+/**
+ * " · topics: finances, family" — or nothing at all when the write side
+ * decided the topics weren't worth storing.
+ */
+function topicSuffix(params: FlagReasonParams, label: string, labels: TopicLabels): string {
+  const topics = params.topics;
+  if (!topics || topics.length === 0) return '';
+  return ` · ${label}: ${topics.map((tk) => labels[tk] ?? tk).join(', ')}`;
+}
+
+// The analyzer's topic vocabulary (see lib/sentiment/analyzer.ts). 'business' is
+// not in its prompt list but the model emits it anyway; unknown keys fall back
+// to the raw string rather than disappearing.
+const TOPICS_ES: TopicLabels = {
+  learning: 'aprendizaje',
+  progress: 'progreso',
+  personal: 'personal',
+  family: 'familia',
+  finances: 'finanzas',
+  business: 'negocio',
+  application: 'aplicación',
+  other: 'otro',
+};
+
+const TOPICS_EN: TopicLabels = {
+  learning: 'learning',
+  progress: 'progress',
+  personal: 'personal',
+  family: 'family',
+  finances: 'finances',
+  business: 'business',
+  application: 'application',
+  other: 'other',
+};
+
+const TOPICS_PT: TopicLabels = {
+  learning: 'aprendizagem',
+  progress: 'progresso',
+  personal: 'pessoal',
+  family: 'família',
+  finances: 'finanças',
+  business: 'negócio',
+  application: 'aplicação',
+  other: 'outro',
+};
 
 export interface DashboardStrings {
   // Layout
@@ -97,6 +150,36 @@ export interface DashboardStrings {
   sentimentNegative: string;
   sentimentNeutral: string;
   sentimentPositive: string;
+  /**
+   * One short line per structured flag reasonCode. Flags written since the
+   * reasonCode migration render from here; older prose rows fall back to the
+   * legacy parser in FlagsPanel.
+   */
+  flagReason: Record<FlagReasonCode, FlagReasonRenderer>;
+  // ── Flag lifecycle (acknowledge / snooze / resolve) ───────────────────────
+  flagActionAcknowledge: string;
+  flagActionSnooze: string;
+  flagActionResolve: string;
+  flagActionCancel: string;
+  flagActionConfirmResolve: string;
+  /** Status badges. "Seen" is deliberately not "handled". */
+  flagStatusOpen: string;
+  flagStatusSeen: string;
+  flagStatusSnoozedUntil: (date: string) => string;
+  flagStatusResolved: string;
+  flagSnoozePrompt: string;
+  flagSnoozeDays: (days: number) => string;
+  flagDispositionLegend: string;
+  flagDisposition: Record<FlagDisposition, string>;
+  flagNoteLabelRequired: string;
+  flagNoteLabelOptional: string;
+  flagNotePlaceholder: string;
+  flagNoteRequiredError: string;
+  flagDispositionRequiredError: string;
+  flagActionError: string;
+  /** Resolved-alert footer, e.g. "Resolved by Ana · 4 Aug 2026". */
+  flagResolvedBy: (who: string, when: string) => string;
+  flagViewMessage: string;
   // Lesson progress
   lessonProgressTitle: string;
   lessonProgressEmpty: string;
@@ -250,6 +333,47 @@ const es: DashboardStrings = {
   sentimentNegative: 'Negativo',
   sentimentNeutral: 'Neutral',
   sentimentPositive: 'Positivo',
+  flagReason: {
+    'sentiment.urgency_high': (p) =>
+      `Urgencia alta detectada (${p.urgency}/10)${topicSuffix(p, 'temas', TOPICS_ES)}`,
+    'sentiment.distressed': (p) =>
+      `Estado de ánimo angustiado detectado${topicSuffix(p, 'temas', TOPICS_ES)}`,
+    'sentiment.confusion_elevated': (p) =>
+      `Confusión elevada (${p.value}/10)${topicSuffix(p, 'temas', TOPICS_ES)}`,
+    'sentiment.frustration_elevated': (p) =>
+      `Frustración elevada (${p.value}/10)${topicSuffix(p, 'temas', TOPICS_ES)}`,
+    'escalation.requested': (p) =>
+      p.requestReason
+        ? `Contacto con mentor solicitado: «${p.requestReason}»`
+        : 'Contacto con mentor solicitado',
+  },
+  flagActionAcknowledge: 'Marcar como vista',
+  flagActionSnooze: 'Posponer',
+  flagActionResolve: 'Resolver',
+  flagActionCancel: 'Cancelar',
+  flagActionConfirmResolve: 'Confirmar resolución',
+  flagStatusOpen: 'Abierta',
+  flagStatusSeen: 'Vista',
+  flagStatusSnoozedUntil: (date) => `Pospuesta hasta ${date}`,
+  flagStatusResolved: 'Resuelta',
+  flagSnoozePrompt: 'Posponer por:',
+  flagSnoozeDays: (days) => (days === 1 ? '1 día' : `${days} días`),
+  flagDispositionLegend: '¿Cómo se resolvió?',
+  flagDisposition: {
+    addressed_in_conversation: 'Se resolvió en la conversación',
+    contacted_directly: 'Contacté al socio directamente',
+    escalated: 'Escalada a otra persona',
+    monitoring: 'En observación',
+    false_positive: 'Falsa alarma',
+  },
+  flagNoteLabelRequired: 'Nota (obligatoria)',
+  flagNoteLabelOptional: 'Nota (opcional)',
+  flagNotePlaceholder: '¿Qué pasó y qué hiciste?',
+  flagNoteRequiredError: 'Escribe una nota para resolver una alerta roja.',
+  flagDispositionRequiredError: 'Elige cómo se resolvió.',
+  flagActionError: 'No se pudo completar la acción. Intenta de nuevo.',
+  flagResolvedBy: (who, when) => `Resuelta por ${who} · ${when}`,
+  flagViewMessage: 'Ver mensaje',
   lessonProgressTitle: 'Progreso de lecciones',
   lessonProgressEmpty: 'Este curso aún no tiene lecciones.',
   lessonPending: 'Pendiente',
@@ -390,6 +514,47 @@ const en: DashboardStrings = {
   sentimentNegative: 'Negative',
   sentimentNeutral: 'Neutral',
   sentimentPositive: 'Positive',
+  flagReason: {
+    'sentiment.urgency_high': (p) =>
+      `High urgency detected (${p.urgency}/10)${topicSuffix(p, 'topics', TOPICS_EN)}`,
+    'sentiment.distressed': (p) =>
+      `Distressed mood detected${topicSuffix(p, 'topics', TOPICS_EN)}`,
+    'sentiment.confusion_elevated': (p) =>
+      `Elevated confusion (${p.value}/10)${topicSuffix(p, 'topics', TOPICS_EN)}`,
+    'sentiment.frustration_elevated': (p) =>
+      `Elevated frustration (${p.value}/10)${topicSuffix(p, 'topics', TOPICS_EN)}`,
+    'escalation.requested': (p) =>
+      p.requestReason
+        ? `Mentor contact requested: “${p.requestReason}”`
+        : 'Mentor contact requested',
+  },
+  flagActionAcknowledge: 'Mark as seen',
+  flagActionSnooze: 'Snooze',
+  flagActionResolve: 'Resolve',
+  flagActionCancel: 'Cancel',
+  flagActionConfirmResolve: 'Confirm resolution',
+  flagStatusOpen: 'Open',
+  flagStatusSeen: 'Seen',
+  flagStatusSnoozedUntil: (date) => `Snoozed until ${date}`,
+  flagStatusResolved: 'Resolved',
+  flagSnoozePrompt: 'Snooze for:',
+  flagSnoozeDays: (days) => (days === 1 ? '1 day' : `${days} days`),
+  flagDispositionLegend: 'How was this resolved?',
+  flagDisposition: {
+    addressed_in_conversation: 'Addressed in conversation',
+    contacted_directly: 'Contacted them directly',
+    escalated: 'Escalated to someone else',
+    monitoring: 'Monitoring',
+    false_positive: 'False positive',
+  },
+  flagNoteLabelRequired: 'Note (required)',
+  flagNoteLabelOptional: 'Note (optional)',
+  flagNotePlaceholder: 'What happened, and what did you do?',
+  flagNoteRequiredError: 'A note is required to resolve a red alert.',
+  flagDispositionRequiredError: 'Choose how this was resolved.',
+  flagActionError: 'That action could not be completed. Please try again.',
+  flagResolvedBy: (who, when) => `Resolved by ${who} · ${when}`,
+  flagViewMessage: 'View message',
   lessonProgressTitle: 'Lesson progress',
   lessonProgressEmpty: 'This course has no lessons yet.',
   lessonPending: 'Pending',
@@ -530,6 +695,47 @@ const pt: DashboardStrings = {
   sentimentNegative: 'Negativo',
   sentimentNeutral: 'Neutro',
   sentimentPositive: 'Positivo',
+  flagReason: {
+    'sentiment.urgency_high': (p) =>
+      `Urgência alta detectada (${p.urgency}/10)${topicSuffix(p, 'temas', TOPICS_PT)}`,
+    'sentiment.distressed': (p) =>
+      `Humor angustiado detectado${topicSuffix(p, 'temas', TOPICS_PT)}`,
+    'sentiment.confusion_elevated': (p) =>
+      `Confusão elevada (${p.value}/10)${topicSuffix(p, 'temas', TOPICS_PT)}`,
+    'sentiment.frustration_elevated': (p) =>
+      `Frustração elevada (${p.value}/10)${topicSuffix(p, 'temas', TOPICS_PT)}`,
+    'escalation.requested': (p) =>
+      p.requestReason
+        ? `Contato com mentor solicitado: «${p.requestReason}»`
+        : 'Contato com mentor solicitado',
+  },
+  flagActionAcknowledge: 'Marcar como vista',
+  flagActionSnooze: 'Adiar',
+  flagActionResolve: 'Resolver',
+  flagActionCancel: 'Cancelar',
+  flagActionConfirmResolve: 'Confirmar resolução',
+  flagStatusOpen: 'Aberta',
+  flagStatusSeen: 'Vista',
+  flagStatusSnoozedUntil: (date) => `Adiada até ${date}`,
+  flagStatusResolved: 'Resolvida',
+  flagSnoozePrompt: 'Adiar por:',
+  flagSnoozeDays: (days) => (days === 1 ? '1 dia' : `${days} dias`),
+  flagDispositionLegend: 'Como foi resolvida?',
+  flagDisposition: {
+    addressed_in_conversation: 'Resolvida na conversa',
+    contacted_directly: 'Entrei em contato diretamente',
+    escalated: 'Encaminhada para outra pessoa',
+    monitoring: 'Em observação',
+    false_positive: 'Alarme falso',
+  },
+  flagNoteLabelRequired: 'Nota (obrigatória)',
+  flagNoteLabelOptional: 'Nota (opcional)',
+  flagNotePlaceholder: 'O que aconteceu e o que você fez?',
+  flagNoteRequiredError: 'Escreva uma nota para resolver um alerta vermelho.',
+  flagDispositionRequiredError: 'Escolha como foi resolvida.',
+  flagActionError: 'Não foi possível concluir a ação. Tente novamente.',
+  flagResolvedBy: (who, when) => `Resolvida por ${who} · ${when}`,
+  flagViewMessage: 'Ver mensagem',
   lessonProgressTitle: 'Progresso das lições',
   lessonProgressEmpty: 'Este curso ainda não tem lições.',
   lessonPending: 'Pendente',

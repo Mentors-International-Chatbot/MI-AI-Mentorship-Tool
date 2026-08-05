@@ -8,6 +8,7 @@ import {
   isSupportedLanguage,
 } from '@/lib/i18n/languages';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
+import { activeFlagWhere } from '@/lib/flags/active';
 
 /** Bump whenever the summary system/human prompt text changes. Recorded on every AiInvocation. */
 export const SUMMARY_PROMPT_VERSION = 'v1';
@@ -187,7 +188,7 @@ export async function generateSummary(
     }),
     prisma.socioProgress.findUnique({ where: { socioId } }),
     prisma.socioFlag.findMany({
-      where: { socioId, resolved: false },
+      where: { socioId, ...activeFlagWhere() },
     }),
     prisma.lessonProgress.findMany({
       where: { socioId, completedAt: { gte: weekAgo } },

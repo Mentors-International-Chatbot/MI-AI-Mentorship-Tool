@@ -8,6 +8,7 @@ import {
     InteractionMode,
     type ParsedMarkers,
     type DetermineModeResult,
+    type StanceDecision,
 } from './prompts';
 import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
 import { DEFAULT_LANGUAGE, AI_ERROR_FALLBACK, type SupportedLanguage } from '@/lib/i18n/languages';
@@ -90,18 +91,28 @@ async function invokeWithRetry(
  * - content: the lesson identity, because Layer 4 is different text per lesson.
  *   Omitted for modes that inject no content block.
  * - context: a plain constant — that layer is assembled entirely in code.
+ * - stance/stanceReason: which posture the router selected and why. Recorded
+ *   here rather than in a dedicated column because ST2 excludes schema
+ *   migrations, and because stance genuinely is a prompt-assembly input — it
+ *   selects which framing text Layer 3 appends, exactly like the other keys.
+ *   Without it, comparing stance behaviour across turns means re-deriving the
+ *   decision from flags and gate rows that have since moved.
  */
 export function buildLessonPromptVersion(params: {
     dbVersions: PromptVersionSink;
     contentIdentity: string | null;
     language: SupportedLanguage;
+    stance?: StanceDecision;
 }): Record<string, string> {
-    const { dbVersions, contentIdentity, language } = params;
+    const { dbVersions, contentIdentity, language, stance } = params;
     return {
         core: dbVersions.core ?? CORE_PROMPT_VERSION,
         context: CONTEXT_PROMPT_VERSION,
         task: dbVersions.task ?? TASK_PROMPT_VERSION,
         ...(contentIdentity ? { content: contentIdentity } : {}),
+        ...(stance ? { stance: stance.stance, stanceReason: stance.reason } : {}),
+        // Present only when a course overrode the stance framing in /admin.
+        ...(dbVersions.stanceText ? { stanceText: dbVersions.stanceText } : {}),
         language,
     };
 }
@@ -230,6 +241,7 @@ export async function generateAIResponse(
         collectionKey,
         priorState,
         dbPromptVersions,
+        modeResult.activeFlags,
     );
     timings.buildPrompt = performance.now() - promptStart;
 
@@ -264,6 +276,7 @@ export async function generateAIResponse(
                 dbVersions: dbPromptVersions,
                 contentIdentity: getContentIdentity(modeResult.routerResult, collectionKey),
                 language: (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage,
+                stance: modeResult.routerResult.stance,
             }),
             systemPrompt,
             socioId: socio.id,
@@ -293,6 +306,8 @@ export async function generateAIResponse(
         void logEvent('info', 'ai', 'AI response generated', {
             socioId: socio.id,
             mode: modeResult.routerResult.mode,
+            stance: modeResult.routerResult.stance?.stance,
+            stanceReason: modeResult.routerResult.stance?.reason,
             promptTokensApprox: systemPrompt.length,
             responseLength: rawContent.length,
             totalMs: Math.round(totalTime),

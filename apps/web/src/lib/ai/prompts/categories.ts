@@ -96,6 +96,20 @@ export const PROMPT_CATEGORIES: readonly PromptCategoryMeta[] = [
     scope: 'course',
   },
   {
+    category: 'stance_tutor',
+    label: 'Tutor stance',
+    description:
+      "Second router axis. How the AI behaves when its job is to build knowledge — before the learner has passed their lesson's gate, or during a bounded return to teaching. Applies across every turn type.",
+    scope: 'course',
+  },
+  {
+    category: 'stance_coach',
+    label: 'Coach stance',
+    description:
+      'Second router axis. How the AI behaves when its job is to support execution — obstacles, progress, morale, next action. The resting posture once the gate is passed, and the posture used whenever a RED distress flag is active.',
+    scope: 'course',
+  },
+  {
     category: 'sentiment',
     label: 'Sentiment analysis',
     description:

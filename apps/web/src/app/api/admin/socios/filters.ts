@@ -7,6 +7,7 @@
  */
 import { Prisma } from '@prisma/client';
 import { UNASSIGNED_COURSE_KEY } from '@/app/dashboard/learners/courseRollup';
+import { activeFlagWhere } from '@/lib/flags/active';
 
 /**
  * Translates the list's query parameters into a Prisma `where`.
@@ -53,7 +54,7 @@ export function buildSocioWhere(params: URLSearchParams): Prisma.SocioWhereInput
     }
   }
   if (flagLevel) {
-    where.flags = { some: { level: flagLevel, resolved: false } };
+    where.flags = { some: { level: flagLevel, ...activeFlagWhere() } };
   }
   if (completedLesson) {
     const num = parseInt(completedLesson, 10);

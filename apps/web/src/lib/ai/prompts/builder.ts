@@ -9,6 +9,8 @@ import type { SupportedLanguage } from '@/lib/i18n/languages';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import type { PromptVersionSink } from './loadPrompt';
 import { resolvePromptScope } from './resolveScope';
+import { STANCE_DETOUR_KEY } from './stance';
+import type { SocioFlag } from '@/lib/repo/types';
 
 // ─── Prompt Builder ─────────────────────────────────────────────────
 // Assembles the 4-layer system prompt at runtime.
@@ -25,6 +27,10 @@ function stripInternalPromptOverrides(raw: unknown): PromptOverrides | null {
   const o = { ...(raw as Record<string, unknown>) };
   delete o.awaitingFeedback;
   delete o.feedbackLessonNum;
+  // Stance detour bookkeeping (see stance.ts). Internal state, not a slider —
+  // leaving it in would put a `{turnsRemaining, lessonNumber}` object through
+  // the tone/conciseness parsing in Layer 1.
+  delete o[STANCE_DETOUR_KEY];
   if (Object.keys(o).length === 0) return null;
   return o as PromptOverrides;
 }
@@ -41,6 +47,12 @@ export async function buildSystemPrompt(
    * absent keys mean the code default was used. Purely observational.
    */
   sink?: PromptVersionSink,
+  /**
+   * Active flags for this socio, already read by the router. Layer 2 renders
+   * them; passing them in avoids a second query for the same rows. Omitted by
+   * callers outside the conversational path, which render "None".
+   */
+  activeFlags?: readonly SocioFlag[],
 ): Promise<string> {
   const overrides = stripInternalPromptOverrides(
     (socio as Record<string, unknown>).promptOverrides,
@@ -56,7 +68,7 @@ export async function buildSystemPrompt(
   const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language, sink, scope);
 
   // Layer 2: Socio context (now async — fetches persistent SocioContext from DB)
-  const layer2 = await buildContextPrompt(socio, progress, collectionKey, language);
+  const layer2 = await buildContextPrompt(socio, progress, collectionKey, language, activeFlags);
 
   // Layer 3: Task context (mode-specific instructions + dimension state)
   const layer3 = await buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState, language, sink, scope);

@@ -37,6 +37,13 @@ function makeFlag(overrides: Partial<SocioFlag> = {}): SocioFlag {
     resolvedAt: null,
     messageId: null,
     createdAt: new Date(),
+    reasonCode: null,
+    reasonParams: null,
+    status: 'OPEN',
+    disposition: null,
+    snoozedUntil: null,
+    occurrenceCount: 1,
+    lastOccurredAt: null,
     ...overrides,
   };
 }
@@ -144,6 +151,58 @@ describe('computeHealthFromData', () => {
 
   it('returns GREEN with high understanding', () => {
     const result = computeHealthFromData([], makeProgress({ weeklyUnderstanding: 8 }));
+    expect(result.status).toBe('GREEN');
+  });
+});
+
+describe('flag lifecycle and health', () => {
+  const NOW = new Date('2026-08-04T12:00:00Z');
+  const inDays = (n: number) => new Date(NOW.getTime() + n * 24 * 60 * 60 * 1000);
+
+  it('excludes a flag snoozed into the future', () => {
+    const flags = [
+      makeFlag({ level: 'RED', resolved: false, status: 'SNOOZED', snoozedUntil: inDays(3) }),
+    ];
+    const result = computeHealthFromData(flags, makeProgress({ lastInteractionAt: NOW }), NOW);
+    expect(result.status).toBe('GREEN');
+  });
+
+  it('includes a flag whose snooze has expired', () => {
+    const flags = [
+      makeFlag({ level: 'RED', resolved: false, status: 'SNOOZED', snoozedUntil: inDays(-1) }),
+    ];
+    const result = computeHealthFromData(flags, makeProgress({ lastInteractionAt: NOW }), NOW);
+    expect(result.status).toBe('RED');
+    expect(renderEs(result.reasons[0])).toMatch(/1 alerta\(s\) roja\(s\)/);
+  });
+
+  it('still counts an acknowledged flag — seeing it does not clear health', () => {
+    const flags = [makeFlag({ level: 'RED', resolved: false, status: 'ACKNOWLEDGED' })];
+    const result = computeHealthFromData(flags, makeProgress({ lastInteractionAt: NOW }), NOW);
+    expect(result.status).toBe('RED');
+  });
+
+  it('counts a SNOOZED flag with no end date, rather than hiding it forever', () => {
+    const flags = [
+      makeFlag({ level: 'RED', resolved: false, status: 'SNOOZED', snoozedUntil: null }),
+    ];
+    const result = computeHealthFromData(flags, makeProgress({ lastInteractionAt: NOW }), NOW);
+    expect(result.status).toBe('RED');
+  });
+
+  it('drops a snoozed flag from YELLOW as well as RED', () => {
+    const flags = [
+      makeFlag({ level: 'YELLOW', resolved: false, status: 'SNOOZED', snoozedUntil: inDays(1) }),
+    ];
+    const result = computeHealthFromData(flags, makeProgress({ lastInteractionAt: NOW }), NOW);
+    expect(result.status).toBe('GREEN');
+  });
+
+  it('ignores a resolved flag even when its snooze has expired', () => {
+    const flags = [
+      makeFlag({ level: 'RED', resolved: true, status: 'RESOLVED', snoozedUntil: inDays(-5) }),
+    ];
+    const result = computeHealthFromData(flags, makeProgress({ lastInteractionAt: NOW }), NOW);
     expect(result.status).toBe('GREEN');
   });
 });

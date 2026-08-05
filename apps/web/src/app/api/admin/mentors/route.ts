@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
 import { requireAdmin } from '@/lib/auth/adminGuard';
+import { activeFlagWhere } from '@/lib/flags/active';
 
 export async function GET() {
   const auth = await requireAdmin();
@@ -25,7 +26,7 @@ export async function GET() {
 
       const unresolvedFlags = ids.length > 0
         ? await prisma.socioFlag.count({
-            where: { socioId: { in: ids }, resolved: false },
+            where: { socioId: { in: ids }, ...activeFlagWhere() },
           })
         : 0;
 

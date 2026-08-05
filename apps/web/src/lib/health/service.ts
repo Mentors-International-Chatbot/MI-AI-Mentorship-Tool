@@ -1,4 +1,5 @@
 import { repo } from '@/lib/repo';
+import { isFlagActive } from '@/lib/flags/active';
 import type { SocioFlag, SocioProgress } from '@/lib/repo/types';
 
 export type HealthStatus = 'RED' | 'YELLOW' | 'GREEN';
@@ -37,12 +38,14 @@ export async function computeSocioHealth(socioId: string): Promise<SocioHealth> 
 export function computeHealthFromData(
     flags: SocioFlag[],
     progress: SocioProgress,
+    now: Date = new Date(),
 ): SocioHealth {
     const reasons: HealthReason[] = [];
     let status: HealthStatus = 'GREEN';
 
-    const unresolvedRed = flags.filter(f => f.level === 'RED' && !f.resolved);
-    const unresolvedYellow = flags.filter(f => f.level === 'YELLOW' && !f.resolved);
+    const active = flags.filter(f => isFlagActive(f, now));
+    const unresolvedRed = active.filter(f => f.level === 'RED');
+    const unresolvedYellow = active.filter(f => f.level === 'YELLOW');
 
     // RED conditions
     if (unresolvedRed.length > 0) {
@@ -51,7 +54,7 @@ export function computeHealthFromData(
     }
 
     const daysSinceInteraction = progress.lastInteractionAt
-        ? (Date.now() - progress.lastInteractionAt.getTime()) / (1000 * 60 * 60 * 24)
+        ? (now.getTime() - progress.lastInteractionAt.getTime()) / (1000 * 60 * 60 * 24)
         : null;
 
     if (daysSinceInteraction !== null && daysSinceInteraction > 21) {

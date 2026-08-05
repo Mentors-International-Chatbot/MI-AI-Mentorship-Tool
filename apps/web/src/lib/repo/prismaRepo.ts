@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, FlagStatus, FlagDisposition, FlagEvent, FlagEventActorType, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 import { scopeTiers } from "@/lib/ai/prompts/scope";
+import { activeFlagWhere } from "@/lib/flags/active";
 import { DEFAULT_LANGUAGE, isSupportedLanguage } from "@/lib/i18n/languages";
 import {
     Prisma,
@@ -10,6 +11,7 @@ import {
     Message as PrismaMessage,
     SocioProgress as PrismaSocioProgress,
     SocioFlag as PrismaSocioFlag,
+    FlagEvent as PrismaFlagEvent,
     LessonProgress as PrismaLessonProgress,
     MessageSentiment as PrismaMessageSentiment,
     SocioContext as PrismaSocioContext,
@@ -101,6 +103,27 @@ function toSocioFlag(p: PrismaSocioFlag): SocioFlag {
         resolvedBy: p.resolvedBy,
         resolvedAt: p.resolvedAt,
         messageId: p.messageId,
+        createdAt: p.createdAt,
+        reasonCode: p.reasonCode,
+        reasonParams: p.reasonParams as Record<string, unknown> | null,
+        status: p.status as FlagStatus,
+        disposition: p.disposition as FlagDisposition | null,
+        snoozedUntil: p.snoozedUntil,
+        occurrenceCount: p.occurrenceCount,
+        lastOccurredAt: p.lastOccurredAt,
+    };
+}
+
+function toFlagEvent(p: PrismaFlagEvent): FlagEvent {
+    return {
+        id: p.id,
+        flagId: p.flagId,
+        actorId: p.actorId,
+        actorType: p.actorType as FlagEventActorType,
+        eventType: p.eventType,
+        disposition: p.disposition as FlagDisposition | null,
+        note: p.note,
+        linkedMessageId: p.linkedMessageId,
         createdAt: p.createdAt,
     };
 }
@@ -457,6 +480,8 @@ export const prismaRepo: Repo = {
                 reason: data.reason,
                 source: data.source ?? 'ai_marker',
                 messageId: data.messageId ?? null,
+                reasonCode: data.reasonCode ?? null,
+                reasonParams: (data.reasonParams as object) ?? undefined,
             },
         });
         return toSocioFlag(flag);
@@ -472,7 +497,7 @@ export const prismaRepo: Repo = {
 
     async getActiveFlags(socioId) {
         const flags = await prisma.socioFlag.findMany({
-            where: { socioId, resolved: false },
+            where: { socioId, ...activeFlagWhere() },
             orderBy: { createdAt: 'desc' },
         });
         return flags.map(toSocioFlag);
@@ -480,7 +505,7 @@ export const prismaRepo: Repo = {
 
     async getAllUnresolvedFlags() {
         const flags = await prisma.socioFlag.findMany({
-            where: { resolved: false },
+            where: activeFlagWhere(),
             include: { socio: true },
             orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
         });
@@ -493,7 +518,7 @@ export const prismaRepo: Repo = {
     async getUnresolvedFlagsByMentor(mentorId: string) {
         const flags = await prisma.socioFlag.findMany({
             where: {
-                resolved: false,
+                ...activeFlagWhere(),
                 socio: { mentorId },
             },
             include: { socio: true },
@@ -505,12 +530,88 @@ export const prismaRepo: Repo = {
         }));
     },
 
-    async resolveFlag(flagId, mentorId) {
+    async resolveFlag(flagId, mentorId, outcome) {
         const flag = await prisma.socioFlag.update({
             where: { id: flagId },
-            data: { resolved: true, resolvedBy: mentorId, resolvedAt: new Date() },
+            data: {
+                resolved: true,
+                resolvedBy: mentorId,
+                resolvedAt: new Date(),
+                ...(outcome ? { status: 'RESOLVED', disposition: outcome.disposition } : {}),
+            },
+        });
+        if (outcome) {
+            await prisma.flagEvent.create({
+                data: {
+                    flagId,
+                    actorId: mentorId,
+                    actorType: 'mentor',
+                    eventType: 'resolved',
+                    disposition: outcome.disposition,
+                    note: outcome.note ?? null,
+                    linkedMessageId: outcome.linkedMessageId ?? null,
+                },
+            });
+        }
+        return toSocioFlag(flag);
+    },
+
+    async acknowledgeFlag(flagId, mentorId, note) {
+        const flag = await prisma.socioFlag.update({
+            where: { id: flagId },
+            data: { status: 'ACKNOWLEDGED' },
+        });
+        await prisma.flagEvent.create({
+            data: {
+                flagId,
+                actorId: mentorId,
+                actorType: 'mentor',
+                eventType: 'acknowledged',
+                note: note ?? null,
+            },
         });
         return toSocioFlag(flag);
+    },
+
+    async snoozeFlag(flagId, mentorId, days, note) {
+        const snoozedUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        const flag = await prisma.socioFlag.update({
+            where: { id: flagId },
+            data: { status: 'SNOOZED', snoozedUntil },
+        });
+        await prisma.flagEvent.create({
+            data: {
+                flagId,
+                actorId: mentorId,
+                actorType: 'mentor',
+                eventType: 'snoozed',
+                note: note ?? null,
+            },
+        });
+        return toSocioFlag(flag);
+    },
+
+    async appendFlagEvent(data) {
+        const event = await prisma.flagEvent.create({
+            data: {
+                flagId: data.flagId,
+                actorId: data.actorId ?? null,
+                actorType: data.actorType,
+                eventType: data.eventType,
+                disposition: data.disposition ?? null,
+                note: data.note ?? null,
+                linkedMessageId: data.linkedMessageId ?? null,
+            },
+        });
+        return toFlagEvent(event);
+    },
+
+    async getFlagEvents(flagId) {
+        const events = await prisma.flagEvent.findMany({
+            where: { flagId },
+            orderBy: { createdAt: 'asc' },
+        });
+        return events.map(toFlagEvent);
     },
 
     async upsertLessonProgress(socioId, lessonNumber, understanding, completed) {
@@ -573,6 +674,15 @@ export const prismaRepo: Repo = {
         return isSupportedLanguage(mentor.preferredLanguage)
             ? mentor.preferredLanguage
             : null;
+    },
+
+    async getMentorNames(mentorIds) {
+        if (mentorIds.length === 0) return {};
+        const mentors = await prisma.mentor.findMany({
+            where: { id: { in: mentorIds } },
+            select: { id: true, name: true },
+        });
+        return Object.fromEntries(mentors.map((m) => [m.id, m.name]));
     },
 
     async setMentorPreferredLanguage(mentorId, language) {

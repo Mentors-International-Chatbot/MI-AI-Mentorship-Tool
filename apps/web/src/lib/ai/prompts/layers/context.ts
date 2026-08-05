@@ -1,4 +1,4 @@
-import { Socio } from '@/lib/repo/types';
+import { Socio, SocioFlag } from '@/lib/repo/types';
 import { SocioProgress } from '../types';
 import { getLessonTitle, getLessonCount } from '@/lib/lessons/db-lesson-service';
 import { repo } from '@/lib/repo';
@@ -6,7 +6,7 @@ import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 
 /** Bump whenever the Layer 2 prompt text changes. Recorded on every AiInvocation. */
-export const CONTEXT_PROMPT_VERSION = 'v1';
+export const CONTEXT_PROMPT_VERSION = 'v2';
 
 // ─── Layer 2: Socio Context (~150 tokens) — Always Sent ────────────
 // Built dynamically from the database for every message.
@@ -102,11 +102,50 @@ const CONTEXT_SCAFFOLDING: Record<SupportedLanguage, ContextScaffolding> = {
   },
 };
 
+/**
+ * Renders the "active flags" line from the real flags.
+ *
+ * This line used to be the literal string "None" in all three languages,
+ * unconditionally. A learner with three unresolved RED distress flags had a
+ * context block telling the model there were none — not an absent signal but a
+ * false assertion, which is worse, because the model had no way to notice.
+ *
+ * Only the level and the reason code are shown. `reason` is a raw key=value
+ * debug line (see `sentiment/pipeline.ts:fallbackReason`) and reasonParams can
+ * carry the learner's verbatim words; neither belongs in a prompt the learner's
+ * own reply is generated from.
+ */
+function formatActiveFlags(
+  flags: readonly SocioFlag[] | undefined,
+  scf: ContextScaffolding,
+): string {
+  if (!flags || flags.length === 0) return scf.noneFlags;
+
+  const red = flags.filter((f) => f.level === 'RED').length;
+  const yellow = flags.filter((f) => f.level === 'YELLOW').length;
+
+  const parts: string[] = [];
+  if (red > 0) parts.push(`${red} RED`);
+  if (yellow > 0) parts.push(`${yellow} YELLOW`);
+
+  const codes = [...new Set(flags.map((f) => f.reasonCode).filter((c): c is string => !!c))];
+  const suffix = codes.length > 0 ? ` (${codes.join(', ')})` : '';
+
+  return `${parts.join(', ')}${suffix}`;
+}
+
 export async function buildContextPrompt(
   socio: Socio,
   progress: SocioProgress | undefined,
   collectionKey: string,
   language: SupportedLanguage = 'es',
+  /**
+   * Active flags, already fetched by the router. Undefined for the callers that
+   * assemble a prompt outside the conversational path (the reminder cron, the
+   * admin test sandbox) — those render "None", which is now honest rather than
+   * merely true-by-hardcoding, because they have no socio state to read.
+   */
+  activeFlags?: readonly SocioFlag[],
 ): Promise<string> {
   const context = await repo.getSocioContext(socio.id);
   const meta = await getCourseMeta(collectionKey);
@@ -120,7 +159,7 @@ export async function buildContextPrompt(
   const scf = CONTEXT_SCAFFOLDING[language] ?? CONTEXT_SCAFFOLDING['en'];
 
   if (!progress || progress.completedLessons.length === 0) {
-    return buildNewSocioContext(socio, context, collectionKey, meta, participantNoun, hasLearnerContext, language, contextLabel, scf);
+    return buildNewSocioContext(socio, context, collectionKey, meta, participantNoun, hasLearnerContext, language, contextLabel, scf, activeFlags);
   }
 
   const currentTitle = getLessonTitle(collectionKey, progress.currentLessonNumber);
@@ -138,10 +177,26 @@ export async function buildContextPrompt(
   block += `
 - ${scf.currentLessonLabel}: ${progress.currentLessonNumber} — "${currentTitle}"
 - ${scf.completedLessonsLabel}: ${formatCompletedLessons(progress.completedLessons, collectionKey, language)}
-- ${scf.lastComprehensionLabel}: ${progress.weeklyUnderstanding ?? 'N/A'}/10
-- ${scf.lastImplementationLabel}: ${progress.weeklyImplementation ?? 'N/A'}/10
+- ${scf.lastComprehensionLabel}: ${progress.weeklyUnderstanding ?? 'N/A'}/10`;
+
+  // `weeklyImplementation` has no writer. The field exists, the repo maps it,
+  // and this line rendered "N/A/10" into every prompt since launch, because the
+  // only caller of `completeLesson` (messaging/handler.ts) passes `understanding`
+  // and never `implementation`. The question that would populate it lives in
+  // `buildCheckinPrompt`, which the router cannot reach.
+  //
+  // Emitting a permanently-N/A metric trains the model that the field is
+  // meaningless, so the line is omitted until a writer exists rather than left
+  // as decoration. Same class of defect as the flags line below, one severity
+  // down: "N/A" was useless, "Active flags: None" was false.
+  if (progress.weeklyImplementation !== null) {
+    block += `
+- ${scf.lastImplementationLabel}: ${progress.weeklyImplementation}/10`;
+  }
+
+  block += `
 - ${scf.daysSinceContactLabel}: ${progress.daysSinceLastInteraction}
-- ${scf.activeFlagsLabel}: ${scf.noneFlags}`;
+- ${scf.activeFlagsLabel}: ${formatActiveFlags(activeFlags, scf)}`;
 
   const contextSection = buildPersistentContextSection(context, hasLearnerContext, language, contextLabel);
   if (contextSection) {
@@ -169,6 +224,7 @@ function buildNewSocioContext(
   language: SupportedLanguage,
   contextLabel: string | undefined,
   scf: ContextScaffolding,
+  activeFlags?: readonly SocioFlag[],
 ): string {
   const lessonTitle = getLessonTitle(collectionKey, 1);
   const totalLessons = getLessonCount(collectionKey);
@@ -205,7 +261,7 @@ function buildNewSocioContext(
   block += `
 - ${scf.currentLessonLabel}: 1${totalLessons > 0 ? ` de ${totalLessons}` : ''} — "${lessonTitle}"
 - ${firstLessonNote[language] ?? firstLessonNote['en']}
-- ${scf.activeFlagsLabel}: ${scf.noneFlags}`;
+- ${scf.activeFlagsLabel}: ${formatActiveFlags(activeFlags, scf)}`;
 
   const contextSection = buildPersistentContextSection(context, hasLearnerContext, language, contextLabel);
   if (contextSection) {

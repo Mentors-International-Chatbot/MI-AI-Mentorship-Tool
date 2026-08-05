@@ -84,11 +84,33 @@ export default async function SocioDetailPage({
     createdAt: m.createdAt.toISOString(),
   }));
 
+  // The resolution note lives on the FlagEvent, not the flag, so pull the
+  // closing event for the ones actually showing a resolution.
+  const resolutionNotes = new Map<string, string>();
+  await Promise.all(
+    flags
+      .filter((f) => f.resolved)
+      .map(async (f) => {
+        const events = await repo.getFlagEvents(f.id);
+        const closing = [...events].reverse().find((e) => e.eventType === 'resolved' && e.note);
+        if (closing?.note) resolutionNotes.set(f.id, closing.note);
+      }),
+  );
+
+  // "Resolved by <uuid>" is useless to a mentor; resolve the names once.
+  const mentorNames = await repo.getMentorNames(
+    [...new Set(flags.map((f) => f.resolvedBy).filter((v): v is string => !!v))],
+  );
+
   const serializedFlags = flags.map((f) => ({
     ...f,
     source: f.source,
     resolvedAt: f.resolvedAt?.toISOString() ?? null,
     createdAt: f.createdAt.toISOString(),
+    snoozedUntil: f.snoozedUntil?.toISOString() ?? null,
+    lastOccurredAt: f.lastOccurredAt?.toISOString() ?? null,
+    resolutionNote: resolutionNotes.get(f.id) ?? null,
+    resolvedByName: f.resolvedBy ? mentorNames[f.resolvedBy] ?? null : null,
   }));
 
   return (

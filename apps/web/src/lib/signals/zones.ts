@@ -10,6 +10,7 @@
  * socio is RED or YELLOW and why; this module reads that verdict and sorts.
  * ═══════════════════════════════════════════════════════════════════════════
  */
+import { isFlagActive } from '@/lib/flags/active';
 import type { SocioHealth } from '@/lib/health';
 import type { PositiveSignal } from './positive';
 
@@ -29,10 +30,12 @@ import type { PositiveSignal } from './positive';
  */
 export type ZoneKey = 'needs_you_now' | 'watching' | 'good_news';
 
-/** The unresolved-flag fields zone assignment actually reads. */
+/** The flag fields zone assignment actually reads. */
 export type ZoneFlagInput = {
   level: string;
   resolved: boolean;
+  status: string;
+  snoozedUntil: Date | null;
   reason: string;
   createdAt: Date;
 };
@@ -84,16 +87,19 @@ export type AlertZones = {
  * yellow flag appears in zone 1 only. Showing them twice would split a single
  * person's story across two panels and inflate both counts.
  */
-export function assignZone(flags: readonly ZoneFlagInput[]): 'needs_you_now' | 'watching' | null {
-  const unresolved = flags.filter((f) => !f.resolved);
-  if (unresolved.some((f) => f.level === 'RED')) return 'needs_you_now';
-  if (unresolved.some((f) => f.level === 'YELLOW')) return 'watching';
+export function assignZone(
+  flags: readonly ZoneFlagInput[],
+  now: Date = new Date(),
+): 'needs_you_now' | 'watching' | null {
+  const active = flags.filter((f) => isFlagActive(f, now));
+  if (active.some((f) => f.level === 'RED')) return 'needs_you_now';
+  if (active.some((f) => f.level === 'YELLOW')) return 'watching';
   return null;
 }
 
 function toZoneSocio(input: ZoneSocioInput): ZoneSocio {
   const unresolved = [...input.flags]
-    .filter((f) => !f.resolved)
+    .filter((f) => isFlagActive(f))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   return {

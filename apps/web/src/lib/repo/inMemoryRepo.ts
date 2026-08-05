@@ -1,4 +1,5 @@
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
+import { isFlagActive } from "@/lib/flags/active";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, FlagEvent, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 import { scopeTiers } from "@/lib/ai/prompts/scope";
 import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
@@ -8,6 +9,7 @@ const sociosById = new Map<string, Socio>();
 const messagesBySocio = new Map<string, Message[]>();
 const progressBySocio = new Map<string, SocioProgress>();
 const flagsBySocio = new Map<string, SocioFlag[]>();
+const flagEventsByFlag = new Map<string, FlagEvent[]>();
 const lessonProgressBySocio = new Map<string, Map<number, LessonProgressRecord>>();
 const sentimentsByMessage = new Map<string, MessageSentimentRecord>();
 const contextBySocio = new Map<string, SocioContext>();
@@ -233,6 +235,13 @@ export const inMemoryRepo: Repo = {
             resolvedAt: null,
             messageId: data.messageId ?? null,
             createdAt: new Date(),
+            reasonCode: data.reasonCode ?? null,
+            reasonParams: data.reasonParams ?? null,
+            status: 'OPEN',
+            disposition: null,
+            snoozedUntil: null,
+            occurrenceCount: 1,
+            lastOccurredAt: null,
         };
         const arr = flagsBySocio.get(data.socioId) ?? [];
         arr.push(flag);
@@ -245,7 +254,7 @@ export const inMemoryRepo: Repo = {
     },
 
     async getActiveFlags(socioId) {
-        return (flagsBySocio.get(socioId) ?? []).filter(f => !f.resolved);
+        return (flagsBySocio.get(socioId) ?? []).filter(f => isFlagActive(f));
     },
 
     async getAllUnresolvedFlags() {
@@ -254,7 +263,7 @@ export const inMemoryRepo: Repo = {
             const socio = sociosById.get(socioId);
             if (!socio) continue;
             for (const f of flags) {
-                if (!f.resolved) result.push({ ...f, socio });
+                if (isFlagActive(f)) result.push({ ...f, socio });
             }
         }
         return result;
@@ -266,23 +275,97 @@ export const inMemoryRepo: Repo = {
             const socio = sociosById.get(socioId);
             if (!socio || socio.mentorId !== mentorId) continue;
             for (const f of flags) {
-                if (!f.resolved) result.push({ ...f, socio });
+                if (isFlagActive(f)) result.push({ ...f, socio });
             }
         }
         return result;
     },
 
-    async resolveFlag(flagId, mentorId) {
+    async resolveFlag(flagId, mentorId, outcome) {
         for (const flags of flagsBySocio.values()) {
             const flag = flags.find(f => f.id === flagId);
             if (flag) {
                 flag.resolved = true;
                 flag.resolvedBy = mentorId;
                 flag.resolvedAt = new Date();
+                if (outcome) {
+                    flag.status = 'RESOLVED';
+                    flag.disposition = outcome.disposition;
+                    await inMemoryRepo.appendFlagEvent({
+                        flagId,
+                        actorId: mentorId,
+                        actorType: 'mentor',
+                        eventType: 'resolved',
+                        disposition: outcome.disposition,
+                        note: outcome.note,
+                        linkedMessageId: outcome.linkedMessageId,
+                    });
+                }
                 return flag;
             }
         }
         throw new Error(`Flag ${flagId} not found`);
+    },
+
+    async acknowledgeFlag(flagId, mentorId, note) {
+        for (const flags of flagsBySocio.values()) {
+            const flag = flags.find(f => f.id === flagId);
+            if (flag) {
+                flag.status = 'ACKNOWLEDGED';
+                await inMemoryRepo.appendFlagEvent({
+                    flagId,
+                    actorId: mentorId,
+                    actorType: 'mentor',
+                    eventType: 'acknowledged',
+                    note,
+                });
+                return flag;
+            }
+        }
+        throw new Error(`Flag ${flagId} not found`);
+    },
+
+    async snoozeFlag(flagId, mentorId, days, note) {
+        for (const flags of flagsBySocio.values()) {
+            const flag = flags.find(f => f.id === flagId);
+            if (flag) {
+                flag.status = 'SNOOZED';
+                flag.snoozedUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+                await inMemoryRepo.appendFlagEvent({
+                    flagId,
+                    actorId: mentorId,
+                    actorType: 'mentor',
+                    eventType: 'snoozed',
+                    note,
+                });
+                return flag;
+            }
+        }
+        throw new Error(`Flag ${flagId} not found`);
+    },
+
+    async appendFlagEvent(data) {
+        const event: FlagEvent = {
+            id: Math.random().toString(36).substring(7),
+            flagId: data.flagId,
+            actorId: data.actorId ?? null,
+            actorType: data.actorType,
+            eventType: data.eventType,
+            disposition: data.disposition ?? null,
+            note: data.note ?? null,
+            linkedMessageId: data.linkedMessageId ?? null,
+            createdAt: new Date(),
+        };
+        const arr = flagEventsByFlag.get(data.flagId) ?? [];
+        arr.push(event);
+        flagEventsByFlag.set(data.flagId, arr);
+        return event;
+    },
+
+    async getFlagEvents(flagId) {
+        return [...(flagEventsByFlag.get(flagId) ?? [])].sort(
+            (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+        );
     },
 
     async upsertLessonProgress(socioId, lessonNumber, understanding, completed) {
@@ -330,6 +413,12 @@ export const inMemoryRepo: Repo = {
 
     async getMentorPreferredLanguage(mentorId) {
         return mentorLanguageById.get(mentorId) ?? null;
+    },
+
+    async getMentorNames(mentorIds) {
+        // No mentor store in the test double; callers fall back to the raw id.
+        void mentorIds;
+        return {};
     },
 
     async setMentorPreferredLanguage(mentorId, language) {

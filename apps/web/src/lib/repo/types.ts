@@ -61,6 +61,72 @@ export interface LessonScores {
 
 export type FlagSource = 'ai_marker' | 'sentiment_auto' | 'mentor_manual';
 
+export type FlagStatus =
+    | 'OPEN'
+    | 'ACKNOWLEDGED'
+    | 'SNOOZED'
+    | 'RESOLVED'
+    | 'REOPENED'
+    | 'AUTO_CLOSED';
+
+/** The snooze durations the dashboard offers. */
+export type SnoozeDays = 1 | 3 | 7;
+
+export const SNOOZE_DAYS: readonly SnoozeDays[] = [1, 3, 7];
+
+export function isSnoozeDays(v: unknown): v is SnoozeDays {
+    return v === 1 || v === 3 || v === 7;
+}
+
+export type FlagDisposition =
+    | 'addressed_in_conversation'
+    | 'contacted_directly'
+    | 'escalated'
+    | 'monitoring'
+    | 'false_positive';
+
+export const FLAG_DISPOSITIONS: readonly FlagDisposition[] = [
+    'addressed_in_conversation',
+    'contacted_directly',
+    'escalated',
+    'monitoring',
+    'false_positive',
+];
+
+export function isFlagDisposition(v: unknown): v is FlagDisposition {
+    return typeof v === 'string' && (FLAG_DISPOSITIONS as readonly string[]).includes(v);
+}
+
+/**
+ * Structured, language-free identity of *why* a flag fired. The rendered
+ * sentence lives in the dashboard i18n table, not in the database, so a flag
+ * reads in the mentor's language rather than the one it was written in.
+ */
+export type FlagReasonCode =
+    | 'sentiment.urgency_high'
+    | 'sentiment.distressed'
+    | 'sentiment.confusion_elevated'
+    | 'sentiment.frustration_elevated'
+    | 'escalation.requested';
+
+/**
+ * Payload stored in `SocioFlag.reasonParams`. Every field is optional: which
+ * ones are present depends on the reasonCode, and old rows have none of them.
+ * `topics` is omitted entirely when the analyzer returned nothing useful.
+ */
+export type FlagReasonParams = {
+    /** sentiment.urgency_high / sentiment.distressed */
+    urgency?: number;
+    sentiment?: string;
+    /** sentiment.confusion_elevated / sentiment.frustration_elevated */
+    value?: number;
+    /** The configured threshold the signal crossed. Stored for audit, not rendered. */
+    threshold?: number;
+    topics?: string[];
+    /** escalation.requested — the socio's own words, verbatim and untranslated. */
+    requestReason?: string;
+};
+
 export type SocioFlag = {
     id: string;
     socioId: string;
@@ -71,6 +137,28 @@ export type SocioFlag = {
     resolvedBy: string | null;
     resolvedAt: Date | null;
     messageId: string | null;
+    createdAt: Date;
+    /** Lifecycle fields. `resolved` remains the source of truth; `status` is written but not yet read. */
+    reasonCode: string | null;
+    reasonParams: Record<string, unknown> | null;
+    status: FlagStatus;
+    disposition: FlagDisposition | null;
+    snoozedUntil: Date | null;
+    occurrenceCount: number;
+    lastOccurredAt: Date | null;
+};
+
+export type FlagEventActorType = 'mentor' | 'ai' | 'system';
+
+export type FlagEvent = {
+    id: string;
+    flagId: string;
+    actorId: string | null;
+    actorType: FlagEventActorType;
+    eventType: string;
+    disposition: FlagDisposition | null;
+    note: string | null;
+    linkedMessageId: string | null;
     createdAt: Date;
 };
 
@@ -215,18 +303,48 @@ export interface Repo {
      */
     getSociosAcrossAllOrganizations(): Promise<Socio[]>;
     getSocioById(socioId: string): Promise<Socio | null>;
-    createFlag(data: { socioId: string; level: string; reason: string; source?: string; messageId?: string }): Promise<SocioFlag>;
+    createFlag(data: { socioId: string; level: string; reason: string; source?: string; messageId?: string; reasonCode?: FlagReasonCode; reasonParams?: FlagReasonParams }): Promise<SocioFlag>;
     getFlags(socioId: string): Promise<SocioFlag[]>;
     getActiveFlags(socioId: string): Promise<SocioFlag[]>;
     getAllUnresolvedFlags(): Promise<(SocioFlag & { socio: Socio })[]>;
     getUnresolvedFlagsByMentor(mentorId: string): Promise<(SocioFlag & { socio: Socio })[]>;
-    resolveFlag(flagId: string, mentorId: string): Promise<SocioFlag>;
+    /**
+     * Always sets resolved/resolvedBy/resolvedAt. When `outcome` is present it also
+     * writes status='RESOLVED' plus the disposition, and appends a FlagEvent.
+     */
+    resolveFlag(
+        flagId: string,
+        mentorId: string,
+        outcome?: { disposition: FlagDisposition; note?: string; linkedMessageId?: string },
+    ): Promise<SocioFlag>;
+
+    /**
+     * status='ACKNOWLEDGED' + a FlagEvent. Deliberately does NOT set `resolved`:
+     * seeing an alert is not the same as dealing with it, and health still counts it.
+     */
+    acknowledgeFlag(flagId: string, mentorId: string, note?: string): Promise<SocioFlag>;
+    /** status='SNOOZED' + snoozedUntil `days` out + a FlagEvent. Leaves `resolved` alone. */
+    snoozeFlag(flagId: string, mentorId: string, days: SnoozeDays, note?: string): Promise<SocioFlag>;
+
+    // Flag lifecycle audit trail (append-only)
+    appendFlagEvent(data: {
+        flagId: string;
+        actorId?: string | null;
+        actorType: FlagEventActorType;
+        eventType: string;
+        disposition?: FlagDisposition;
+        note?: string;
+        linkedMessageId?: string;
+    }): Promise<FlagEvent>;
+    getFlagEvents(flagId: string): Promise<FlagEvent[]>;
     upsertLessonProgress(socioId: string, lessonNumber: number, understanding: number | null, completed: boolean): Promise<LessonProgressRecord>;
     getLessonProgressAll(socioId: string): Promise<LessonProgressRecord[]>;
 
     // Mentor/admin UI preferences
     /** Returns null when the mentor is unknown or the stored value is not a supported language. */
     getMentorPreferredLanguage(mentorId: string): Promise<SupportedLanguage | null>;
+    /** Display names for the given mentor ids, keyed by id. Unknown ids are omitted. */
+    getMentorNames(mentorIds: string[]): Promise<Record<string, string>>;
     /** Returns false when no mentor row matched. */
     setMentorPreferredLanguage(mentorId: string, language: SupportedLanguage): Promise<boolean>;
 

@@ -23,6 +23,7 @@ import {
 import { getCourseSummaries } from '@/lib/journey-package/course-summaries';
 import { buildSocioWhere } from '../filters';
 import { requireAdmin } from '@/lib/auth/adminGuard';
+import { activeFlagWhere } from '@/lib/flags/active';
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin();
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.socioFlag.groupBy({
       by: ['socioId', 'level'],
-      where: { socioId: { in: socioIds }, resolved: false },
+      where: { socioId: { in: socioIds }, ...activeFlagWhere() },
       _count: { _all: true },
     }),
   ]);

@@ -17,9 +17,10 @@ import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import { DEFAULT_PERSONALIZATION_INSTRUCTION } from '@/lib/courses/defaults';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
+import { buildStanceBlock } from '../stance';
 
 /** Bump whenever the Layer 3 prompt text changes. Recorded on every AiInvocation. */
-export const TASK_PROMPT_VERSION = 'v1';
+export const TASK_PROMPT_VERSION = 'v2';
 
 // ─── Layer 3: Task Context — One Per Interaction Mode ───────────────
 // The router determines the mode; this function returns the right prompt.
@@ -128,12 +129,33 @@ export async function buildTaskPrompt(
       throw new Error(`Unexpected mode in task layer: ${result.mode}`);
   }
 
-  // Append dimension context if available
-  if (dimensionContext) {
-    return `${basePrompt}\n\n${dimensionContext}`;
-  }
+  // ── Stance: the second router axis ──────────────────────────────────────
+  // Appended after the mode-specific instructions rather than woven into each
+  // of them, for two reasons. The axes are orthogonal — eight builders times
+  // two stances is sixteen prompt variants to keep in sync, and every one of
+  // them would drift. And appending last means stance framing is the closest
+  // instruction to the model's turn, which is where a posture directive should
+  // sit relative to the task description it modifies.
+  //
+  // Absent stance (the reminder cron, the admin test sandbox) emits nothing,
+  // so those paths produce byte-identical prompts to before this change.
+  const stanceBlock = result.stance
+    ? await buildStanceBlock({
+        stance: result.stance.stance,
+        participantNoun,
+        collectionKey,
+        currentLessonNumber: progress?.currentLessonNumber ?? 1,
+        language,
+        sink,
+        scope,
+      })
+    : '';
 
-  return basePrompt;
+  const sections = [basePrompt];
+  if (stanceBlock) sections.push(stanceBlock);
+  if (dimensionContext) sections.push(dimensionContext);
+
+  return sections.join('\n\n');
 }
 
 // ─── LESSON_START ───────────────────────────────────────────────────
