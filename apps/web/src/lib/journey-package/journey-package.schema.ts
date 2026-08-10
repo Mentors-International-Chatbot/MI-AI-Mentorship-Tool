@@ -130,7 +130,7 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
     prompt: z.string().min(1),
     evaluatesConcepts: z.array(z.string()).default([]),
     dimensionKey: key, // Required: specifies which dimension this teach_back assesses
-    delivery: z.enum(["inline", "gated_session"]).default("inline").optional(),
+    delivery: z.enum(["inline", "gated_session"]).default("inline"),
     passingOverride: passingSchema.partial().optional(), // per-block tweak of config.assessment.passing
   }),
 
