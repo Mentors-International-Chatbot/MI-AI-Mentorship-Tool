@@ -92,6 +92,20 @@ interface AssessmentStrings {
     error: string;
     readOnlyNotice: string;
     placeholder: string;
+    /**
+     * Closing lines written into the assessment transcript by
+     * `/api/assessment/[sessionId]/complete`. These were English string
+     * literals in the route until 2026-08-09, so a Spanish-speaking learner
+     * finished a Spanish assessment and was congratulated in English.
+     *
+     * They close the ASSESSMENT only. The conversational half — acknowledging
+     * the result and moving the learner on — belongs to the AI's follow-up turn
+     * (`messaging/gateFollowUp.ts`), not here.
+     */
+    completedPassed: string;
+    completedNotPassed: string;
+    completedReteach: string;
+    completedCancelled: string;
 }
 
 export const ASSESSMENT_STRINGS: Record<SupportedLanguage, AssessmentStrings> = {
@@ -106,6 +120,10 @@ export const ASSESSMENT_STRINGS: Record<SupportedLanguage, AssessmentStrings> = 
         error: 'No se pudo cargar la evaluación. Intenta de nuevo.',
         readOnlyNotice: 'Esta evaluación ya está completada.',
         placeholder: 'Escribe tu respuesta...',
+        completedPassed: '¡Muy bien! Completaste esta evaluación.',
+        completedNotPassed: 'Terminaste esta evaluación. ¡Gracias por tu esfuerzo!',
+        completedReteach: 'Repasemos el material juntos. Tómate tu tiempo para volver a ver la lección.',
+        completedCancelled: 'Sin problema. Puedes intentar esta evaluación cuando quieras.',
     },
     en: {
         startButton: 'Start assessment',
@@ -118,6 +136,10 @@ export const ASSESSMENT_STRINGS: Record<SupportedLanguage, AssessmentStrings> = 
         error: 'Could not load assessment. Please try again.',
         readOnlyNotice: 'This assessment is already complete.',
         placeholder: 'Type your response...',
+        completedPassed: 'Nicely done. You completed this assessment.',
+        completedNotPassed: "You've completed this assessment. Thank you for your effort!",
+        completedReteach: "Let's review the material together. Take your time going through the lesson again.",
+        completedCancelled: "That's okay! You can try this assessment again whenever you're ready.",
     },
     pt: {
         startButton: 'Iniciar avaliação',
@@ -130,6 +152,72 @@ export const ASSESSMENT_STRINGS: Record<SupportedLanguage, AssessmentStrings> = 
         error: 'Não foi possível carregar a avaliação. Tente novamente.',
         readOnlyNotice: 'Esta avaliação já foi concluída.',
         placeholder: 'Digite sua resposta...',
+        completedPassed: 'Muito bem! Você concluiu esta avaliação.',
+        completedNotPassed: 'Você concluiu esta avaliação. Obrigado pelo seu esforço!',
+        completedReteach: 'Vamos revisar o material juntos. Reserve um tempo para rever a lição.',
+        completedCancelled: 'Sem problema. Você pode tentar esta avaliação quando quiser.',
+    },
+};
+
+// ─── Progress Panel (web chat sidebar) ───────────────────────────────
+// Scaffolding only. Every value shown through these labels — course name,
+// lesson count, project title, milestone names — comes from the learner's own
+// collection and its declared outcome, never from here.
+
+interface ProgressStrings {
+    heading: string;
+    lessonOf: (current: number, total: number) => string;
+    partOf: (part: number, total: number) => string;
+    gateHeading: string;
+    gateNotReached: string;
+    gatePassed: string;
+    gateNotPassed: string;
+    projectHeading: string;
+    milestoneDone: string;
+    milestonePending: string;
+    /** Accessible name for the narrow-viewport toggle. */
+    toggleLabel: string;
+}
+
+export const PROGRESS_STRINGS: Record<SupportedLanguage, ProgressStrings> = {
+    es: {
+        heading: 'Tu avance',
+        lessonOf: (c, t) => `Lección ${c} de ${t}`,
+        partOf: (p, t) => `Parte ${p} de ${t}`,
+        gateHeading: 'Evaluación',
+        gateNotReached: 'Aún no la alcanzas',
+        gatePassed: 'Aprobada',
+        gateNotPassed: 'Sin aprobar',
+        projectHeading: 'Tu proyecto',
+        milestoneDone: 'hecho',
+        milestonePending: 'pendiente',
+        toggleLabel: 'Mostrar u ocultar tu avance',
+    },
+    en: {
+        heading: 'Your progress',
+        lessonOf: (c, t) => `Lesson ${c} of ${t}`,
+        partOf: (p, t) => `Part ${p} of ${t}`,
+        gateHeading: 'Assessment',
+        gateNotReached: 'Not yet reached',
+        gatePassed: 'Passed',
+        gateNotPassed: 'Not passed',
+        projectHeading: 'Your project',
+        milestoneDone: 'done',
+        milestonePending: 'pending',
+        toggleLabel: 'Show or hide your progress',
+    },
+    pt: {
+        heading: 'Seu progresso',
+        lessonOf: (c, t) => `Lição ${c} de ${t}`,
+        partOf: (p, t) => `Parte ${p} de ${t}`,
+        gateHeading: 'Avaliação',
+        gateNotReached: 'Ainda não alcançada',
+        gatePassed: 'Aprovada',
+        gateNotPassed: 'Não aprovada',
+        projectHeading: 'Seu projeto',
+        milestoneDone: 'feito',
+        milestonePending: 'pendente',
+        toggleLabel: 'Mostrar ou ocultar seu progresso',
     },
 };
 
@@ -146,9 +234,6 @@ export const AI_ERROR_FALLBACK: Record<SupportedLanguage, string> = {
 
 interface LessonMessageStrings {
     lessonHeader: (num: number, total: number) => string;
-    lessonComplete: (num: number) => string;
-    nextLesson: (num: number) => string;
-    courseComplete: string;
     /** Fallback welcome for web socios without course config. */
     welcomeWithName: (name: string) => string;
     /** Fallback welcome for web socios without course config. */
@@ -162,10 +247,7 @@ interface LessonMessageStrings {
 export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = {
     es: {
         lessonHeader: (num, total) => `📚 Lección ${num} de ${total}`,
-        lessonComplete: (num) => `✅ ¡Lección ${num} completada!`,
-        nextLesson: (num) => `Cuando estés listo(a), escribe "siguiente" para comenzar la Lección ${num}.`,
-        courseComplete: '¡Felicitaciones por completar todas las lecciones!',
-        welcomeWithName: (name) => `¡Hola ${name}! 👋 Estoy aquí para ayudarte a aprender con lecciones prácticas.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
+                    welcomeWithName: (name) => `¡Hola ${name}! 👋 Estoy aquí para ayudarte a aprender con lecciones prácticas.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
         welcomeAnonymous: `¡Hola! 👋 Estoy aquí para ayudarte a aprender con lecciones prácticas.\n\n📚 Cuando estés listo(a), escribe "comenzar" para iniciar tu primera lección.`,
         welcomeStart: 'comenzar',
         escalationConfirmation: '📋 He notificado a tu mentor humano. Te contactará lo más pronto posible. Mientras tanto, puedo seguir ayudándote con cualquier pregunta.',
@@ -173,10 +255,7 @@ export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = 
     },
     en: {
         lessonHeader: (num, total) => `📚 Lesson ${num} of ${total}`,
-        lessonComplete: (num) => `✅ Lesson ${num} complete!`,
-        nextLesson: (num) => `When you're ready, type "next" to start Lesson ${num}.`,
-        courseComplete: 'Congratulations on completing all the lessons!',
-        welcomeWithName: (name) => `Hi ${name}! 👋 I'm here to help you learn with practical lessons.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
+                    welcomeWithName: (name) => `Hi ${name}! 👋 I'm here to help you learn with practical lessons.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
         welcomeAnonymous: `Hi! 👋 I'm here to help you learn with practical lessons.\n\n📚 When you're ready, type "start" to begin your first lesson.`,
         welcomeStart: 'start',
         escalationConfirmation: "📋 I've notified your human mentor. They will contact you as soon as possible. In the meantime, I'm here if you have any questions.",
@@ -184,10 +263,7 @@ export const LESSON_MESSAGES: Record<SupportedLanguage, LessonMessageStrings> = 
     },
     pt: {
         lessonHeader: (num, total) => `📚 Lição ${num} de ${total}`,
-        lessonComplete: (num) => `✅ Lição ${num} concluída!`,
-        nextLesson: (num) => `Quando estiver pronto(a), digite "próximo" para começar a Lição ${num}.`,
-        courseComplete: 'Parabéns por completar todas as lições!',
-        welcomeWithName: (name) => `Olá ${name}! 👋 Estou aqui para ajudá-lo a aprender com lições práticas.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
+                    welcomeWithName: (name) => `Olá ${name}! 👋 Estou aqui para ajudá-lo a aprender com lições práticas.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
         welcomeAnonymous: `Olá! 👋 Estou aqui para ajudá-lo a aprender com lições práticas.\n\n📚 Quando estiver pronto(a), digite "começar" para iniciar sua primeira lição.`,
         welcomeStart: 'começar',
         escalationConfirmation: '📋 Notifiquei seu mentor humano. Ele entrará em contato o mais breve possível. Enquanto isso, estou aqui se você tiver dúvidas.',

@@ -20,9 +20,15 @@
 import { repo } from '@/lib/repo';
 import type { SocioFlag } from '@/lib/repo/types';
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { RETEACH_THRESHOLD } from './constants';
 import { loadActivePrompt, type PromptVersionSink } from './loadPrompt';
 import type { ConfigScope } from './scope';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
+import { resolveCourseProject, resolveCourseMilestones } from './courseOutcome';
+import { createGateSessionLoader, type GateSessionLoader } from './gateSessions';
+import { canDeliverGatedAssessment } from '@/lib/ai/assessment/channelSupport';
+
+
 
 export type Stance = 'tutor' | 'coach';
 
@@ -31,10 +37,14 @@ export type Stance = 'tutor' | 'coach';
  * compared across turns without re-deriving the decision from raw state.
  */
 export type StanceReason =
-  | 'distress'          // rule (a): an active RED flag outranks everything
-  | 'tutor_detour'      // a bounded return to tutor from resting coach
-  | 'gate_not_passed'   // rule (b): no demonstrated knowledge yet
-  | 'gate_passed';      // rule (c): resting state once the gate is cleared
+  | 'distress'            // rule (a): an active RED flag outranks everything
+  | 'tutor_detour'        // a bounded return to tutor from resting coach
+  | 'gate_not_passed'     // gated lesson, bar not yet cleared
+  | 'gate_passed'         // gated lesson, bar cleared
+  // ── Ungated lessons only. See the evidence ladder in `resolveStance`. ──
+  | 'milestone_reached'   // reported doing part of the course project
+  | 'lesson_taught_out'   // the lesson has no teaching left to deliver
+  | 'awaiting_evidence';  // ungated, mid-lesson, nothing reported yet
 
 export interface StanceDecision {
   stance: Stance;
@@ -106,7 +116,11 @@ async function persistDetour(
 }
 
 /**
- * Has the learner passed the gate(s) on their current lesson?
+ * What the current lesson's gates say about this learner.
+ *
+ *   `no_gates`   the lesson declares no teach-back, so gates cannot answer
+ *   `passed`     every gate has a session with `passedAt` set
+ *   `not_passed` at least one gate is outstanding
  *
  * `passedAt !== null` is the pass fact — deliberately not `status`, because a
  * session can be `completed` with `passedAt` null, which is a fail. The same
@@ -115,33 +129,86 @@ async function persistDetour(
  * treats any completed session as clearing the gate, because for *progression*
  * a failed-but-finished attempt should not block forever.
  *
- * A lesson with no gates returns false. That is deliberate rather than an
- * oversight: with no gate there is no evidence the learner knows the material,
- * and tutor is the honest default. A course that wants its learners coached
- * declares a teach-back gate. Note this means curricula imported without gates
- * (the legacy MI collection among them) stay tutor unless distress flips them.
+ * `no_gates` is kept distinct from `not_passed` because they are different
+ * facts. "This learner has not passed the bar" and "this course set no bar"
+ * used to collapse into the same `false`, which is what made coach unreachable
+ * for every curriculum imported without gates — the legacy MI collection among
+ * them. See `resolveStance` for what happens in the `no_gates` case now.
+ */
+export type GateEvidence = 'no_gates' | 'passed' | 'not_passed';
+
+export async function readGateEvidence(
+  socioId: string,
+  collectionKey: string,
+  lessonNumber: number,
+  loadGateSessions: GateSessionLoader = createGateSessionLoader(socioId),
+  /**
+   * The learner's channel. A gate that cannot be delivered here reads as
+   * `no_gates`, matching what the router's progression check does with it.
+   * Omitted by callers with no channel, which keeps the pre-existing behaviour.
+   */
+  channelType?: string,
+): Promise<GateEvidence> {
+  if (!hasLessonData(collectionKey, lessonNumber)) return 'no_gates';
+
+  const lesson = getLessonData(collectionKey, lessonNumber);
+  if (lesson.gates.length === 0) return 'no_gates';
+
+  // The router skips these gates for progression; stance must agree. Reporting
+  // `not_passed` for a gate the learner can never attempt would pin them to
+  // tutor for the entire course — the exact defect the ungated ladder exists to
+  // prevent, arriving through the side door.
+  if (!canDeliverGatedAssessment(channelType)) return 'no_gates';
+
+  // Every gate must be passed, but they are independent — asking about gate two
+  // does not depend on gate one's answer, so they go out together.
+  const results = await Promise.all(
+    lesson.gates.map(async (gate) => {
+      const sessions = await loadGateSessions(lesson.lessonKey, gate.blockId);
+      return sessions.some((s) => s.passedAt !== null);
+    }),
+  );
+
+  return results.every(Boolean) ? 'passed' : 'not_passed';
+}
+
+/**
+ * Has the learner passed the gate(s) on their current lesson?
+ *
+ * A lesson with no gates returns false: nothing was passed, because there was
+ * nothing to pass. Callers deciding a *stance* want `readGateEvidence` instead,
+ * which does not collapse "no bar" into "did not clear the bar".
  */
 export async function hasPassedCurrentLessonGates(
   socioId: string,
   collectionKey: string,
   lessonNumber: number,
+  /**
+   * The turn's shared gate-session loader. Supplied by the router so this and
+   * `checkGatePosition` fetch the same rows once; standalone callers (tests,
+   * anything outside the conversational path) get their own.
+   */
+  loadGateSessions: GateSessionLoader = createGateSessionLoader(socioId),
 ): Promise<boolean> {
+  const evidence = await readGateEvidence(socioId, collectionKey, lessonNumber, loadGateSessions);
+  return evidence === 'passed';
+}
+
+/**
+ * Has the lesson run out of things to teach this learner?
+ *
+ * `currentMessageIndex >= messages.length` means every teaching message in the
+ * lesson has been delivered and the model has not emitted `[LESSON_COMPLETE]`.
+ * This is not an inferred state — it is the exact condition under which the
+ * router itself stops returning LESSON_DELIVERY and falls through to
+ * FREEFORM_QUESTION, which is to say the state where the learner has the whole
+ * lesson and is working with it.
+ */
+export function isLessonTaughtOut(collectionKey: string, lessonNumber: number, currentMessageIndex: number): boolean {
   if (!hasLessonData(collectionKey, lessonNumber)) return false;
-
   const lesson = getLessonData(collectionKey, lessonNumber);
-  if (lesson.gates.length === 0) return false;
-
-  for (const gate of lesson.gates) {
-    const sessions = await repo.getAssessmentSessionsForSocioLesson?.(
-      socioId,
-      lesson.lessonKey,
-      gate.blockId,
-    );
-    const passed = sessions?.some((s) => s.passedAt !== null) ?? false;
-    if (!passed) return false;
-  }
-
-  return true;
+  if (lesson.messages.length === 0) return false;
+  return currentMessageIndex >= lesson.messages.length;
 }
 
 /** An active RED flag is the distress signal. YELLOW is not a crisis. */
@@ -161,14 +228,84 @@ export interface ResolveStanceParams {
    * signal — see below for why it is not a fresh dimension threshold.
    */
   reteachThisTurn: boolean;
+  /**
+   * The turn's shared gate-session loader, threaded from the router so the
+   * pass check reuses the rows the progression check already fetched.
+   */
+  loadGateSessions?: GateSessionLoader;
+  /**
+   * Where the learner sits inside the current lesson's message list. Feeds the
+   * taught-out rung of the ungated ladder.
+   */
+  currentMessageIndex: number;
+  /**
+   * The understanding score from the most recently completed lesson, or null if
+   * none was ever captured. A score at or below `RETEACH_THRESHOLD` vetoes the
+   * taught-out rung; null does not (see `resolveStance`).
+   */
+  weeklyUnderstanding: number | null;
+  /**
+   * Milestone keys this learner has reached on this course. Lazy and memoized
+   * by the router, because on a gated lesson the decision never needs it and on
+   * a course that declares no milestones there is nothing to read.
+   */
+  loadReachedMilestones?: () => Promise<ReadonlySet<string>>;
+  /**
+   * The learner's delivery channel. Gates this channel cannot deliver read as
+   * absent rather than failed, so the ungated ladder applies.
+   */
+  channelType?: string;
 }
 
 /**
  * Chooses the stance for this turn, in precedence order.
  *
  *   a. active RED distress flag → coach   (never tutor someone in crisis)
- *   b. gate not passed          → tutor
- *   c. gate passed              → coach
+ *   b. the current lesson declares gates → the gates decide, and nothing else
+ *   c. the current lesson declares no gates → the evidence ladder below
+ *
+ * ── Why (b) and (c) are separate ──────────────────────────────────────────
+ * Until 2026-08-09 both collapsed into "gate passed?", and a lesson with no
+ * gates answered no. The reasoning was that with no gate there is no evidence
+ * the learner knows the material, so tutor is the honest default — a course
+ * that wants its learners coached should declare a teach-back.
+ *
+ * That is right about a *gated* course and wrong about an ungated one. It made
+ * coach unreachable for every curriculum imported without gates, the legacy MI
+ * collection among them, so those learners were tutored through the entire
+ * course and the coach half of the system never ran for them. "This course set
+ * no bar" is not the same fact as "this learner did not clear the bar", and
+ * treating them the same disabled a feature rather than defaulting it safely.
+ *
+ * So gates keep their authority exactly where a course declared them: on a
+ * gated lesson a failed teach-back still means tutor, and no amount of weaker
+ * evidence overrides it. The ladder below runs only when there is no gate to
+ * override.
+ *
+ * ── The ungated evidence ladder ───────────────────────────────────────────
+ *   c1. a milestone reached on this course → coach
+ *       The strongest signal in the system that someone has DONE part of the
+ *       task rather than been taught it. Written from the learner's own report
+ *       via `[MILESTONE:key]`, validated against the course's declared keys.
+ *
+ *   c2. the lesson has been taught out → coach
+ *       Every teaching message delivered, no `[LESSON_COMPLETE]` yet. This is
+ *       the precise state in which the router stops delivering lesson content
+ *       and falls through to FREEFORM_QUESTION: the learner holds the whole
+ *       lesson and is working with it. Tutor has nothing left to teach here,
+ *       and re-explaining material already delivered is the failure mode coach
+ *       stance exists to prevent.
+ *
+ *       A recorded understanding at or below RETEACH_THRESHOLD vetoes this
+ *       rung — they finished the material and told us they did not get it.
+ *       A *null* score does not veto: most lessons complete without a parsed
+ *       score, so treating absence as failure would leave the ladder as
+ *       unreachable as the gate rule it replaces. Absence is no objection, not
+ *       an objection. If they truly did not follow it, RETEACH fires and opens
+ *       a tutor detour, which is the mechanism already built for exactly this.
+ *
+ *   c3. otherwise → tutor
+ *       Ungated and mid-lesson. There is still teaching to deliver.
  *
  * ── Hysteresis ────────────────────────────────────────────────────────────
  * Coach is the resting state once the gate is passed. A tutor detour from
@@ -191,6 +328,10 @@ export interface ResolveStanceParams {
  *
  * Writes only happen while a detour is open or being opened. Steady-state
  * coach and pre-gate tutor cost no writes at all.
+ *
+ * The detour applies to every route into coach, not only the gate route — a
+ * learner coached because they reached a milestone can still need a bounded
+ * return to tutor when they stumble.
  */
 export async function resolveStance(params: ResolveStanceParams): Promise<StanceDecision> {
   const {
@@ -200,6 +341,11 @@ export async function resolveStance(params: ResolveStanceParams): Promise<Stance
     currentLessonNumber,
     activeFlags,
     reteachThisTurn,
+    loadGateSessions,
+    currentMessageIndex,
+    weeklyUnderstanding,
+    loadReachedMilestones,
+    channelType,
   } = params;
 
   const detour = readStanceDetour(promptOverrides);
@@ -210,20 +356,25 @@ export async function resolveStance(params: ResolveStanceParams): Promise<Stance
     return { stance: 'coach', reason: 'distress' };
   }
 
-  // ── (b) No demonstrated knowledge yet → tutor is the base state ─────────
-  const gatePassed = await hasPassedCurrentLessonGates(
+  // ── (b)/(c) Has this learner earned coach, and on what evidence? ────────
+  const evidence = await readCoachEvidence({
     socioId,
     collectionKey,
     currentLessonNumber,
-  );
+    currentMessageIndex,
+    weeklyUnderstanding,
+    loadGateSessions: loadGateSessions ?? createGateSessionLoader(socioId),
+    loadReachedMilestones,
+    channelType,
+  });
 
-  if (!gatePassed) {
+  if (!evidence.coach) {
     // Tutor is already the answer; a detour would be redundant bookkeeping.
     if (detour) await persistDetour(socioId, promptOverrides, null);
-    return { stance: 'tutor', reason: 'gate_not_passed' };
+    return { stance: 'tutor', reason: evidence.reason };
   }
 
-  // ── (c) Gate passed: coach rests here, tutor visits ─────────────────────
+  // ── Coach earned: coach rests here, tutor visits ────────────────────────
   if (detour && detour.lessonNumber === currentLessonNumber) {
     const turnsRemaining = detour.turnsRemaining - 1;
     await persistDetour(
@@ -244,7 +395,61 @@ export async function resolveStance(params: ResolveStanceParams): Promise<Stance
 
   // A stale detour from a previous lesson, if any, ends here.
   if (detour) await persistDetour(socioId, promptOverrides, null);
-  return { stance: 'coach', reason: 'gate_passed' };
+  return { stance: 'coach', reason: evidence.reason };
+}
+
+/**
+ * Rules (b) and (c): does this learner get coach, and on what evidence?
+ *
+ * Split out so the ladder can be read as a ladder, and so the detour handling
+ * in `resolveStance` stays about hysteresis rather than about evidence.
+ */
+async function readCoachEvidence(params: {
+  socioId: string;
+  collectionKey: string;
+  currentLessonNumber: number;
+  currentMessageIndex: number;
+  weeklyUnderstanding: number | null;
+  loadGateSessions: GateSessionLoader;
+  loadReachedMilestones?: () => Promise<ReadonlySet<string>>;
+  channelType?: string;
+}): Promise<{ coach: boolean; reason: StanceReason }> {
+  const {
+    socioId, collectionKey, currentLessonNumber, currentMessageIndex,
+    weeklyUnderstanding, loadGateSessions, loadReachedMilestones, channelType,
+  } = params;
+
+  // ── (b) A declared gate is the authority, full stop ─────────────────────
+  const gate = await readGateEvidence(
+    socioId, collectionKey, currentLessonNumber, loadGateSessions, channelType,
+  );
+  if (gate === 'passed') return { coach: true, reason: 'gate_passed' };
+  if (gate === 'not_passed') return { coach: false, reason: 'gate_not_passed' };
+
+  // ── (c1) Reported doing part of the project ─────────────────────────────
+  if (loadReachedMilestones) {
+    let reached: ReadonlySet<string> = new Set();
+    try {
+      reached = await loadReachedMilestones();
+    } catch (error) {
+      // Losing milestone progress for a turn costs this rung, not the reply.
+      // The taught-out rung below still applies.
+      console.error(`[Stance] Failed to read milestone progress for ${socioId}:`, error);
+    }
+    if (reached.size > 0) return { coach: true, reason: 'milestone_reached' };
+  }
+
+  // ── (c2) Nothing left to teach in this lesson ───────────────────────────
+  if (isLessonTaughtOut(collectionKey, currentLessonNumber, currentMessageIndex)) {
+    // A recorded score at or below the reteach bar vetoes; a null score does
+    // not. See the ladder note on `resolveStance` for why absence is not a veto.
+    const understandingObjects =
+      weeklyUnderstanding !== null && weeklyUnderstanding <= RETEACH_THRESHOLD;
+    if (!understandingObjects) return { coach: true, reason: 'lesson_taught_out' };
+  }
+
+  // ── (c3) Ungated and still mid-lesson ───────────────────────────────────
+  return { coach: false, reason: 'awaiting_evidence' };
 }
 
 // ─── Stance framing for Layer 3 ─────────────────────────────────────────────
@@ -305,21 +510,45 @@ AVANCE, não ensinar de novo.
 - Reexplique apenas se ele pedir, ou se claramente esqueceu algo pontual.`,
 };
 
-const TASK_BLOCK_LABELS: Record<SupportedLanguage, { header: string; exercise: string; commitment: string }> = {
+const TASK_BLOCK_LABELS: Record<
+  SupportedLanguage,
+  {
+    header: string; exercise: string; commitment: string; project: string;
+    deliverables: string; progress: string; done: string; pending: string; marker: string;
+  }
+> = {
   es: {
     header: 'LO QUE EL PARTICIPANTE ESTÁ TRATANDO DE HACER',
     exercise: 'Ejercicio de esta lección',
     commitment: 'Compromiso',
+    project: 'Proyecto del curso',
+    deliverables: 'Entregables',
+    progress: 'Avance del proyecto',
+    done: 'hecho',
+    pending: 'pendiente',
+    marker: 'Cuando el participante REPORTE haber completado un hito pendiente, agrega [MILESTONE:clave] al final de tu respuesta, usando la clave exacta de la lista. Solo cuando lo reporte él, nunca por tu cuenta.',
   },
   en: {
     header: 'WHAT THE PARTICIPANT IS TRYING TO DO',
     exercise: "This lesson's exercise",
     commitment: 'Commitment',
+    project: 'Course project',
+    deliverables: 'Deliverables',
+    progress: 'Project progress',
+    done: 'done',
+    pending: 'pending',
+    marker: 'When the participant REPORTS completing a pending milestone, add [MILESTONE:key] at the end of your reply, using the exact key from the list. Only when they report it, never on your own.',
   },
   pt: {
     header: 'O QUE O PARTICIPANTE ESTÁ TENTANDO FAZER',
     exercise: 'Exercício desta lição',
     commitment: 'Compromisso',
+    project: 'Projeto do curso',
+    deliverables: 'Entregáveis',
+    progress: 'Progresso do projeto',
+    done: 'feito',
+    pending: 'pendente',
+    marker: 'Quando o participante RELATAR ter concluído um marco pendente, adicione [MILESTONE:chave] ao final da sua resposta, usando a chave exata da lista. Somente quando ele relatar, nunca por conta própria.',
   },
 };
 
@@ -331,33 +560,70 @@ const TASK_BLOCK_LABELS: Record<SupportedLanguage, { header: string; exercise: s
  * `lesson.commitment`, which are real per-lesson fields carried through
  * `db-lesson-service`.
  *
- * ── Known constraint, not an oversight ──────────────────────────────────────
- * `outcome.project` — the completable project a whole course builds toward —
- * belongs in this block and is NOT here, because it does not survive import.
- * `import-journey-package.ts` validates `pkg.outcome` (project, milestones,
- * mentorResources), pushes a warning, and drops it: there are no Outcome or
- * Milestone tables. So coach stance knows this lesson's task and not the
- * overall goal. Closing that needs the outcome migration, which ST2 excludes.
- * If a coach-vs-tutor prompt diff ever reads thin, this absence is the first
- * thing to check.
+ * Two scopes, deliberately both:
+ *
+ *   `outcome.project`   the completable thing the whole course builds toward
+ *   `lesson.exercise` / `lesson.commitment`   this lesson's slice of it
+ *
+ * The project was unreachable until 2026-08-08 — the importer validated it and
+ * dropped it for want of a table — so coach stance knew the immediate task and
+ * not the goal it served. It now rides in `ProgramVersion.config.outcome`.
+ *
+ * Still absent, and it is the next real gap: nothing records that a participant
+ * *reached* a milestone. `outcome.milestones` is imported and read by nothing,
+ * so the AI knows what the project is and cannot know how far along they are.
+ * That needs per-participant state, which needs tables.
  */
-function buildTaskFactsBlock(
+async function buildTaskFactsBlock(
   collectionKey: string,
   lessonNumber: number,
   language: SupportedLanguage,
-): string | null {
-  if (!hasLessonData(collectionKey, lessonNumber)) return null;
-
-  const lesson = getLessonData(collectionKey, lessonNumber);
-  const exercise = lesson.exercise?.trim();
-  const commitment = lesson.commitment?.trim();
-  if (!exercise && !commitment) return null;
-
+  scope?: ConfigScope,
+  reachedMilestoneKeys?: ReadonlySet<string>,
+): Promise<string | null> {
   const l = TASK_BLOCK_LABELS[language] ?? TASK_BLOCK_LABELS['en'];
-  const lines = [`${l.header}:`];
-  if (exercise) lines.push(`- ${l.exercise}: ${exercise}`);
-  if (commitment) lines.push(`- ${l.commitment}: ${commitment}`);
-  return lines.join('\n');
+  const lines: string[] = [];
+
+  const project = scope ? await resolveCourseProject(scope) : null;
+  if (project) {
+    const desc = project.description ? ` — ${project.description}` : '';
+    lines.push(`- ${l.project}: ${project.title}${desc}`);
+    if (project.deliverables.length > 0) {
+      const items = project.deliverables
+        .map((d) => (d.description ? `${d.name} (${d.description})` : d.name))
+        .join('; ');
+      lines.push(`- ${l.deliverables}: ${items}`);
+    }
+  }
+
+  if (hasLessonData(collectionKey, lessonNumber)) {
+    const lesson = getLessonData(collectionKey, lessonNumber);
+    const exercise = lesson.exercise?.trim();
+    const commitment = lesson.commitment?.trim();
+    if (exercise) lines.push(`- ${l.exercise}: ${exercise}`);
+    if (commitment) lines.push(`- ${l.commitment}: ${commitment}`);
+  }
+
+  // Milestone progress — how far along they actually are, which is the thing
+  // the AI could not know before `milestone_progress` existed. Rendered with
+  // the key visible so the marker instruction below has something exact to
+  // quote; a paraphrased key would not survive validation in handler.ts.
+  const milestones = scope ? await resolveCourseMilestones(scope) : [];
+  if (milestones.length > 0) {
+    const reached = reachedMilestoneKeys ?? new Set<string>();
+    const rendered = milestones
+      .map((m) => `${m.name} [${m.key}] — ${reached.has(m.key) ? l.done : l.pending}`)
+      .join('; ');
+    lines.push(`- ${l.progress}: ${rendered}`);
+    // Only ask for the marker when something is still outstanding. Inviting it
+    // with everything done is an invitation to emit a duplicate.
+    if (milestones.some((m) => !reached.has(m.key))) {
+      lines.push(`- ${l.marker}`);
+    }
+  }
+
+  if (lines.length === 0) return null;
+  return [`${l.header}:`, ...lines].join('\n');
 }
 
 /**
@@ -377,9 +643,13 @@ export async function buildStanceBlock(params: {
   language: SupportedLanguage;
   sink?: PromptVersionSink;
   scope?: ConfigScope;
+  /** Milestone keys this participant has already reached, for coach stance. */
+  reachedMilestoneKeys?: ReadonlySet<string>;
 }): Promise<string> {
-  const { stance, participantNoun, collectionKey, currentLessonNumber, language, sink, scope } =
-    params;
+  const {
+    stance, participantNoun, collectionKey, currentLessonNumber, language, sink, scope,
+    reachedMilestoneKeys,
+  } = params;
 
   const table = stance === 'coach' ? COACH_FRAMING : TUTOR_FRAMING;
   const defaultFraming = (table[language] ?? table['en'])(participantNoun);
@@ -396,6 +666,8 @@ export async function buildStanceBlock(params: {
 
   if (stance !== 'coach') return framing;
 
-  const taskFacts = buildTaskFactsBlock(collectionKey, currentLessonNumber, language);
+  const taskFacts = await buildTaskFactsBlock(
+    collectionKey, currentLessonNumber, language, scope, reachedMilestoneKeys,
+  );
   return taskFacts ? `${framing}\n\n${taskFacts}` : framing;
 }

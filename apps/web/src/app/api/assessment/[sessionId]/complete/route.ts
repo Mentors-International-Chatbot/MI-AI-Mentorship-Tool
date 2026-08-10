@@ -19,6 +19,9 @@ import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
 import { completeAssessment, type CompletionConfig } from '@/lib/ai/assessment/completeAssessment';
 import { getSessionConfig, AssessmentConfigError } from '@/lib/ai/assessment/createAssessmentSession';
+import { runGateResolvedFollowUp } from '@/lib/messaging/gateFollowUp';
+import { repo } from '@/lib/repo';
+import { ASSESSMENT_STRINGS, DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 
 interface CompleteRequestBody {
@@ -119,21 +122,48 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     });
 
     // ─── Store completion message ───────────────────────────────────────────
+    // Closes the ASSESSMENT, in the learner's language. It deliberately does
+    // not congratulate or point anywhere: the AI's follow-up turn below owns
+    // acknowledging the result and moving them on, and two voices doing that
+    // job is the thing this whole change is removing.
+    const socioLanguage = ((await repo.getSocioById(socioId))?.language
+      || DEFAULT_LANGUAGE) as SupportedLanguage;
+    const aStrings = ASSESSMENT_STRINGS[socioLanguage] ?? ASSESSMENT_STRINGS['en'];
+
     let completionMessage: string;
     if (isCancellation) {
-      completionMessage = "That's okay! You can try this assessment again whenever you're ready.";
+      completionMessage = aStrings.completedCancelled;
     } else if (didPass) {
-      completionMessage = "Congratulations! You've successfully completed this assessment.";
+      completionMessage = aStrings.completedPassed;
     } else if (completionResult.reteachTriggered) {
-      completionMessage = "Let's review the material together. Take your time going through the lesson again.";
+      completionMessage = aStrings.completedReteach;
     } else {
-      completionMessage = "You've completed this assessment. Thank you for your effort!";
+      completionMessage = aStrings.completedNotPassed;
     }
 
     await tenantPrismaRepo.addAssessmentMessage(ctx, sessionId, {
       role: 'assistant',
       content: completionMessage,
     });
+
+    // ─── Let the AI speak first ─────────────────────────────────────────────
+    // Awaited deliberately. It costs this request an LLM call, which the
+    // learner feels as a slower button on a click they just made — and buys
+    // them a chat that is already answering when the redirect lands, instead of
+    // silence they have to break themselves. A marker row plus poll-triggered
+    // generation would move the latency out of sight at the price of being a
+    // job queue with extra steps.
+    //
+    // Cancellations get nothing: there is no result to speak about.
+    if (!isCancellation) {
+      const resolvedAt = completionResult.session.completedAt ?? new Date();
+      await runGateResolvedFollowUp({
+        socioId,
+        sessionId,
+        passed: didPass,
+        resolvedAt,
+      });
+    }
 
     // Note: Blocking state is derived per-turn from session status + configSnapshot.blocking.
     // No flag cleanup needed - the router will see the completed/passed session and allow progression.

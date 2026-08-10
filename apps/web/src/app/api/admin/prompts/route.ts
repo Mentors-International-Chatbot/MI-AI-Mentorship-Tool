@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { requireCourseConfigurer } from '@/lib/auth/adminGuard';
 import { canWriteScope, writableScopesFor } from '@/lib/auth/courseScope';
 import { PROMPT_CATEGORY_KEYS, getPromptCategoryMeta, validateCategoryScope } from '@/lib/ai/prompts/categories';
+import { invalidateActivePromptCache } from '@/lib/ai/prompts/activePromptCache';
 import type { SessionPayload } from '@/lib/auth/session';
 
 /**
@@ -178,6 +179,10 @@ export async function PUT(request: NextRequest) {
   }
 
   const updated = await prisma.systemPrompt.update({ where: { id }, data: { active } });
+
+  // Prompt reads are memoized for 60s (see activePromptCache.ts). Busting here
+  // makes the change immediate on this instance; the TTL covers the others.
+  invalidateActivePromptCache();
 
   await prisma.auditLog.create({
     data: {

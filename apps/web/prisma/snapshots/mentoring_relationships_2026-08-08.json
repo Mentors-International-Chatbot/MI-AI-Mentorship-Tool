@@ -1,0 +1,92 @@
+[
+  {
+    "id": "99884528-7363-463e-af53-2d97317c9c34",
+    "mentorId": "dafc9cd4-a918-419b-ba55-50d41a26bc67",
+    "participantId": "929e493c-b885-4cef-a3ca-458fed381a80",
+    "role": "primary",
+    "activeFrom": "2026-04-13T18:32:45.546Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:26.713Z"
+  },
+  {
+    "id": "c542420a-c3cd-4e9f-bb63-5b2c1e22c5bc",
+    "mentorId": "2baef468-f481-4e6a-9bb3-c0b35adc6ad8",
+    "participantId": "c7ca312e-9dd8-4ce1-86c4-4b520910db48",
+    "role": "primary",
+    "activeFrom": "2026-04-06T18:05:01.877Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:27.370Z"
+  },
+  {
+    "id": "720ae54e-43c8-444c-8663-be37586e5298",
+    "mentorId": "1c215e12-93cf-4412-8d50-de1e67e59f6d",
+    "participantId": "134a617b-70cd-4f96-a3f8-cd72ae361300",
+    "role": "primary",
+    "activeFrom": "2026-04-06T18:05:04.024Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:27.735Z"
+  },
+  {
+    "id": "b7973040-5c75-4bb9-9e24-f70465c1bf43",
+    "mentorId": "1c215e12-93cf-4412-8d50-de1e67e59f6d",
+    "participantId": "10719557-2e18-435f-b715-392a5a7e556f",
+    "role": "primary",
+    "activeFrom": "2026-07-10T21:22:42.683Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:27.947Z"
+  },
+  {
+    "id": "846c5e5a-fb19-4334-8c76-83568babeb2d",
+    "mentorId": "baa1f314-e15f-4675-b0c9-ba24224d23a2",
+    "participantId": "a74afb43-bc21-457d-9985-f199074b5456",
+    "role": "primary",
+    "activeFrom": "2026-04-02T17:08:58.133Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:28.457Z"
+  },
+  {
+    "id": "1c582b55-77b6-46c6-a967-38a2799f073d",
+    "mentorId": "baa1f314-e15f-4675-b0c9-ba24224d23a2",
+    "participantId": "6659cfac-707c-47a2-9ea5-8133212a5150",
+    "role": "primary",
+    "activeFrom": "2026-04-02T17:08:43.810Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:28.672Z"
+  },
+  {
+    "id": "99e89414-4b16-4826-a3f0-98ebd2d8db03",
+    "mentorId": "baa1f314-e15f-4675-b0c9-ba24224d23a2",
+    "participantId": "9daa0ebb-4573-4ba7-98a2-30514ef16796",
+    "role": "primary",
+    "activeFrom": "2026-04-06T18:10:31.015Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:28.892Z"
+  },
+  {
+    "id": "2a8146f8-bd1a-4954-b5f3-133b4e47d4dc",
+    "mentorId": "baa1f314-e15f-4675-b0c9-ba24224d23a2",
+    "participantId": "8c03ecfb-3128-48dd-86bd-fc4d09317b45",
+    "role": "primary",
+    "activeFrom": "2026-04-13T18:30:48.253Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:29.112Z"
+  },
+  {
+    "id": "74f7da39-d916-4fac-b901-93cd0f7e2dd6",
+    "mentorId": "baa1f314-e15f-4675-b0c9-ba24224d23a2",
+    "participantId": "17607203-5d62-4f58-976c-7d79d0618d87",
+    "role": "primary",
+    "activeFrom": "2026-04-03T06:36:17.526Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:29.404Z"
+  },
+  {
+    "id": "1fd62d75-702c-4968-8077-0284e5b1bd8c",
+    "mentorId": "baa1f314-e15f-4675-b0c9-ba24224d23a2",
+    "participantId": "eabd1fe3-3a0a-4a10-80f8-322f2f21af0d",
+    "role": "primary",
+    "activeFrom": "2026-04-13T18:31:02.058Z",
+    "activeUntil": null,
+    "createdAt": "2026-07-16T19:01:29.620Z"
+  }
+]

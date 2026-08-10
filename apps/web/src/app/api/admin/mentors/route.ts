@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
 import { requireAdmin } from '@/lib/auth/adminGuard';
 import { activeFlagWhere } from '@/lib/flags/active';
+import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
+import { anchorMentorProfile } from '@/lib/tenancy/mentorAnchor';
 
 export async function GET() {
   const auth = await requireAdmin();
@@ -80,6 +82,23 @@ export async function POST(request: NextRequest) {
   }
 
   const mentor = await prisma.mentor.create({ data });
+
+  // An admin in a known tenant deliberately creating a mentor IS the org
+  // signal — stronger than inferring one from their (currently empty) caseload,
+  // which is why it outranks the other signals in resolveMentorOrg.
+  //
+  // The creating admin may themselves be unanchored (3 of 14 mentors are), in
+  // which case there is no signal to pass on and the new mentor stays
+  // unanchored until their first socio assignment. Correct, and logged.
+  const adminOrganizationId = await tenantPrismaRepo
+    .getOrganizationIdByMentorId(auth.session.userId)
+    .catch(() => null);
+
+  await anchorMentorProfile({
+    mentorId: mentor.id,
+    trigger: 'admin_create_mentor',
+    explicitOrganizationId: adminOrganizationId,
+  });
 
   return NextResponse.json(mentor, { status: 201 });
 }

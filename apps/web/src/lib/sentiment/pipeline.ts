@@ -1,4 +1,4 @@
-import { analyzeSentiment } from '@/lib/sentiment/analyzer';
+import type { SentimentResult } from '@/lib/sentiment/analyzer';
 import { repo } from '@/lib/repo';
 import { getConfigNumber } from '@/lib/config/service';
 import type { FlagReasonParams } from '@/lib/repo/types';
@@ -27,16 +27,23 @@ function fallbackReason(params: Record<string, string | number | undefined>): st
 }
 
 /**
- * Runs sentiment analysis on a user message and auto-flags if thresholds are exceeded.
- * Designed to be called fire-and-forget (don't block the AI response).
+ * Persists an already-computed sentiment reading and auto-flags past the
+ * configured thresholds.
+ *
+ * Takes the scores rather than the message: since 2026-08-10 they arrive from
+ * the merged analysis pass (`ai/sensing/senseAndScore.ts`), which scores
+ * emotion and comprehension in one call instead of asking the same model about
+ * the same sentence twice. This function does no LLM work of its own.
+ *
+ * Still fire-and-forget at the call site — a learner should never wait on a
+ * flag write — but the LLM round trip it used to own now happens concurrently
+ * with the reply rather than after it.
  */
-export async function analyzeSentimentAndFlag(
+export async function persistSentimentAndFlag(
   messageId: string,
   socioId: string,
-  message: string,
+  result: SentimentResult,
 ): Promise<void> {
-  const result = await analyzeSentiment(message, socioId);
-
   await repo.saveSentiment({
     messageId,
     socioId,

@@ -165,6 +165,59 @@ export const programVersionConfigSchema = z.object({
    */
   dashboard: dashboardSchema.optional(),
 
+  /**
+   * The completable project this course builds toward — what a participant is
+   * trying to DO, as distinct from what they are learning.
+   *
+   * Carried here rather than in dedicated Outcome/Milestone tables, and that is
+   * a deliberate split rather than a shortcut:
+   *
+   *   authored content   what the project IS, per published version — belongs
+   *                      with every other authored block, which is here
+   *   per-learner state  which milestones THIS participant has reached —
+   *                      genuinely needs tables, and has no writer today
+   *
+   * Building the tables now would add three models whose per-learner half
+   * nothing writes, which is the exact shape `writePathAudit.test.ts` exists to
+   * catch. So the content lands here, milestone *tracking* stays unbuilt, and
+   * the difference is stated instead of blurred.
+   *
+   * `milestones` and `mentorResources` are stored even though nothing reads
+   * them yet: they are authored alongside the project and dropping them on
+   * import is what made `outcome` invisible in the first place.
+   */
+  outcome: z
+    .object({
+      project: z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        deliverables: z
+          .array(z.object({ name: z.string(), description: z.string().optional() }))
+          .default([]),
+      }),
+      milestones: z
+        .array(
+          z.object({
+            key: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+            name: z.string().min(1),
+            afterLessonKey: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+            checkDescription: z.string().optional(),
+          }),
+        )
+        .default([]),
+      mentorResources: z
+        .array(
+          z.object({
+            milestoneKey: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+            trigger: z.enum(["on_reach", "when_behind"]).default("on_reach"),
+            body: z.string(),
+            mentorPrompt: z.string().optional(),
+          }),
+        )
+        .default([]),
+    })
+    .optional(),
+
   // ─── Org-Level Fields (not from JourneyPackage) ─────────────────────────────
   /** Visual branding (logo, colors). Inherited from org or overridden. */
   branding: brandingSchema,

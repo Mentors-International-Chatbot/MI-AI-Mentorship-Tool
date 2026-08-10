@@ -324,6 +324,19 @@ export const prismaRepo: Repo = {
         return messages.reverse().map(toMessage);
     },
 
+    async getLastAssistantMessageAt(socioId) {
+        const row = await prisma.message.findFirst({
+            where: {
+                socioId,
+                assessmentSessionId: null,
+                role: { in: ['assistant', 'mentor'] },
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+        });
+        return row?.createdAt ?? null;
+    },
+
     async getUserMessageDates(socioId) {
         const rows = await prisma.message.findMany({
             where: { socioId, role: 'user', assessmentSessionId: null },
@@ -901,6 +914,57 @@ export const prismaRepo: Repo = {
     },
 
     // ─── Assessment Session Methods ─────────────────────────────────────────────
+
+    async recordMilestoneReached(data) {
+        // upsert with an empty update: a second marker for the same milestone
+        // must not move `reachedAt`. The first time they reported doing it is
+        // the fact worth keeping.
+        const row = await prisma.milestoneProgress.upsert({
+            where: {
+                socioId_collectionKey_milestoneKey: {
+                    socioId: data.socioId,
+                    collectionKey: data.collectionKey,
+                    milestoneKey: data.milestoneKey,
+                },
+            },
+            update: {},
+            create: {
+                socioId: data.socioId,
+                organizationId: data.organizationId,
+                collectionKey: data.collectionKey,
+                milestoneKey: data.milestoneKey,
+                source: data.source ?? 'ai_marker',
+                evidence: data.evidence ?? null,
+            },
+        });
+        return {
+            id: row.id,
+            socioId: row.socioId,
+            organizationId: row.organizationId,
+            collectionKey: row.collectionKey,
+            milestoneKey: row.milestoneKey,
+            reachedAt: row.reachedAt,
+            source: row.source,
+            evidence: row.evidence,
+        };
+    },
+
+    async getMilestoneProgress(socioId, collectionKey) {
+        const rows = await prisma.milestoneProgress.findMany({
+            where: { socioId, collectionKey },
+            orderBy: { reachedAt: 'asc' },
+        });
+        return rows.map((r) => ({
+            id: r.id,
+            socioId: r.socioId,
+            organizationId: r.organizationId,
+            collectionKey: r.collectionKey,
+            milestoneKey: r.milestoneKey,
+            reachedAt: r.reachedAt,
+            source: r.source,
+            evidence: r.evidence,
+        }));
+    },
 
     async getAssessmentSessionsForSocioLesson(socioId, lessonKey, blockId) {
         const sessions = await prisma.assessmentSession.findMany({

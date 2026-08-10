@@ -104,15 +104,6 @@ export type MentorProfile = {
   updatedAt: Date;
 };
 
-export type MentoringRelationship = {
-  id: string;
-  mentorId: string;
-  participantId: string;
-  role: 'primary' | 'backup' | 'observer';
-  activeFrom: Date;
-  activeUntil: Date | null;
-  createdAt: Date;
-};
 
 export type ContentCollection = {
   id: string;
@@ -291,6 +282,26 @@ export interface TenantRepo {
    */
   getOrganizationIdByMentorId(mentorId: string): Promise<string | null>;
   /**
+   * Bootstrap method: every organization signal available for one mentor,
+   * before any tenant context exists.
+   *
+   * Deliberately raw. It reports what is there — memberships, the orgs of the
+   * socios assigned to them, their identity for the profile row — and decides
+   * nothing. Which combination resolves, which is ambiguous, and which is a
+   * refusal to guess is policy, and policy lives in
+   * `src/lib/tenancy/mentorAnchor.ts` so the runtime path and the backfill
+   * script share one definition instead of drifting into two.
+   *
+   * Returns null identity when no such mentor exists.
+   */
+  getMentorAnchorInputs(mentorId: string): Promise<{
+    identity: { name: string; email: string; role: string } | null;
+    memberships: { organizationId: string; role: string }[];
+    assignedSocioCount: number;
+    /** Distinct orgs of assigned socios. Shorter than assignedSocioCount when some are unanchored. */
+    assignedSocioOrganizationIds: string[];
+  }>;
+  /**
    * Resolve organizationId for a socio with fallback chain (never returns null):
    * 1. ParticipantProfile path (enrolled socios)
    * 2. Curriculum collection → organization (course-based resolution)
@@ -393,10 +404,6 @@ export interface TenantRepo {
   createMentorProfile(ctx: TenantContext, data: Omit<MentorProfile, 'id' | 'organizationId' | 'createdAt' | 'updatedAt'>): Promise<MentorProfile>;
   updateMentorProfile(ctx: TenantContext, profileId: string, data: Partial<Pick<MentorProfile, 'displayName' | 'specialties' | 'metadata'>>): Promise<MentorProfile>;
 
-  // ─── Mentoring Relationships ───────────────────────────────────────────────
-  getMentoringRelationships(ctx: TenantContext, participantId: string): Promise<MentoringRelationship[]>;
-  createMentoringRelationship(ctx: TenantContext, mentorProfileId: string, participantId: string, role: MentoringRelationship['role']): Promise<MentoringRelationship>;
-  endMentoringRelationship(ctx: TenantContext, relationshipId: string): Promise<MentoringRelationship>;
 
   // ─── Content Collections ───────────────────────────────────────────────────
   getContentCollections(ctx: TenantContext): Promise<ContentCollection[]>;

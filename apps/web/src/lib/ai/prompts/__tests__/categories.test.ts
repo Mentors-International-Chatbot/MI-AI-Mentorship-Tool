@@ -36,8 +36,10 @@ function sourceFiles(dir: string, acc: string[] = []): string[] {
 /** Categories the runtime actually asks for. Multiline- and quote-agnostic. */
 function categoriesReadByCode(): Set<string> {
   const found = new Set<string>();
-  // Matches loadActivePrompt('x' / getActivePrompt("x") across line breaks.
-  const call = /(?:loadActivePrompt|getActivePrompt)\(\s*['"]([a-z_]+)['"]/g;
+  // Matches loadActivePrompt('x' / getActivePrompt("x") / getActivePromptCached('x')
+  // across line breaks. Every function that resolves a category against the DB
+  // must appear here, or a live call site reads as an orphan.
+  const call = /(?:loadActivePrompt|getActivePromptCached|getActivePrompt)\(\s*['"]([a-z_]+)['"]/g;
 
   for (const file of sourceFiles(SRC)) {
     const text = readFileSync(file, 'utf8');

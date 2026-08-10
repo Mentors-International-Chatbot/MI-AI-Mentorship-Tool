@@ -13,7 +13,7 @@
  *   // Pass liveState to buildSystemPrompt
  */
 
-export { senseDimensions } from './senseDimensions';
+export { senseAndScore, type SenseAndScoreResult } from './senseAndScore';
 export {
   updateDimensionState,
   getDimensionStateMap,

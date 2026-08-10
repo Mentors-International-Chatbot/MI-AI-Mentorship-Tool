@@ -1,10 +1,10 @@
 import { ToneOverride, PromptOverrides, ConcisivenessLevel } from '../types';
 import { MAX_SENTENCES_PER_MESSAGE, MAX_EMOJIS_PER_MESSAGE } from '../constants';
 import { DEFAULT_LANGUAGE, getLanguageDirective, type SupportedLanguage } from '@/lib/i18n/languages';
-import { repo } from '@/lib/repo';
 // getChatbotDisplayName removed - mentor name now comes from course metadata only
 import { getCourseMeta, resolveLocalized, type CourseMeta } from '@/lib/courses/course-meta';
 import { formatDbPromptVersion, type PromptVersionSink } from '../loadPrompt';
+import { getActivePromptCached } from '../activePromptCache';
 import type { ConfigScope } from '../scope';
 import { resolvePromptScope } from '../resolveScope';
 import { resolveCourseAiBehavior, buildCourseBehaviorSnippet } from '../courseBehavior';
@@ -50,7 +50,7 @@ async function loadScopedPrompt(
     // read the pseudo-category `core:{collectionKey}`; the migration promoted
     // those rows to real columns, and deactivated the unscoped duplicate that
     // would otherwise have become a platform-wide default.
-    const scopedPrompt = await repo.getActivePrompt('core', scope);
+    const scopedPrompt = await getActivePromptCached('core', scope);
     if (scopedPrompt?.content) {
       // Record the DB row's version so traces show what actually shipped, not
       // CORE_PROMPT_VERSION (which never moves when the row is edited in /admin).

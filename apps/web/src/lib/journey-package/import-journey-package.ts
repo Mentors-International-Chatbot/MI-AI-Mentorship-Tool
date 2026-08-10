@@ -243,6 +243,12 @@ export async function importJourneyPackage(
     assessment: pkg.config.assessment,
     dashboard: pkg.config.dashboard,
 
+    // `outcome` used to be validated here and then thrown away with a warning,
+    // because there were no Outcome/Milestone tables. That made every project,
+    // milestone and mentor resource an author wrote invisible at runtime — the
+    // schema cross-validated them, and nothing could ever read them.
+    outcome: pkg.outcome,
+
     // Reference to curriculum
     curriculumCollectionKey: pkg.curriculum.collectionKey,
 
@@ -294,15 +300,18 @@ export async function importJourneyPackage(
     },
   });
 
-  // ─── 5. Handle Outcome (if present) ──────────────────────────────────────
-  // NOTE: Outcome/Milestone tables don't exist in schema.prisma yet.
-  // If pkg.outcome is present, log a warning.
-  if (pkg.outcome) {
+  // ─── 5. Outcome ──────────────────────────────────────────────────────────
+  // Now stored on ProgramVersion.config above, so the project reaches the
+  // conversational path (coach stance reads it). Milestone *progress* per
+  // participant is still unbuilt and does need tables — the warning says which
+  // half landed so nobody reads "imported" as "tracked".
+  if (pkg.outcome && pkg.outcome.milestones.length > 0) {
     warnings.push(
-      `Package includes outcome data (project: "${pkg.outcome.project.title}", ` +
-        `${pkg.outcome.milestones.length} milestones), but Outcome/Milestone tables ` +
-        `don't exist in the schema. This data was NOT imported. ` +
-        `TODO: Add models to schema.prisma if outcome tracking is needed.`
+      `Outcome imported (project: "${pkg.outcome.project.title}"), including ` +
+        `${pkg.outcome.milestones.length} milestone(s) and ` +
+        `${pkg.outcome.mentorResources.length} mentor resource(s). NOTE: the project is ` +
+        `read at runtime, but per-participant milestone tracking does not exist yet — ` +
+        `nothing records that a participant reached a milestone.`
     );
   }
 

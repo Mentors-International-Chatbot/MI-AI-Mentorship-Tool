@@ -15,6 +15,9 @@ vi.mock('@/lib/repo', () => ({
   repo: {
     getSocioProgress: vi.fn(),
     getMessages: vi.fn(),
+    // Never spoken before: the turn measures a zero-day gap, which is what
+    // these suites are about. Cases that care about the gap set it themselves.
+    getLastAssistantMessageAt: vi.fn(async () => null),
     getAssessmentSessionsForSocioLesson: vi.fn(),
   },
 }));

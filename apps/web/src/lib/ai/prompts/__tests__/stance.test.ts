@@ -33,8 +33,14 @@ vi.mock('../loadPrompt', () => ({
   loadActivePrompt: vi.fn(async (_category: string, fallback: string) => fallback),
 }));
 
+vi.mock('../courseOutcome', () => ({
+  resolveCourseProject: vi.fn(async () => null),
+  resolveCourseMilestones: vi.fn(async () => []),
+}));
+
 import { repo } from '@/lib/repo';
 import { hasLessonData, getLessonData } from '@/lib/lessons/db-lesson-service';
+import { resolveCourseProject, resolveCourseMilestones } from '../courseOutcome';
 import {
   resolveStance,
   buildStanceBlock,
@@ -108,6 +114,20 @@ const base = {
   collectionKey: 'pbj',
   currentLessonNumber: 3,
   reteachThisTurn: false,
+  // Mid-lesson with no score on record: the neutral starting point, so a case
+  // that does not opt into the ungated ladder is unaffected by it.
+  currentMessageIndex: 0,
+  weeklyUnderstanding: null as number | null,
+};
+
+/** An ungated lesson with real teaching messages, for the taught-out rung. */
+const ungatedLesson = {
+  ...lessonWithGate,
+  gates: [],
+  messages: [
+    { order: 1, type: 'escenario' as const, contentEs: 'Scenario' },
+    { order: 2, type: 'explicación' as const, contentEs: 'Explanation' },
+  ],
 };
 
 beforeEach(() => {
@@ -143,13 +163,13 @@ describe('stance selection', () => {
     expect(d.stance).toBe('tutor');
   });
 
-  it('stays tutor on a lesson that declares no gate at all', async () => {
-    // No gate means no evidence of knowledge. Documented consequence: curricula
-    // imported without teach-backs never reach coach except through distress.
+  it('does not consult gate sessions on a lesson that declares no gate', async () => {
     setLesson(lessonWithoutGate);
 
     const d = await resolveStance({ ...base, promptOverrides: null, activeFlags: [] });
-    expect(d).toEqual({ stance: 'tutor', reason: 'gate_not_passed' });
+    // Not `gate_not_passed`: this course set no bar, so the learner did not
+    // fail to clear one. The ungated ladder answers instead.
+    expect(d).toEqual({ stance: 'tutor', reason: 'awaiting_evidence' });
     expect(mockRepo.getAssessmentSessionsForSocioLesson).not.toHaveBeenCalled();
   });
 
@@ -167,6 +187,160 @@ describe('stance selection', () => {
 
     const d = await resolveStance({ ...base, promptOverrides: null, activeFlags: [] });
     expect(d.stance).toBe('tutor');
+  });
+});
+
+describe('rule (c): the ungated evidence ladder', () => {
+  /**
+   * The bug this ladder fixes: every curriculum imported without teach-back
+   * gates — the legacy MI collection among them — was pinned to tutor for the
+   * entire course, so the coach half of the system never ran for those
+   * learners. "This course set no bar" was being read as "this learner did not
+   * clear the bar".
+   */
+  it('reaches coach once the lesson has been taught out', async () => {
+    setLesson(ungatedLesson);
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      currentMessageIndex: ungatedLesson.messages.length,
+    });
+
+    expect(d).toEqual({ stance: 'coach', reason: 'lesson_taught_out' });
+  });
+
+  it('stays tutor while there is still teaching left to deliver', async () => {
+    setLesson(ungatedLesson);
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      currentMessageIndex: 1, // one message still undelivered
+    });
+
+    expect(d).toEqual({ stance: 'tutor', reason: 'awaiting_evidence' });
+  });
+
+  it('lets a recorded low understanding veto the taught-out rung', async () => {
+    setLesson(ungatedLesson);
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      currentMessageIndex: ungatedLesson.messages.length,
+      weeklyUnderstanding: 2, // at or below RETEACH_THRESHOLD
+    });
+
+    expect(d.stance).toBe('tutor');
+  });
+
+  it('does not let a MISSING understanding score veto it', async () => {
+    // Most lessons complete without a parsed score. Treating absence as failure
+    // would leave the ladder as unreachable as the gate rule it replaces.
+    setLesson(ungatedLesson);
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      currentMessageIndex: ungatedLesson.messages.length,
+      weeklyUnderstanding: null,
+    });
+
+    expect(d.stance).toBe('coach');
+  });
+
+  it('reaches coach on a reported milestone even mid-lesson', async () => {
+    setLesson(ungatedLesson);
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      currentMessageIndex: 0,
+      loadReachedMilestones: async () => new Set(['first-sale']),
+    });
+
+    expect(d).toEqual({ stance: 'coach', reason: 'milestone_reached' });
+  });
+
+  it('is unmoved by an empty milestone set', async () => {
+    setLesson(ungatedLesson);
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      currentMessageIndex: 0,
+      loadReachedMilestones: async () => new Set<string>(),
+    });
+
+    expect(d).toEqual({ stance: 'tutor', reason: 'awaiting_evidence' });
+  });
+
+  it('survives a milestone read failure and falls to the next rung', async () => {
+    setLesson(ungatedLesson);
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      currentMessageIndex: ungatedLesson.messages.length,
+      loadReachedMilestones: async () => { throw new Error('connection reset'); },
+    });
+
+    expect(d).toEqual({ stance: 'coach', reason: 'lesson_taught_out' });
+  });
+
+  it('never lets the ladder override a gate the course DID declare', async () => {
+    // The rigour that made the old rule right about gated courses has to
+    // survive: a failed teach-back is not overridden by a milestone or by
+    // having run out of teaching messages.
+    setLesson({ ...lessonWithGate, messages: ungatedLesson.messages });
+    mockRepo.getAssessmentSessionsForSocioLesson.mockResolvedValue(failedSession());
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      currentMessageIndex: ungatedLesson.messages.length,
+      weeklyUnderstanding: 9,
+      loadReachedMilestones: async () => new Set(['first-sale']),
+    });
+
+    expect(d).toEqual({ stance: 'tutor', reason: 'gate_not_passed' });
+  });
+
+  it('does not read milestones at all on a gated lesson', async () => {
+    // The gate answers on its own, so the extra query is never issued.
+    setLesson(lessonWithGate);
+    mockRepo.getAssessmentSessionsForSocioLesson.mockResolvedValue(passedSession());
+    const load = vi.fn(async () => new Set<string>());
+
+    await resolveStance({
+      ...base, promptOverrides: null, activeFlags: [], loadReachedMilestones: load,
+    });
+
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('still applies the tutor detour to a milestone-earned coach', async () => {
+    // Hysteresis belongs to every route into coach, not only the gate route.
+    setLesson(ungatedLesson);
+
+    const d = await resolveStance({
+      ...base,
+      promptOverrides: null,
+      activeFlags: [],
+      reteachThisTurn: true,
+      loadReachedMilestones: async () => new Set(['first-sale']),
+    });
+
+    expect(d).toEqual({ stance: 'tutor', reason: 'tutor_detour' });
   });
 });
 
@@ -425,6 +599,123 @@ describe('stance framing', () => {
     expect(es).toContain('LO QUE EL PARTICIPANTE');
     expect(en).toContain('WHAT THE PARTICIPANT IS TRYING TO DO');
     expect(en).not.toContain('POSTURA');
+  });
+
+  it('gives coach the course project, not just this lesson', async () => {
+    // The project was validated-then-dropped at import until 2026-08-08, so
+    // coach stance knew the immediate task and never the goal it served.
+    const mockProject = resolveCourseProject as unknown as ReturnType<typeof vi.fn>;
+    mockProject.mockResolvedValue({
+      title: 'A peanut butter and jelly sandwich',
+      description: 'Made start to finish, unaided',
+      deliverables: [{ name: 'The sandwich' }, { name: 'A written recipe', description: 'One page' }],
+    });
+
+    const coach = await buildStanceBlock({
+      stance: 'coach', participantNoun: 'learner', collectionKey: 'pbj',
+      currentLessonNumber: 3, language: 'en',
+      scope: { organizationId: 'org-1', collectionKey: 'pbj' },
+    });
+
+    expect(coach).toContain('Course project: A peanut butter and jelly sandwich');
+    expect(coach).toContain('Made start to finish, unaided');
+    expect(coach).toContain('Deliverables: The sandwich; A written recipe (One page)');
+    // Both scopes together: the goal AND this lesson's slice of it.
+    expect(coach).toContain('narrating each step out loud');
+  });
+
+  it('withholds the project from tutor', async () => {
+    const mockProject = resolveCourseProject as unknown as ReturnType<typeof vi.fn>;
+    mockProject.mockResolvedValue({ title: 'A sandwich', deliverables: [] });
+
+    const tutor = await buildStanceBlock({
+      stance: 'tutor', participantNoun: 'learner', collectionKey: 'pbj',
+      currentLessonNumber: 3, language: 'en',
+      scope: { organizationId: 'org-1', collectionKey: 'pbj' },
+    });
+
+    expect(tutor).not.toContain('Course project');
+    expect(mockProject).not.toHaveBeenCalled();
+  });
+
+  it('still emits the lesson task when the course has no project', async () => {
+    const mockProject = resolveCourseProject as unknown as ReturnType<typeof vi.fn>;
+    mockProject.mockResolvedValue(null);
+
+    const coach = await buildStanceBlock({
+      stance: 'coach', participantNoun: 'learner', collectionKey: 'pbj',
+      currentLessonNumber: 3, language: 'en',
+      scope: { organizationId: 'org-1', collectionKey: 'pbj' },
+    });
+
+    expect(coach).not.toContain('Course project');
+    expect(coach).toContain('narrating each step out loud');
+  });
+
+  it('emits the project even when the lesson has no exercise or commitment', async () => {
+    setLesson({ ...lessonWithGate, exercise: '', commitment: '' });
+    const mockProject = resolveCourseProject as unknown as ReturnType<typeof vi.fn>;
+    mockProject.mockResolvedValue({ title: 'A sandwich', deliverables: [] });
+
+    const coach = await buildStanceBlock({
+      stance: 'coach', participantNoun: 'learner', collectionKey: 'pbj',
+      currentLessonNumber: 3, language: 'en',
+      scope: { organizationId: 'org-1', collectionKey: 'pbj' },
+    });
+
+    expect(coach).toContain('WHAT THE PARTICIPANT IS TRYING TO DO');
+    expect(coach).toContain('Course project: A sandwich');
+  });
+
+  it('tells coach how far along the participant is, with keys for the marker', async () => {
+    // The first time the system can answer "how far along are they" — before
+    // milestone_progress existed there was no record that anyone DID anything.
+    const mockMs = resolveCourseMilestones as unknown as ReturnType<typeof vi.fn>;
+    mockMs.mockResolvedValue([
+      { key: 'assembled', name: 'Assembled a sandwich', afterLessonKey: 'l1' },
+      { key: 'delivered', name: 'Gave one to someone', afterLessonKey: 'l2' },
+    ]);
+
+    const coach = await buildStanceBlock({
+      stance: 'coach', participantNoun: 'learner', collectionKey: 'pbj',
+      currentLessonNumber: 3, language: 'en',
+      scope: { organizationId: 'org-1', collectionKey: 'pbj' },
+      reachedMilestoneKeys: new Set(['assembled']),
+    });
+
+    expect(coach).toContain('Assembled a sandwich [assembled] — done');
+    expect(coach).toContain('Gave one to someone [delivered] — pending');
+    // The marker instruction must quote an exact key, so the key is rendered.
+    expect(coach).toContain('[MILESTONE:key]');
+  });
+
+  it('stops inviting the marker once every milestone is reached', async () => {
+    // Asking for a marker with nothing outstanding invites a duplicate emit.
+    const mockMs = resolveCourseMilestones as unknown as ReturnType<typeof vi.fn>;
+    mockMs.mockResolvedValue([{ key: 'assembled', name: 'Assembled', afterLessonKey: 'l1' }]);
+
+    const coach = await buildStanceBlock({
+      stance: 'coach', participantNoun: 'learner', collectionKey: 'pbj',
+      currentLessonNumber: 3, language: 'en',
+      scope: { organizationId: 'org-1', collectionKey: 'pbj' },
+      reachedMilestoneKeys: new Set(['assembled']),
+    });
+
+    expect(coach).toContain('— done');
+    expect(coach).not.toContain('[MILESTONE:key]');
+  });
+
+  it('treats absent progress as everything pending rather than throwing', async () => {
+    const mockMs = resolveCourseMilestones as unknown as ReturnType<typeof vi.fn>;
+    mockMs.mockResolvedValue([{ key: 'assembled', name: 'Assembled', afterLessonKey: 'l1' }]);
+
+    const coach = await buildStanceBlock({
+      stance: 'coach', participantNoun: 'learner', collectionKey: 'pbj',
+      currentLessonNumber: 3, language: 'en',
+      scope: { organizationId: 'org-1', collectionKey: 'pbj' },
+    });
+
+    expect(coach).toContain('— pending');
   });
 
   it('uses the course terminology for the participant', async () => {

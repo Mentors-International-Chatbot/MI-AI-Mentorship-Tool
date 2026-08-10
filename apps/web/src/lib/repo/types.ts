@@ -127,6 +127,17 @@ export type FlagReasonParams = {
     requestReason?: string;
 };
 
+export type MilestoneProgressRecord = {
+    id: string;
+    socioId: string;
+    organizationId: string;
+    collectionKey: string;
+    milestoneKey: string;
+    reachedAt: Date;
+    source: string;
+    evidence: string | null;
+};
+
 export type SocioFlag = {
     id: string;
     socioId: string;
@@ -268,6 +279,15 @@ export interface Repo {
 
     addMessage(data: Omit<Message, "id" | "createdAt">): Promise<Message>;
     getMessages(socioId: string, limit?: number): Promise<Message[]>;
+    /**
+     * When the AI (or a mentor) last spoke in the main thread, or null if never.
+     *
+     * The reference point for "did this happen since the AI last had a chance
+     * to mention it" — see `prompts/gateRecency.ts`. Assessment messages are
+     * excluded for the same reason `getMessages` excludes them: they are not
+     * part of the conversation the model can see.
+     */
+    getLastAssistantMessageAt(socioId: string): Promise<Date | null>;
     getMessagesWithSentiment(socioId: string, opts?: { limit?: number; since?: Date }): Promise<(Message & { sentiment?: { confusion: number; frustration: number; urgency: number; sentiment: string } })[]>;
     /**
      * Timestamps of the socio's own messages, ascending. Deliberately narrow:
@@ -388,6 +408,24 @@ export interface Repo {
 
     // Curriculum selection
     setSocioCurriculum(socioId: string, collectionKey: string): Promise<Socio>;
+
+    // ─── Milestone progress ────────────────────────────────────────────────
+    /**
+     * Records that a participant reached a milestone. Idempotent on
+     * (socioId, collectionKey, milestoneKey) — the AI can emit the same marker
+     * twice across a conversation and the first `reachedAt` is the true one, so
+     * a repeat must never move it.
+     */
+    recordMilestoneReached(data: {
+        socioId: string;
+        organizationId: string;
+        collectionKey: string;
+        milestoneKey: string;
+        source?: string;
+        evidence?: string;
+    }): Promise<MilestoneProgressRecord>;
+    /** Milestones this participant has reached on this course, oldest first. */
+    getMilestoneProgress(socioId: string, collectionKey: string): Promise<MilestoneProgressRecord[]>;
 
     // Assessment session methods (for gated teach-backs)
     getAssessmentSessionsForSocioLesson(

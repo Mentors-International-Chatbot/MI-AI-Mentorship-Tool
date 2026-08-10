@@ -70,12 +70,6 @@ const mockPrisma = vi.hoisted(() => ({
     create: vi.fn(),
     update: vi.fn(),
   },
-  mentoringRelationship: {
-    findMany: vi.fn(),
-    findUnique: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
   contentCollection: {
     findMany: vi.fn(),
     findUnique: vi.fn(),
@@ -564,26 +558,6 @@ describe('Create with Cross-Tenant References', () => {
     ).rejects.toThrow(TenantIsolationError);
 
     expect(mockPrisma.enrollment.create).not.toHaveBeenCalled();
-  });
-
-  it('BLOCKS: Creating mentoring relationship across orgs', async () => {
-    // Mentor profile belongs to Org A
-    mockPrisma.mentorProfile.findUnique.mockResolvedValue({
-      id: MENTOR_PROFILE_A_ID,
-      organizationId: ORG_A_ID,
-    });
-
-    // Participant belongs to Org B
-    mockPrisma.participantProfile.findUnique.mockResolvedValue({
-      id: PARTICIPANT_B_ID,
-      organizationId: ORG_B_ID,
-    });
-
-    await expect(
-      tenantPrismaRepo.createMentoringRelationship(ctxOrgA, MENTOR_PROFILE_A_ID, PARTICIPANT_B_ID, 'primary')
-    ).rejects.toThrow(TenantIsolationError);
-
-    expect(mockPrisma.mentoringRelationship.create).not.toHaveBeenCalled();
   });
 
   it('BLOCKS: Creating alert rule referencing Org B metric', async () => {

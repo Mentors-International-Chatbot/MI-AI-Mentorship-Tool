@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, FormEvent } from 'react';
+import { useState, useRef, useEffect, useCallback, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     type SupportedLanguage,
@@ -11,6 +11,8 @@ import {
     CHAT_EMPTY_STATE_SOCIO,
 } from '@/lib/i18n/languages';
 import { AssessmentGateCard } from '@/components/AssessmentGateCard';
+import { ProgressSidebar, ProgressStrip } from './ProgressPanel';
+import type { ChatProgress } from '@/lib/chat/progress';
 
 interface ChatMessage {
     id?: string;
@@ -133,6 +135,7 @@ export default function ChatPage() {
     const [lastMessageTime, setLastMessageTime] = useState<string | null>(null);
     const lastMessageTimeRef = useRef<string | null>(null);
     const [currentLesson, setCurrentLesson] = useState<number | null>(null);
+    const [progress, setProgress] = useState<ChatProgress | null>(null);
     const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -338,6 +341,25 @@ export default function ChatPage() {
         setLastMessageTime(max);
     }, [messages]);
 
+    // Progress is refreshed on load and whenever the conversation moves, rather
+    // than on the five-second poll: these numbers change a handful of times per
+    // lesson, and the reads behind them are not free.
+    const refreshProgress = useCallback(async () => {
+        try {
+            const res = await fetch('/api/chat/progress');
+            if (!res.ok) return;
+            const data = (await res.json()) as { progress: ChatProgress | null };
+            setProgress(data.progress);
+        } catch {
+            // A missing sidebar must never take the conversation down with it.
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!session || session.role !== 'socio') return;
+        void refreshProgress();
+    }, [session, refreshProgress]);
+
     useEffect(() => {
         if (!session || !lastMessageTime) return;
 
@@ -359,6 +381,10 @@ export default function ChatPage() {
                     setCurrentLesson(data.currentLesson);
                 }
                 if (newMsgs.length === 0) return;
+
+                // Something arrived — a gate follow-up, a mentor DM, a lesson
+                // advancing. Any of those can move the panel.
+                void refreshProgress();
 
                 setMessages((prev) => {
                     const existingIds = new Set(
@@ -393,7 +419,7 @@ export default function ChatPage() {
 
         const interval = setInterval(poll, 5000);
         return () => clearInterval(interval);
-    }, [session, lastMessageTime]);
+    }, [session, lastMessageTime, refreshProgress]);
 
     async function handleLanguageChange(newLang: SupportedLanguage) {
         setLanguage(newLang);
@@ -442,6 +468,166 @@ export default function ChatPage() {
         }
     }
 
+    /**
+     * Reload the conversation from the server and take its word for it.
+     *
+     * The recovery path when a streamed turn ends without a `done` frame. The
+     * DB is authoritative and, by the guarantee at the generateAIResponse call
+     * site in handler.ts, already holds the reply whether or not this browser
+     * stayed to read it — so refetching is not a consolation prize, it is the
+     * same text arriving by a slower route.
+     */
+    async function refetchHistory() {
+        try {
+            const res = await fetch('/api/chat/history');
+            if (!res.ok) return;
+            const payload = (await res.json()) as {
+                messages: {
+                    id?: string;
+                    role: 'user' | 'assistant';
+                    content: string;
+                    createdAt: string;
+                    senderType?: string | null;
+                    metadata?: Record<string, unknown> | null;
+                }[];
+                currentLesson?: number;
+            };
+            setMessages(
+                payload.messages.map((m) => ({
+                    id: m.id,
+                    role: m.role,
+                    content: m.content,
+                    createdAt: m.createdAt,
+                    senderType: m.senderType ?? null,
+                    metadata: m.metadata ?? null,
+                })),
+            );
+            if (typeof payload.currentLesson === 'number') {
+                setCurrentLesson(payload.currentLesson);
+            }
+            const times = payload.messages.map((m) => m.createdAt).filter(Boolean);
+            if (times.length > 0) {
+                setLastMessageTime(times.reduce((a, b) => (a > b ? a : b)));
+            }
+        } catch {
+            // Leave what is on screen; the 5s poll is the next chance.
+        }
+    }
+
+    /**
+     * Consumes the NDJSON reply, growing a provisional bubble as it arrives.
+     *
+     * Two rules, both load-bearing:
+     *
+     *  - `done` REPLACES the bubble, it never appends to it. The streamed text
+     *    is only a prefix of the final reply — the handler appends the
+     *    escalation confirmation and the feedback prompt after generation ends
+     *    — so appending would show the tail twice.
+     *  - no `done` means something failed server-side after the headers went
+     *    out, and there is no status code left to read. The provisional bubble
+     *    is torn down and history refetched, rather than leaving half a reply
+     *    on screen looking finished.
+     */
+    async function consumeChatStream(res: Response, provisionalId: string) {
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let sawDone = false;
+
+        const appendDelta = (delta: string) => {
+            setMessages((prev) => {
+                const idx = prev.findIndex((m) => m.id === provisionalId);
+                if (idx === -1) {
+                    return [...prev, {
+                        id: provisionalId,
+                        role: 'assistant' as const,
+                        content: delta,
+                        createdAt: new Date().toISOString(),
+                    }];
+                }
+                const next = [...prev];
+                next[idx] = { ...next[idx], content: next[idx].content + delta };
+                return next;
+            });
+        };
+
+        const applyDone = (done: {
+            response?: string;
+            isError?: boolean;
+            messages?: ChatMessage[];
+        }) => {
+            setMessages((prev) => {
+                const settled = prev.filter((m) => m.id !== provisionalId);
+                const provided = done.messages ?? [];
+
+                if (provided.length > 0) {
+                    // The 5s poll can win the race and have already inserted
+                    // the same row. Its id is the one thing that says so.
+                    const seen = new Set(settled.map((m) => m.id).filter(Boolean) as string[]);
+                    const fresh = provided
+                        .filter((m) => !m.id || !seen.has(m.id))
+                        .map((m) => ({ ...m, isError: Boolean(done.isError) }));
+                    return [...settled, ...fresh];
+                }
+
+                if (done.response) {
+                    return [...settled, {
+                        role: 'assistant' as const,
+                        content: done.response,
+                        createdAt: new Date().toISOString(),
+                        isError: Boolean(done.isError),
+                    }];
+                }
+                return settled;
+            });
+
+            // The reply may have advanced the lesson, cleared a gate, or
+            // recorded a milestone. Refresh the panel rather than let it lag a
+            // poll cycle behind the message that changed it.
+            void refreshProgress();
+        };
+
+        const handleFrame = (line: string) => {
+            let frame: { t?: unknown; done?: Parameters<typeof applyDone>[0] };
+            try {
+                frame = JSON.parse(line);
+            } catch {
+                return; // A frame we cannot read is one we cannot act on.
+            }
+            if (typeof frame.t === 'string') {
+                appendDelta(frame.t);
+            } else if (frame.done) {
+                sawDone = true;
+                applyDone(frame.done);
+            }
+        };
+
+        for (;;) {
+            const { done: exhausted, value } = await reader.read();
+            if (exhausted) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            // Frames are newline-delimited, and a chunk boundary lands wherever
+            // it likes — mid-frame as often as not. Only whole lines are parsed.
+            let nl = buffer.indexOf('\n');
+            while (nl !== -1) {
+                const line = buffer.slice(0, nl).trim();
+                buffer = buffer.slice(nl + 1);
+                if (line) handleFrame(line);
+                nl = buffer.indexOf('\n');
+            }
+        }
+
+        buffer += decoder.decode();
+        const tail = buffer.trim();
+        if (tail) handleFrame(tail);
+
+        if (!sawDone) {
+            setMessages((prev) => prev.filter((m) => m.id !== provisionalId));
+            await refetchHistory();
+        }
+    }
+
     async function handleLogout() {
         await fetch('/api/auth/logout', { method: 'POST' });
         router.push('/login');
@@ -465,7 +651,7 @@ export default function ChatPage() {
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text, language }),
+                body: JSON.stringify({ message: text, language, stream: true }),
             });
 
             if (res.status === 401) {
@@ -473,9 +659,10 @@ export default function ChatPage() {
                 return;
             }
 
-            const data = await res.json();
-
             if (!res.ok) {
+                // Every rejection is still ordinary JSON with a real status,
+                // answered before the server could open a stream.
+                const data = await res.json().catch(() => ({} as { error?: string }));
                 setMessages((prev) => [
                     ...prev,
                     {
@@ -487,6 +674,21 @@ export default function ChatPage() {
                 ]);
                 return;
             }
+
+            // The server decides. Asking for a stream is not the same as being
+            // given one, and the JSON path below stays the fallback rather than
+            // becoming dead code.
+            if (res.body && res.headers.get('Content-Type')?.includes('ndjson')) {
+                await consumeChatStream(res, `streaming-${Date.now()}`);
+                return;
+            }
+
+            const data = await res.json();
+
+            // The reply may have advanced the lesson, cleared a gate, or
+            // recorded a milestone. Refresh the panel rather than let it lag a
+            // poll cycle behind the message that changed it.
+            void refreshProgress();
 
             // Use returned messages with DB ids and metadata (enables gate card rendering + poll dedupe)
             if (data.messages && data.messages.length > 0) {
@@ -557,7 +759,12 @@ export default function ChatPage() {
     const isSocio = session.role === 'socio';
 
     return (
-        <div className="flex flex-col h-screen max-w-2xl mx-auto bg-white dark:bg-zinc-950">
+        // Outer row so the progress sidebar can sit beside the conversation on
+        // wide viewports. The conversation keeps its own max width, so nothing
+        // about its line length changes when the panel is absent.
+        <div className="flex h-screen w-full justify-center bg-white dark:bg-zinc-950">
+        <div className="flex w-full max-w-5xl">
+        <div className="flex flex-col flex-1 min-w-0 max-w-2xl mx-auto">
             <header className="flex items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
                 <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg">
                     {chatbotName.charAt(0).toUpperCase()}
@@ -594,6 +801,8 @@ export default function ChatPage() {
                     Log out
                 </button>
             </header>
+
+            {isSocio && <ProgressStrip progress={progress} language={language} />}
 
             <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
                 {messages.length === 0 && !isLoading && (
@@ -726,6 +935,10 @@ export default function ChatPage() {
                     {ui.send}
                 </button>
             </form>
+        </div>
+
+        {isSocio && <ProgressSidebar progress={progress} language={language} />}
+        </div>
         </div>
     );
 }

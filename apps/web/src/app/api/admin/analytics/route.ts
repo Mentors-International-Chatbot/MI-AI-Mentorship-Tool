@@ -87,6 +87,25 @@ export async function GET() {
     }),
   ]);
 
+  // ── Unanchored counts ────────────────────────────────────────────────────
+  // "Unanchored" means no ParticipantProfile (socio) or no MentorProfile
+  // (mentor), which is the tenancy anchor every org-scoped query filters on.
+  // It is a legitimate state — anchoring waits for a real org signal rather
+  // than guessing a default org — but it is invisible by construction: the
+  // socio simply does not appear on a dashboard, and the mentor simply sees an
+  // empty roster. Neither surfaces an error.
+  //
+  // Surfacing the counts here is what makes it a state someone can see rather
+  // than infer from a missing row. A number that climbs means anchoring stopped
+  // happening, which is otherwise silent until someone asks where their learner
+  // went. `whatsappUnanchored` is broken out because that path has no curriculum
+  // signal at all today, so it is the one expected to grow.
+  const [unanchoredSocios, unanchoredMentors, whatsappUnanchored] = await Promise.all([
+    prisma.socio.count({ where: { participantProfile: null } }),
+    prisma.mentor.count({ where: { mentorProfile: null } }),
+    prisma.socio.count({ where: { participantProfile: null, channelType: 'whatsapp' } }),
+  ]);
+
   // Compute avg messages per socio per week
   const activeSocioCount = await prisma.socio.count({ where: { status: 'ACTIVE' } });
   const avgMessagesPerSocio = activeSocioCount > 0
@@ -117,6 +136,11 @@ export async function GET() {
     totalMessages,
     avgMessagesPerSocio,
     activeSocioCount,
+    tenancy: {
+      unanchoredSocios,
+      unanchoredMentors,
+      whatsappUnanchored,
+    },
     financialSummary: financialWeeks.map((w) => ({
       weekStartDate: w.weekStartDate,
       totalRevenue: w._sum.revenue ?? 0,

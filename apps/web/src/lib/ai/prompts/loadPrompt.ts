@@ -1,6 +1,6 @@
-import { repo } from '@/lib/repo';
 import type { SystemPrompt } from '@/lib/repo/types';
 import type { ConfigScope } from './scope';
+import { getActivePromptCached } from './activePromptCache';
 
 /**
  * Mutable accumulator for AI-trace prompt versions: layer key -> version string.
@@ -46,7 +46,7 @@ export async function loadActivePrompt(
   sinkKey?: string,
 ): Promise<string> {
   try {
-    const prompt = await repo.getActivePrompt(category, scope);
+    const prompt = await getActivePromptCached(category, scope);
     if (!prompt?.content) return fallback;
 
     if (sink && sinkKey) {

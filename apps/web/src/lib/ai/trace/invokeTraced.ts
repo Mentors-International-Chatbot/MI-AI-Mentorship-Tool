@@ -44,8 +44,16 @@ export interface InvokeTracedParams<T> {
   assessmentSessionId?: string;
   /** Router mode when applicable. */
   mode?: string;
-  /** The real LLM call, already configured by the caller. */
-  invoke: () => Promise<T>;
+  /**
+   * The real LLM call, already configured by the caller.
+   *
+   * Streaming callers call `markFirstToken()` when the first chunk with actual
+   * content arrives; the wrapper stamps TTFT off the same clock it uses for
+   * latencyMs, so the two are directly comparable. Only the first call counts.
+   * Non-streaming callers ignore the argument — `() => Promise<T>` is still
+   * assignable here, so every existing call site is untouched.
+   */
+  invoke: (markFirstToken: () => void) => Promise<T>;
 }
 
 /** LangChain attaches token counts here when the provider returns them. */
@@ -97,6 +105,7 @@ async function writeTrace(row: {
   promptTokensApprox: number | null;
   responseLength: number | null;
   latencyMs: number;
+  ttftMs: number | null;
   success: boolean;
   errorMessage: string | null;
 }): Promise<void> {
@@ -115,6 +124,7 @@ async function writeTrace(row: {
         promptTokensApprox: row.promptTokensApprox,
         responseLength: row.responseLength,
         latencyMs: row.latencyMs,
+        ttftMs: row.ttftMs,
         success: row.success,
         errorMessage: row.errorMessage,
       },
@@ -135,8 +145,14 @@ export async function invokeTraced<T>(params: InvokeTracedParams<T>): Promise<T>
   const promptText = shouldStorePromptText() ? systemPrompt : null;
   const startedAt = Date.now();
 
+  // Stays null for non-streaming calls, which never invoke the callback.
+  let ttftMs: number | null = null;
+  const markFirstToken = () => {
+    if (ttftMs === null) ttftMs = Date.now() - startedAt;
+  };
+
   try {
-    const result = await params.invoke();
+    const result = await params.invoke(markFirstToken);
 
     await writeTrace({
       operation,
@@ -151,6 +167,7 @@ export async function invokeTraced<T>(params: InvokeTracedParams<T>): Promise<T>
       promptTokensApprox: approxPromptTokens(systemPrompt, result),
       responseLength: contentLength(result) ?? null,
       latencyMs: Date.now() - startedAt,
+      ttftMs,
       success: true,
       errorMessage: null,
     });
@@ -170,6 +187,8 @@ export async function invokeTraced<T>(params: InvokeTracedParams<T>): Promise<T>
       promptTokensApprox: approxPromptTokens(systemPrompt, null),
       responseLength: null,
       latencyMs: Date.now() - startedAt,
+      // A stream that emitted tokens and then failed still has a real TTFT.
+      ttftMs,
       success: false,
       errorMessage: error instanceof Error ? error.message : String(error),
     });

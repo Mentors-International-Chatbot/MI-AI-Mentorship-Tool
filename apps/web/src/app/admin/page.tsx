@@ -20,6 +20,16 @@ type Analytics = {
   totalMessages: number;
   avgMessagesPerSocio: number;
   activeSocioCount: number;
+  /**
+   * Optional so an older deployment of the analytics route — or a cached
+   * response from before this field existed — renders the rest of the page
+   * instead of throwing on a missing key.
+   */
+  tenancy?: {
+    unanchoredSocios: number;
+    unanchoredMentors: number;
+    whatsappUnanchored: number;
+  };
   financialSummary: {
     weekStartDate: string;
     totalRevenue: number;
@@ -177,6 +187,49 @@ export default function AdminOverviewPage() {
       {/* Drill-down for row 1 */}
       {expanded && ['totalSocios', 'activeSocios', 'activeThisWeek', 'messagesThisWeek'].includes(expanded) && (
         <DrillDownPanel key={expanded} drillKey={expanded} showMessages={expanded === 'messagesThisWeek'} />
+      )}
+
+      {/* Tenancy anchoring.
+          Rendered only when something is unanchored: at zero this is noise, and
+          a permanent "0 unanchored" tile trains people to stop reading it. An
+          unanchored socio or mentor is otherwise completely silent — the socio
+          just does not appear on a dashboard and the mentor just sees an empty
+          roster, with no error anywhere. */}
+      {data.tenancy && (data.tenancy.unanchoredSocios > 0 || data.tenancy.unanchoredMentors > 0) && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <h3 className="font-semibold text-amber-900 mb-1">Unanchored records</h3>
+          <p className="text-sm text-amber-800 mb-3">
+            These have no organization anchor, so they are invisible to org-scoped
+            queries — learners do not appear on any mentor dashboard, and mentors
+            see an empty roster. Anchoring happens when a real organization signal
+            first exists (course selection for learners, first learner assignment
+            for mentors); it is never guessed.
+          </p>
+          <div className="flex flex-wrap gap-6 text-sm">
+            <span className="text-amber-900">
+              Learners: <strong>{data.tenancy.unanchoredSocios}</strong>
+              {data.tenancy.whatsappUnanchored > 0 && (
+                <span className="text-amber-700">
+                  {' '}({data.tenancy.whatsappUnanchored} via WhatsApp, which has no course signal yet)
+                </span>
+              )}
+            </span>
+            <span className="text-amber-900">
+              Mentors: <strong>{data.tenancy.unanchoredMentors}</strong>
+            </span>
+          </div>
+          <p className="text-xs text-amber-700 mt-3">
+            Backfill with{' '}
+            <code className="bg-amber-100 px-1 rounded">
+              npx tsx scripts/backfill-participant-profiles.ts --apply
+            </code>{' '}
+            /{' '}
+            <code className="bg-amber-100 px-1 rounded">
+              scripts/backfill-mentor-profiles.ts --apply
+            </code>
+            . Records with no organization signal are skipped by design.
+          </p>
+        </div>
       )}
 
       {/* Top-level metrics row 2 */}

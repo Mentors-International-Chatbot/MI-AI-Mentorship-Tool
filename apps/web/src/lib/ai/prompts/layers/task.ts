@@ -9,7 +9,7 @@ import {
   SocioProgress,
   RouterResult,
 } from '../types';
-import { getLessonTitle } from '@/lib/lessons/db-lesson-service';
+import { getLessonTitle, hasLessonData } from '@/lib/lessons/db-lesson-service';
 import { FLAG_RED_THRESHOLD, RETEACH_LEVEL_THRESHOLD, CONFUSION_ESCALATE_THRESHOLD } from '../constants';
 import { loadActivePrompt, type PromptVersionSink } from '../loadPrompt';
 import type { ConfigScope } from '../scope';
@@ -19,8 +19,87 @@ import { DEFAULT_PERSONALIZATION_INSTRUCTION } from '@/lib/courses/defaults';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
 import { buildStanceBlock } from '../stance';
 
-/** Bump whenever the Layer 3 prompt text changes. Recorded on every AiInvocation. */
-export const TASK_PROMPT_VERSION = 'v2';
+/**
+ * Bump whenever the Layer 3 prompt text changes. Recorded on every AiInvocation.
+ *
+ * v3 hands the AI the lesson closing. It used to be a system banner
+ * concatenated onto the reply in `messaging/handler.ts` — "✅ Lesson 1
+ * complete!" plus either a "type next" line or "Congratulations on completing
+ * all the lessons!" — which arrived in a different voice immediately after the
+ * AI had assigned a commitment as the next step, and contradicted it.
+ */
+export const TASK_PROMPT_VERSION = 'v3';
+
+// ─── Lesson closing ─────────────────────────────────────────────────
+// Finishing a lesson and finishing the course are different events and have to
+// read differently. The old banner could not tell them apart: it chose between
+// them on `hasLessonData(n+1)`, so a one-lesson course produced "Congratulations
+// on completing all the lessons!" — literally true and reading like a bug.
+//
+// The AI can only write the right closing if it knows, BEFORE it decides to
+// emit the marker, whether another lesson follows. That is a static fact about
+// curriculum position, so it is knowable up front and stated here.
+
+interface ClosingScaffolding {
+  header: string;
+  finalLesson: (pn: string) => string;
+  moreLessons: (pn: string, next: number) => string;
+}
+
+const CLOSING_SCAFFOLDING: Record<SupportedLanguage, ClosingScaffolding> = {
+  es: {
+    header: 'AL CERRAR LA LECCIÓN',
+    finalLesson: (pn) => `- Esta es la ÚLTIMA lección del curso. Si el ${pn} la completa, cierra el CURSO, no solo la lección.
+- Reconoce lo que logró en todo el curso y apunta a lo que sigue haciendo por su cuenta (su compromiso o su proyecto).
+- NO le digas que escriba "siguiente" ni sugieras que quedan más lecciones. No quedan.`,
+    moreLessons: (pn, next) => `- Después del marcador, cierra tú mismo la lección en tus propias palabras.
+- Reconoce brevemente lo que el ${pn} acaba de terminar, y dile que escriba "siguiente" cuando quiera empezar la lección ${next}.
+- Es el cierre de UNA lección, no del curso. No lo felicites por terminar el curso.`,
+  },
+  en: {
+    header: 'WHEN CLOSING THE LESSON',
+    finalLesson: (pn) => `- This is the LAST lesson of the course. If the ${pn} completes it, close the COURSE, not just the lesson.
+- Acknowledge what they achieved across the whole course and point at what they carry on doing themselves (their commitment or their project).
+- Do NOT tell them to type "next" or imply more lessons remain. None do.`,
+    moreLessons: (pn, next) => `- After the marker, write the lesson's closing yourself, in your own words.
+- Briefly acknowledge what the ${pn} just finished, and tell them to type "next" when they want to start lesson ${next}.
+- This closes ONE lesson, not the course. Do not congratulate them on finishing the course.`,
+  },
+  pt: {
+    header: 'AO FECHAR A LIÇÃO',
+    finalLesson: (pn) => `- Esta é a ÚLTIMA lição do curso. Se o ${pn} a completar, feche o CURSO, não apenas a lição.
+- Reconheça o que ele alcançou em todo o curso e aponte para o que ele continua fazendo por conta própria (seu compromisso ou seu projeto).
+- NÃO diga para digitar "próximo" nem sugira que restam mais lições. Não restam.`,
+    moreLessons: (pn, next) => `- Depois do marcador, escreva você mesmo o fechamento da lição, com suas palavras.
+- Reconheça brevemente o que o ${pn} acabou de terminar, e diga para digitar "próximo" quando quiser começar a lição ${next}.
+- Isto fecha UMA lição, não o curso. Não o parabenize por terminar o curso.`,
+  },
+};
+
+/**
+ * The closing note appended wherever the AI is told it may emit
+ * `[LESSON_COMPLETE]`. Deliberately assembled outside `loadActivePrompt`, like
+ * the last-message instructions it sits beside: a course lead retuning their
+ * task prompt should not be able to delete the only thing that ends a course.
+ */
+export function buildLessonClosingNote(params: {
+  collectionKey: string;
+  lessonNumber: number;
+  participantNoun: string;
+  language: SupportedLanguage;
+}): string {
+  const { collectionKey, lessonNumber, participantNoun, language } = params;
+  const s = CLOSING_SCAFFOLDING[language] ?? CLOSING_SCAFFOLDING['en'];
+
+  const nextLesson = lessonNumber + 1;
+  const isFinalLesson = !hasLessonData(collectionKey, nextLesson);
+
+  const body = isFinalLesson
+    ? s.finalLesson(participantNoun)
+    : s.moreLessons(participantNoun, nextLesson);
+
+  return `\n\n${s.header}:\n${body}`;
+}
 
 // ─── Layer 3: Task Context — One Per Interaction Mode ───────────────
 // The router determines the mode; this function returns the right prompt.
@@ -91,6 +170,7 @@ export async function buildTaskPrompt(
   /** Trace-only: receives `task` when a DB-backed prompt overrode the default. */
   sink?: PromptVersionSink,
   scope?: ConfigScope,
+  reachedMilestoneKeys?: ReadonlySet<string>,
 ): Promise<string> {
   const dimensionContext = buildDimensionContext(dimensionState);
   const meta = await getCourseMeta(collectionKey);
@@ -103,7 +183,7 @@ export async function buildTaskPrompt(
       basePrompt = await buildLessonStartPrompt(socio, result.lesson!, meta, participantNoun, language, sink, scope);
       break;
     case InteractionMode.LESSON_DELIVERY:
-      basePrompt = await buildLessonDeliveryPrompt(socio, result.lesson!, meta, participantNoun, language, sink, scope);
+      basePrompt = await buildLessonDeliveryPrompt(socio, result.lesson!, meta, participantNoun, language, collectionKey, sink, scope);
       break;
     case InteractionMode.FREEFORM_QUESTION:
       basePrompt = await buildFreeformPrompt(progress, collectionKey, meta, participantNoun, language, sink, scope);
@@ -112,7 +192,7 @@ export async function buildTaskPrompt(
       basePrompt = await buildCheckinPrompt(socio, result.checkin!, meta, participantNoun, language, sink, scope);
       break;
     case InteractionMode.RETEACH:
-      basePrompt = await buildReteachPrompt(socio, result.reteach!, meta, participantNoun, language, sink, scope);
+      basePrompt = await buildReteachPrompt(socio, result.reteach!, meta, participantNoun, language, collectionKey, sink, scope);
       break;
     case InteractionMode.REMINDER:
       basePrompt = await buildReminderPrompt(socio, result.reminder!, participantNoun, language, sink, scope);
@@ -148,6 +228,7 @@ export async function buildTaskPrompt(
         language,
         sink,
         scope,
+        reachedMilestoneKeys,
       })
     : '';
 
@@ -252,6 +333,7 @@ async function buildLessonDeliveryPrompt(
   meta: Awaited<ReturnType<typeof getCourseMeta>>,
   participantNoun: string,
   language: SupportedLanguage,
+  collectionKey: string,
   sink?: PromptVersionSink,
   scope?: ConfigScope,
 ): Promise<string> {
@@ -342,7 +424,15 @@ async function buildLessonDeliveryPrompt(
     ? `
 
 ${s.lastMessageHeader}:
-${s.lastMessageInstructions(participantNoun, lesson.lessonNumber, lesson.messageIndex, lesson.totalMessages)}`
+${s.lastMessageInstructions(participantNoun, lesson.lessonNumber, lesson.messageIndex, lesson.totalMessages)}` +
+      // Only where the marker is actually invited. Telling the AI how to close
+      // a lesson it is not near the end of would invite it to close early.
+      buildLessonClosingNote({
+        collectionKey,
+        lessonNumber: lesson.lessonNumber,
+        participantNoun,
+        language,
+      })
     : '';
 
   // Build context line - include context info only when learnerContext exists
@@ -708,6 +798,7 @@ async function buildReteachPrompt(
   meta: Awaited<ReturnType<typeof getCourseMeta>>,
   participantNoun: string,
   language: SupportedLanguage,
+  collectionKey: string,
   sink?: PromptVersionSink,
   scope?: ConfigScope,
 ): Promise<string> {
@@ -827,7 +918,16 @@ INSTRUÇÕES:
 
   const defaultInstructions = instructionTemplates[language] ?? instructionTemplates['en'];
   const instructions = await loadActivePrompt('reteach', defaultInstructions, scope, sink, 'task');
-  return `${instructions}\n\n${dynamicContext.trim()}`;
+  // Reteach can complete a lesson too (step 6 emits the marker on a 4+ score),
+  // so it needs the same closing guidance. Missing it here is how the last
+  // lesson of a course would end with "type next" after a successful reteach.
+  const closing = buildLessonClosingNote({
+    collectionKey,
+    lessonNumber: reteach.lessonNumber,
+    participantNoun,
+    language,
+  });
+  return `${instructions}\n\n${dynamicContext.trim()}${closing}`;
 }
 
 // ─── REMINDER ───────────────────────────────────────────────────────

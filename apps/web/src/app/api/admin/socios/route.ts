@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { buildSocioWhere } from './filters';
 import { requireAdmin } from '@/lib/auth/adminGuard';
 import { activeFlagWhere } from '@/lib/flags/active';
+import { anchorMentorProfile } from '@/lib/tenancy/mentorAnchor';
 
 const SOCIO_LIST_INCLUDE = {
   progress: true,
@@ -115,6 +116,19 @@ export async function PATCH(request: NextRequest) {
     where: { id: socioId },
     data: { mentorId },
   });
+
+  // First socio assignment is the moment a mentor's org becomes knowable, so it
+  // is where they get anchored. Deliberately AFTER the update commits, not in a
+  // transaction with it: resolution reads the socio's mentorId back, and an
+  // uncommitted write is invisible to that query — the same ordering the
+  // curriculum route relies on for socios.
+  //
+  // Never blocks the assignment. If the socio is itself unanchored, neither
+  // gets anchored and the admin's action still succeeds; anchoring chains, and
+  // a mentor becomes resolvable once their socios are.
+  if (mentorId) {
+    await anchorMentorProfile({ mentorId, trigger: 'admin_assign_socio' });
+  }
 
   await prisma.auditLog.create({
     data: {

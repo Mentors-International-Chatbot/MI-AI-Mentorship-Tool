@@ -12,7 +12,6 @@ import type {
   EnrollmentInvitation,
   ParticipantProfile,
   MentorProfile,
-  MentoringRelationship,
   ContentCollection,
   ContentLesson,
   LessonVersion,
@@ -38,7 +37,6 @@ import type {
   EnrollmentInvitation as PrismaEnrollmentInvitation,
   ParticipantProfile as PrismaParticipantProfile,
   MentorProfile as PrismaMentorProfile,
-  MentoringRelationship as PrismaMentoringRelationship,
   ContentCollection as PrismaContentCollection,
   ContentLesson as PrismaContentLesson,
   LessonVersion as PrismaLessonVersion,
@@ -168,17 +166,6 @@ function toMentorProfile(p: PrismaMentorProfile): MentorProfile {
   };
 }
 
-function toMentoringRelationship(p: PrismaMentoringRelationship): MentoringRelationship {
-  return {
-    id: p.id,
-    mentorId: p.mentorId,
-    participantId: p.participantId,
-    role: p.role as MentoringRelationship['role'],
-    activeFrom: p.activeFrom,
-    activeUntil: p.activeUntil,
-    createdAt: p.createdAt,
-  };
-}
 
 function toContentCollection(p: PrismaContentCollection): ContentCollection {
   return {
@@ -753,6 +740,36 @@ export const tenantPrismaRepo: TenantRepo = {
     return profile?.organizationId ?? null;
   },
 
+  async getMentorAnchorInputs(mentorId) {
+    const [mentor, memberships, socios] = await Promise.all([
+      prisma.mentor.findUnique({
+        where: { id: mentorId },
+        select: { name: true, email: true, role: true },
+      }),
+      prisma.organizationMembership.findMany({
+        where: { userId: mentorId },
+        select: { organizationId: true, role: true },
+      }),
+      prisma.socio.findMany({
+        where: { mentorId },
+        select: { participantProfile: { select: { organizationId: true } } },
+      }),
+    ]);
+
+    return {
+      identity: mentor,
+      memberships,
+      assignedSocioCount: socios.length,
+      assignedSocioOrganizationIds: [
+        ...new Set(
+          socios
+            .map((s) => s.participantProfile?.organizationId)
+            .filter((o): o is string => typeof o === 'string'),
+        ),
+      ],
+    };
+  },
+
   /**
    * Resolve organizationId for a socio with fallback chain:
    * 1. ParticipantProfile path (enrolled socios)
@@ -1261,13 +1278,53 @@ export const tenantPrismaRepo: TenantRepo = {
   },
 
   async createMentorProfile(ctx, data) {
-    const profile = await prisma.mentorProfile.create({
-      data: {
+    // Same shape and same reasoning as createParticipant: `mentorId` is a
+    // unique nullable natural key, so when it is present this must upsert.
+    // Anchoring now runs from two concurrent-capable triggers (admin create,
+    // first socio assignment) plus the backfill, and a plain create would turn
+    // a second one into a P2002 that fails the admin's action.
+    if (data.mentorId === null) {
+      const profile = await prisma.mentorProfile.create({
+        data: {
+          organizationId: ctx.organizationId,
+          mentorId: null,
+          displayName: data.displayName,
+          specialties: data.specialties,
+          metadata: (data.metadata as object) ?? undefined,
+        },
+      });
+      return toMentorProfile(profile);
+    }
+
+    // A profile already anchored to another tenant is not ours to re-home.
+    const existing = await prisma.mentorProfile.findUnique({
+      where: { mentorId: data.mentorId },
+      select: { id: true, organizationId: true },
+    });
+    if (existing && existing.organizationId !== ctx.organizationId) {
+      throw new TenantIsolationError('Cross-tenant access denied', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: existing.organizationId,
+        resourceType: 'MentorProfile',
+        resourceId: existing.id,
+      });
+    }
+
+    const profile = await prisma.mentorProfile.upsert({
+      where: { mentorId: data.mentorId },
+      create: {
         organizationId: ctx.organizationId,
         mentorId: data.mentorId,
         displayName: data.displayName,
         specialties: data.specialties,
         metadata: (data.metadata as object) ?? undefined,
+      },
+      // organizationId is deliberately absent: the tenant anchor is set once at
+      // creation, and the guard above has established any existing row is ours.
+      update: {
+        ...(data.displayName !== null && { displayName: data.displayName }),
+        ...(data.specialties.length > 0 && { specialties: data.specialties }),
+        ...(data.metadata !== null && { metadata: data.metadata as object }),
       },
     });
     return toMentorProfile(profile);
@@ -1284,42 +1341,6 @@ export const tenantPrismaRepo: TenantRepo = {
       },
     });
     return toMentorProfile(profile);
-  },
-
-  // ─── Mentoring Relationships ───────────────────────────────────────────────
-  async getMentoringRelationships(ctx, participantId) {
-    await verifyParticipantOwnership(ctx, participantId);
-    const relationships = await prisma.mentoringRelationship.findMany({
-      where: { participantId },
-      orderBy: { createdAt: 'desc' },
-    });
-    return relationships.map(toMentoringRelationship);
-  },
-
-  async createMentoringRelationship(ctx, mentorProfileId, participantId, role) {
-    await verifyMentorProfileOwnership(ctx, mentorProfileId);
-    await verifyParticipantOwnership(ctx, participantId);
-    const relationship = await prisma.mentoringRelationship.create({
-      data: { mentorId: mentorProfileId, participantId, role },
-    });
-    return toMentoringRelationship(relationship);
-  },
-
-  async endMentoringRelationship(ctx, relationshipId) {
-    // Verify through participant ownership
-    const relationship = await prisma.mentoringRelationship.findUnique({
-      where: { id: relationshipId },
-      select: { participantId: true },
-    });
-    if (!relationship) {
-      throw new TenantIsolationError('Relationship not found', { resourceType: 'MentoringRelationship', resourceId: relationshipId });
-    }
-    await verifyParticipantOwnership(ctx, relationship.participantId);
-    const updated = await prisma.mentoringRelationship.update({
-      where: { id: relationshipId },
-      data: { activeUntil: new Date() },
-    });
-    return toMentoringRelationship(updated);
   },
 
   // ─── Content Collections ───────────────────────────────────────────────────

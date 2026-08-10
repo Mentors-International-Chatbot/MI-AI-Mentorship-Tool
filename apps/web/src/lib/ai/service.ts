@@ -1,6 +1,6 @@
-import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
+import { HumanMessage, SystemMessage, AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { repo } from '@/lib/repo';
-import { Socio, Message } from '@/lib/repo/types';
+import { Socio, Message, SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
 import {
     buildSystemPrompt,
     determineMode,
@@ -11,16 +11,19 @@ import {
     type StanceDecision,
 } from './prompts';
 import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
+import { createStreamingSanitizer } from '@/lib/ai/streamingSanitizer';
 import { DEFAULT_LANGUAGE, AI_ERROR_FALLBACK, type SupportedLanguage } from '@/lib/i18n/languages';
 import { logEvent } from '@/lib/logging/logger';
 import {
-    senseDimensions,
+    senseAndScore,
     updateDimensionState,
     getDimensionStateMap,
     type DimensionStateMap,
 } from './sensing';
 
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
+import { resolveAnalysisPolicy, type AnalysisPolicy } from '@/lib/ai/analysisPolicy';
+import type { SentimentResult } from '@/lib/sentiment/analyzer';
 import { createOpenRouterChat, resolveOpenRouterModel } from '@/lib/ai/openrouter';
 import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
 import { CORE_PROMPT_VERSION } from './prompts/layers/core';
@@ -30,7 +33,25 @@ import { getContentIdentity } from './prompts/layers/content';
 import type { PromptVersionSink } from './prompts/loadPrompt';
 
 
-const AI_TIMEOUT_MS = 30000; // 30 seconds max per request
+/**
+ * Ceiling on one LLM attempt in the interactive path.
+ *
+ * Was 30s. A learner staring at a blank chat for half a minute is worse served
+ * than one who gets the honest fallback at 12s and can retry — and a turn that
+ * has not produced a first token in 12s is not about to produce a good one.
+ * Batch work (summaries, crons) does not come through here.
+ *
+ * ── The threshold and the metric are not the same thing ───────────────────
+ * The reasoning above is stated in time-to-FIRST-token terms, but this budget
+ * has always been enforced against time-to-LAST-token — it is raced against
+ * the whole generation, on the streaming path exactly as on the non-streaming
+ * one. That was an identity while a reply arrived all at once. It no longer is:
+ * `ttftMs` now measures the quantity the argument is actually about, and a slow
+ * stream can hand back its first token in 400ms and still be killed at 12s.
+ * If TTFT ever becomes a user-facing SLO, this constant is what has to be
+ * revisited, and it likely splits into two budgets rather than moving.
+ */
+const AI_TIMEOUT_MS = 12000;
 
 async function invokeWithTimeout<T>(
     promise: Promise<T>,
@@ -45,10 +66,25 @@ async function invokeWithTimeout<T>(
     ]);
 }
 
+/**
+ * The narrowing `invokeWithRetry` has always applied to a message's `.content`,
+ * which is `string | ContentBlock[]`. Extracted verbatim so the streaming path
+ * applies the same rule per chunk and to the accumulated message instead of
+ * inventing a second one.
+ */
+export function contentToText(content: unknown): string {
+    return typeof content === 'string' ? content : JSON.stringify(content);
+}
+
+/**
+ * One retry, not two. With a 12s per-attempt ceiling and a 1s backoff, the old
+ * `maxRetries = 2` meant a worst case the learner experienced as a hang. One
+ * retry still absorbs the transient 5xx that motivated retrying at all.
+ */
 async function invokeWithRetry(
     chat: { invoke: (messages: (SystemMessage | HumanMessage | AIMessage)[]) => Promise<{ content: unknown }> },
     messages: (SystemMessage | HumanMessage | AIMessage)[],
-    maxRetries: number = 2,
+    maxRetries: number = 1,
 ): Promise<string> {
     let lastError: Error | null = null;
 
@@ -59,9 +95,7 @@ async function invokeWithRetry(
                 AI_TIMEOUT_MS,
                 `AI request timeout after ${AI_TIMEOUT_MS}ms`
             );
-            return typeof response.content === 'string'
-                ? response.content
-                : JSON.stringify(response.content);
+            return contentToText(response.content);
         } catch (error) {
             lastError = error as Error;
             console.error(`[AI] Attempt ${attempt + 1}/${maxRetries + 1} failed:`, error);
@@ -79,6 +113,131 @@ async function invokeWithRetry(
     }
 
     throw lastError ?? new Error('AI invoke failed');
+}
+
+/** Structural, like invokeWithRetry's — keeps LangChain's client type out of here. */
+type StreamingChat = {
+    stream: (
+        messages: (SystemMessage | HumanMessage | AIMessage)[],
+    ) => Promise<AsyncIterable<AIMessageChunk>>;
+};
+
+/**
+ * The streaming twin of invokeWithRetry.
+ *
+ * Returns the ACCUMULATED AIMessageChunk rather than a string, and only once
+ * the stream is drained. Two things depend on that: invokeTraced's latencyMs
+ * stays time-to-last-token instead of collapsing to time-to-stream-handle, and
+ * its usage_metadata / contentLength extraction reads the same shape it reads
+ * from a non-streaming reply. Nothing in invokeTraced needed to change.
+ *
+ * ── Retry, and why it is narrower here ────────────────────────────────────
+ * A retry re-runs generation from scratch. On the non-streaming path nobody
+ * has seen the first attempt, so that is free. Once a token has been emitted
+ * the learner is already reading attempt one, and appending attempt two's
+ * different wording onto it corrupts the message in place. So a stream is
+ * retried only while nothing has reached the client. That keeps the case the
+ * retry existed for — the transient 5xx, which happens at connection time
+ * before any token — and drops only the case that would double-send.
+ */
+export async function streamWithRetry(
+    chat: StreamingChat,
+    messages: (SystemMessage | HumanMessage | AIMessage)[],
+    onToken: (delta: string) => void,
+    markFirstToken: () => void,
+    maxRetries: number = 1,
+): Promise<AIMessageChunk> {
+    let lastError: Error | null = null;
+    let emittedAnything = false;
+
+    /**
+     * Best-effort delivery to the consumer. Generation does not depend on it.
+     *
+     * The client half of a stream is the least reliable part of the system: a
+     * closed tab makes the route's controller throw on write. That must not
+     * become a generation failure, because the reply still has to be stored,
+     * its markers persisted and progression advanced — a learner who reloads
+     * mid-reply gets their turn back from the DB, not from the socket.
+     *
+     * `emittedAnything` is set even when the consumer threw, because we cannot
+     * know whether the bytes landed before it did, and a retry that guesses
+     * wrong double-sends.
+     */
+    const emit = (delta: string) => {
+        emittedAnything = true;
+        try {
+            onToken(delta);
+        } catch (error) {
+            console.error('[AI] Stream consumer threw; generation continues:', error);
+        }
+    };
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        // Set when this attempt loses the timeout race. Promise.race does not
+        // cancel the loser, so without it an abandoned stream would keep
+        // pushing tokens at a client that has already been handed the fallback.
+        let abandoned = false;
+
+        const consume = async (): Promise<AIMessageChunk> => {
+            const sanitizer = createStreamingSanitizer();
+            let accumulated: AIMessageChunk | null = null;
+
+            const stream = await chat.stream(messages);
+            for await (const chunk of stream) {
+                // Breaking calls the iterator's return(), which cancels the
+                // underlying request rather than leaving it to run to term.
+                if (abandoned) break;
+
+                accumulated = accumulated === null ? chunk : accumulated.concat(chunk);
+
+                const raw = contentToText(chunk.content);
+                // The last chunk carries usage and no content; it is not a token.
+                if (raw.length === 0) continue;
+
+                markFirstToken();
+                const delta = sanitizer.push(raw);
+                if (delta && !abandoned) emit(delta);
+            }
+
+            if (abandoned) throw lastError ?? new Error('AI stream abandoned');
+
+            const tail = sanitizer.end();
+            if (tail) emit(tail);
+
+            if (accumulated === null) throw new Error('AI stream produced no chunks');
+            return accumulated;
+        };
+
+        try {
+            // Same 12s ceiling as the non-streaming path, over the same span:
+            // the whole generation, not merely its first token.
+            return await invokeWithTimeout(
+                consume(),
+                AI_TIMEOUT_MS,
+                `AI request timeout after ${AI_TIMEOUT_MS}ms`,
+            );
+        } catch (error) {
+            abandoned = true;
+            lastError = error as Error;
+            console.error(`[AI] Stream attempt ${attempt + 1}/${maxRetries + 1} failed:`, error);
+
+            if (error instanceof Error && error.message.includes('timeout')) {
+                throw error;
+            }
+            // Retrying now would append a second generation to text already on
+            // screen. The caller's fallback handles it instead.
+            if (emittedAnything) {
+                throw error;
+            }
+
+            if (attempt < maxRetries) {
+                const delay = Math.pow(2, attempt) * 1000;
+                await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+        }
+    }
+
+    throw lastError ?? new Error('AI stream failed');
 }
 
 /**
@@ -123,6 +282,18 @@ export interface AIResponse {
     mode: InteractionMode;
     determineModeResult: DetermineModeResult;
     dimensionState?: DimensionStateMap;
+    /**
+     * Which passive analysis this turn earned. Resolved here because it needs
+     * the router's mode, and returned because the caller owns the two passes
+     * that run after the reply (sentiment, context extraction).
+     */
+    analysisPolicy: AnalysisPolicy;
+    /**
+     * Emotion scores for the learner's message, from the merged analysis pass.
+     * Present only when the policy asked for it and the model's answer parsed.
+     * The caller persists it; no LLM work remains.
+     */
+    sentiment?: SentimentResult | null;
     isError?: boolean;
     /** Gated assessment info - present when mode is GATED_ASSESSMENT */
     gatedAssessment?: {
@@ -140,6 +311,16 @@ export async function generateAIResponse(
     collectionKey: string,
     /** Optional pre-computed dimension state for testing */
     overrideDimensionState?: DimensionStateMap,
+    /**
+     * Opt into streaming. Absent means the exact non-streaming path as before:
+     * one .invoke(), one result, nothing emitted along the way.
+     *
+     * Deltas are already through the delivery pipeline — the sanitizer releases
+     * only text no later token can alter, so what arrives here never needs to
+     * be taken back. It is still a PREFIX of the final `text`, not equal to it:
+     * the caller appends to the reply after generation ends.
+     */
+    onToken?: (delta: string) => void,
 ): Promise<AIResponse> {
     const startTime = performance.now();
     const timings: Record<string, number> = {};
@@ -148,52 +329,83 @@ export async function generateAIResponse(
         temperature: 0.7,
     });
 
-    // 0. Kick off the sensing pass. It is NOT awaited here: dimension state is
-    //    a slow-moving EMA, so this turn's reply is generated against the PRIOR
-    //    state while sensing computes the new one concurrently. Turn latency
-    //    drops from sensing + llm (~5s) to roughly max(sensing, llm) (~2.5s).
+    // 0. State the router needs. Both reads are independent, so they go out
+    //    together rather than one after the other.
     const sensingStart = performance.now();
     let priorState: DimensionStateMap = {};
-    let sensingPromise: Promise<DimensionStateMap>;
+    // Read once here and handed to determineMode below. The router used to
+    // re-read it, which was a second round trip for a value that cannot have
+    // changed in between.
+    let prefetchedProgress: RepoSocioProgress | undefined;
 
     if (overrideDimensionState) {
         // Use override state (for testing) - no sensing call at all
         priorState = overrideDimensionState;
-        sensingPromise = Promise.resolve(overrideDimensionState);
     } else {
-        priorState = await getDimensionStateMap(socio.id);
-
-        // Get lesson context for sensing
-        const repoProgress = await repo.getSocioProgress(socio.id);
-        const lessonContext = hasLessonData(collectionKey, repoProgress.currentLessonNumber)
-            ? getLessonData(collectionKey, repoProgress.currentLessonNumber).titleEs
-            : 'Conversación general de mentoría';
-
-        const stateAtDispatch = priorState;
-        sensingPromise = senseDimensions({
-            incomingText,
-            priorState: stateAtDispatch,
-            lessonContext,
-            socioId: socio.id,
-        }).then((sensed) => {
-            // Trivial message: no LLM call ran and there is nothing to fold in,
-            // so the prior state carries forward untouched.
-            if (sensed.skipped || sensed.dimensions.length === 0) {
-                return stateAtDispatch;
-            }
-            return updateDimensionState(socio.id, sensed.dimensions);
-        }).catch((error) => {
-            console.error('[AI] Sensing pass failed, keeping prior state:', error);
-            return stateAtDispatch;
-        });
+        const [dimensionState, repoProgress] = await Promise.all([
+            getDimensionStateMap(socio.id),
+            repo.getSocioProgress(socio.id),
+        ]);
+        priorState = dimensionState;
+        prefetchedProgress = repoProgress;
     }
 
     // 1. Determine interaction mode from real progress data + PRIOR dimension
     //    state. Gate detection does not read dimension state; only the reteach
     //    heuristic does, and a one-turn lag on an EMA signal is immaterial.
     const modeStart = performance.now();
-    const modeResult = await determineMode(socio, incomingText, collectionKey, priorState);
+    const modeResult = await determineMode(
+        socio, incomingText, collectionKey, priorState, prefetchedProgress,
+    );
     timings.determineMode = performance.now() - modeStart;
+
+    // 1b. Kick off the sensing pass, if this turn is worth sensing.
+    //
+    //     It is NOT awaited here: dimension state is a slow-moving EMA, so this
+    //     turn's reply is generated against the PRIOR state while sensing
+    //     computes the new one concurrently. Turn latency drops from
+    //     sensing + llm to roughly max(sensing, llm).
+    //
+    //     Dispatched AFTER the router rather than before it, which costs
+    //     nothing — `determineMode` is DB-only and already had to finish before
+    //     the LLM call — and buys the policy a mode to decide on. A learner
+    //     typing "next" to advance a lesson is not reporting comprehension, and
+    //     sensing it was a Haiku round trip spent to learn nothing.
+    const policy = resolveAnalysisPolicy({
+        mode: modeResult.routerResult.mode,
+        message: incomingText,
+    });
+
+    //     One call, both signals. Comprehension and emotion used to be two
+    //     Haiku round trips scoring the same sentence, with `confusion` graded
+    //     twice and no guarantee the answers agreed.
+    let analysisPromise: Promise<{ state: DimensionStateMap; sentiment: SentimentResult | null }>;
+    if (overrideDimensionState || !policy.sensing) {
+        analysisPromise = Promise.resolve({ state: priorState, sentiment: null });
+    } else {
+        const repoProgress = prefetchedProgress ?? modeResult.repoProgress;
+        const lessonContext = hasLessonData(collectionKey, repoProgress.currentLessonNumber)
+            ? getLessonData(collectionKey, repoProgress.currentLessonNumber).titleEs
+            : 'Conversación general de mentoría';
+
+        const stateAtDispatch = priorState;
+        analysisPromise = senseAndScore({
+            incomingText,
+            priorState: stateAtDispatch,
+            lessonContext,
+            socioId: socio.id,
+        }).then(async (result) => {
+            // Trivial or unreadable: nothing to fold in, so the prior state
+            // carries forward untouched rather than being pulled toward neutral.
+            const state = result.dimensions.length > 0
+                ? await updateDimensionState(socio.id, result.dimensions)
+                : stateAtDispatch;
+            return { state, sentiment: result.sentiment };
+        }).catch((error) => {
+            console.error('[AI] Analysis pass failed, keeping prior state:', error);
+            return { state: stateAtDispatch, sentiment: null };
+        });
+    }
 
     // ── Handle gated assessment mode early ──────────────────────────────────
     // When student reaches a gate, we return the assessment prompt instead of
@@ -212,14 +424,15 @@ export async function generateAIResponse(
         console.log(`[GatedAssessment] Reached gate ${gateState.blockId} in lesson ${gateState.lessonKey}`);
 
         // Let the in-flight sensing pass finish and persist before returning.
-        const gateLiveState = await sensingPromise;
+        const { state: gateLiveState } = await analysisPromise;
 
         return {
             text: introText,
-            markers: { cleanText: introText, flags: [], lessonsCompleted: [], escalations: [], financials: [] },
+            markers: { cleanText: introText, flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
             mode: InteractionMode.GATED_ASSESSMENT,
             determineModeResult: modeResult,
             dimensionState: gateLiveState,
+            analysisPolicy: policy,
             gatedAssessment: {
                 sessionId: gateState.sessionId,
                 blockId: gateState.blockId,
@@ -232,23 +445,26 @@ export async function generateAIResponse(
     // 2. Assemble 4-layer system prompt with real progress + dimension state.
     //    dbPromptVersions collects the versions of any DB-backed layers the
     //    build actually used — no extra queries, it rides along the existing ones.
+    //    The history fetch does not depend on the prompt, so the two run
+    //    concurrently rather than back to back.
     const promptStart = performance.now();
     const dbPromptVersions: PromptVersionSink = {};
-    const systemPrompt = await buildSystemPrompt(
-        socio,
-        modeResult.routerResult,
-        modeResult.progress,
-        collectionKey,
-        priorState,
-        dbPromptVersions,
-        modeResult.activeFlags,
-    );
+    const [systemPrompt, recentHistory] = await Promise.all([
+        buildSystemPrompt(
+            socio,
+            modeResult.routerResult,
+            modeResult.progress,
+            collectionKey,
+            priorState,
+            dbPromptVersions,
+            modeResult.activeFlags,
+            modeResult.reachedMilestoneKeys,
+            modeResult.gateRecency,
+        ),
+        repo.getMessages(socio.id, 10),
+    ]);
     timings.buildPrompt = performance.now() - promptStart;
-
-    // 3. Fetch conversation history (last 10 messages for context)
-    const historyStart = performance.now();
-    const recentHistory = await repo.getMessages(socio.id, 10);
-    timings.fetchHistory = performance.now() - historyStart;
+    timings.fetchHistory = 0; // folded into buildPrompt above
 
     const previousMessages = recentHistory
         .map((msg: Message) => {
@@ -269,7 +485,7 @@ export async function generateAIResponse(
         const invokeStart = performance.now();
         // One trace row per logical turn: retries inside invokeWithRetry are part
         // of the same traced call, so latencyMs covers the whole attempt chain.
-        const { content: rawContent } = await invokeTraced({
+        const { content: rawMessageContent } = await invokeTraced({
             operation: 'lesson_delivery',
             model: resolveOpenRouterModel(),
             promptVersion: buildLessonPromptVersion({
@@ -283,15 +499,21 @@ export async function generateAIResponse(
             // The exact router mode (RETEACH, FREEFORM_QUESTION, ...) lives here;
             // operation stays coarse so the whole chat path is queryable as one.
             mode: modeResult.routerResult.mode,
-            invoke: async () => ({ content: await invokeWithRetry(chat, messages) }),
+            // markFirstToken is what stamps ttftMs; only the streaming branch
+            // ever calls it, so non-streaming rows keep a null TTFT.
+            invoke: async (markFirstToken): Promise<{ content: unknown }> =>
+                onToken
+                    ? await streamWithRetry(chat, messages, onToken, markFirstToken)
+                    : { content: await invokeWithRetry(chat, messages) },
         });
+        const rawContent = contentToText(rawMessageContent);
         timings.llmInvoke = performance.now() - invokeStart;
 
         // 4b. Join the concurrent sensing pass. By now it has usually already
         //     settled, so sensingJoinWait should be near zero on a normal turn -
         //     that number is how much sensing still costs after parallelization.
         const joinStart = performance.now();
-        const liveState = await sensingPromise;
+        const { state: liveState, sentiment } = await analysisPromise;
         timings.sensingJoinWait = performance.now() - joinStart;
         timings.sensing = performance.now() - sensingStart;
 
@@ -330,12 +552,14 @@ export async function generateAIResponse(
             mode: modeResult.routerResult.mode,
             determineModeResult: modeResult,
             dimensionState: liveState,
+            analysisPolicy: policy,
+            sentiment,
         };
     } catch (error) {
         console.error('[AI] All retry attempts failed:', error);
 
         // Still join sensing so its state write lands before the request ends.
-        await sensingPromise;
+        await analysisPromise;
 
         void logEvent('error', 'ai', 'AI generation failed after retries', {
             socioId: socio.id,
@@ -345,9 +569,12 @@ export async function generateAIResponse(
         const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
         return {
             text: AI_ERROR_FALLBACK[language] ?? AI_ERROR_FALLBACK['es'],
-            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [] },
+            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
             mode: modeResult.routerResult.mode,
             determineModeResult: modeResult,
+            // The reply failed, so there is no AI turn to extract context from.
+            // Sentiment still stands on the learner's own message.
+            analysisPolicy: { ...policy, contextExtraction: false },
             isError: true,
         };
     }

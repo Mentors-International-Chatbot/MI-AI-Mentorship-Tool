@@ -1,5 +1,5 @@
 import { isFlagActive } from "@/lib/flags/active";
-import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, LessonProgressRecord, MessageSentimentRecord, FlagSource, FlagEvent, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
+import { Repo, Socio, Message, SocioProgress, StaleSocio, LessonScores, SocioFlag, MilestoneProgressRecord, LessonProgressRecord, MessageSentimentRecord, FlagSource, FlagEvent, SocioContext, SocioDimensionState, SystemPrompt, Summary, FinancialSnapshot, SocioFeedback } from "./types";
 import type { ChannelType } from "@/lib/delivery/types";
 import { scopeTiers } from "@/lib/ai/prompts/scope";
 import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
@@ -9,6 +9,7 @@ const sociosById = new Map<string, Socio>();
 const messagesBySocio = new Map<string, Message[]>();
 const progressBySocio = new Map<string, SocioProgress>();
 const flagsBySocio = new Map<string, SocioFlag[]>();
+const milestoneProgress = new Map<string, MilestoneProgressRecord>();
 const flagEventsByFlag = new Map<string, FlagEvent[]>();
 const lessonProgressBySocio = new Map<string, Map<number, LessonProgressRecord>>();
 const sentimentsByMessage = new Map<string, MessageSentimentRecord>();
@@ -116,6 +117,15 @@ export const inMemoryRepo: Repo = {
             return arr.slice(Math.max(0, arr.length - limit));
         }
         return arr;
+    },
+
+    async getLastAssistantMessageAt(socioId) {
+        const arr = messagesBySocio.get(socioId) ?? [];
+        for (let i = arr.length - 1; i >= 0; i--) {
+            const role = arr[i].role;
+            if (role === 'assistant' || role === 'mentor') return arr[i].createdAt;
+        }
+        return null;
     },
 
     async getUserMessageDates(socioId) {
@@ -599,6 +609,31 @@ export const inMemoryRepo: Repo = {
             }
         }
         return null;
+    },
+
+    async recordMilestoneReached(data) {
+        const key = `${data.socioId}:${data.collectionKey}:${data.milestoneKey}`;
+        const existing = milestoneProgress.get(key);
+        // Matches prismaRepo: a repeat marker must not move `reachedAt`.
+        if (existing) return existing;
+        const row = {
+            id: `mp-${milestoneProgress.size + 1}`,
+            socioId: data.socioId,
+            organizationId: data.organizationId,
+            collectionKey: data.collectionKey,
+            milestoneKey: data.milestoneKey,
+            reachedAt: new Date(),
+            source: data.source ?? 'ai_marker',
+            evidence: data.evidence ?? null,
+        };
+        milestoneProgress.set(key, row);
+        return row;
+    },
+
+    async getMilestoneProgress(socioId, collectionKey) {
+        return [...milestoneProgress.values()]
+            .filter((r) => r.socioId === socioId && r.collectionKey === collectionKey)
+            .sort((a, b) => a.reachedAt.getTime() - b.reachedAt.getTime());
     },
 
     async setSocioCurriculum(socioId, collectionKey) {

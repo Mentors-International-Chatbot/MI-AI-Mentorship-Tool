@@ -220,7 +220,6 @@ async function main() {
 
   let mentorProfilesCreated = 0;
   let mentorProfilesUpdated = 0;
-  let relationshipsCreated = 0;
 
   for (const mentor of mentors) {
     // Upsert MentorProfile linked to legacy Mentor
@@ -253,42 +252,14 @@ async function main() {
       mentorProfilesCreated++;
     }
 
-    // Create MentoringRelationship for each assigned socio
-    for (const socio of mentor.socios) {
-      // Find the participant profile for this socio
-      const participant = await prisma.participantProfile.findUnique({
-        where: { socioId: socio.id },
-      });
-
-      if (participant) {
-        // Check if relationship already exists
-        const existingRelationship = await prisma.mentoringRelationship.findUnique({
-          where: {
-            mentorId_participantId_role: {
-              mentorId: mentorProfile.id,
-              participantId: participant.id,
-              role: 'primary',
-            },
-          },
-        });
-
-        if (!existingRelationship) {
-          await prisma.mentoringRelationship.create({
-            data: {
-              mentorId: mentorProfile.id,
-              participantId: participant.id,
-              role: 'primary',
-              activeFrom: socio.createdAt,
-            },
-          });
-          relationshipsCreated++;
-        }
-      }
-    }
   }
 
+  // MentoringRelationship was dropped 2026-08-08 (migration
+  // 20260808000000_drop_mentoring_relationship). It had zero application
+  // readers; Socio.mentorId is what every authorization path and mentor-facing
+  // list actually reads, so this loop wrote rows nothing ever consulted.
+
   console.log(`✓ MentorProfiles: ${mentorProfilesCreated} created, ${mentorProfilesUpdated} updated`);
-  console.log(`✓ MentoringRelationships: ${relationshipsCreated} created`);
 
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log('\n─────────────────────────────────────────────────');
@@ -303,7 +274,6 @@ async function main() {
     participantProfiles: await prisma.participantProfile.count(),
     mentorProfiles: await prisma.mentorProfile.count(),
     enrollments: await prisma.enrollment.count(),
-    mentoringRelationships: await prisma.mentoringRelationship.count(),
   };
 
   console.log('Final counts:');

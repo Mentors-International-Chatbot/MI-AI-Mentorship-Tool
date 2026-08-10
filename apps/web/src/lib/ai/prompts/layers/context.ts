@@ -4,9 +4,17 @@ import { getLessonTitle, getLessonCount } from '@/lib/lessons/db-lesson-service'
 import { repo } from '@/lib/repo';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import type { SupportedLanguage } from '@/lib/i18n/languages';
+import type { GateRecency } from '../gateRecency';
 
-/** Bump whenever the Layer 2 prompt text changes. Recorded on every AiInvocation. */
-export const CONTEXT_PROMPT_VERSION = 'v2';
+/**
+ * Bump whenever the Layer 2 prompt text changes. Recorded on every AiInvocation.
+ *
+ * v3 adds the gate-result line. Before it, nothing in the assembled prompt said
+ * a teach-back had been taken, let alone just taken: the assessment transcript
+ * is excluded from conversational history by design, so the model was inferring
+ * a passed gate from the gate prompt still sitting in its context.
+ */
+export const CONTEXT_PROMPT_VERSION = 'v3';
 
 // ─── Layer 2: Socio Context (~150 tokens) — Always Sent ────────────
 // Built dynamically from the database for every message.
@@ -46,6 +54,12 @@ interface ContextScaffolding {
   friendLabel: string;
   useNameNaturally: (pn: string) => string;
   typeOfLabel: (cl: string) => string;
+  /** Gate result for a lesson. Four states: {passed,failed} × {now,earlier}. */
+  gateLabel: (lessonNumber: number) => string;
+  gatePassedNow: string;
+  gateFailedNow: string;
+  gatePassedEarlier: string;
+  gateFailedEarlier: string;
 }
 
 const CONTEXT_SCAFFOLDING: Record<SupportedLanguage, ContextScaffolding> = {
@@ -65,6 +79,11 @@ const CONTEXT_SCAFFOLDING: Record<SupportedLanguage, ContextScaffolding> = {
     friendLabel: 'Amigo',
     useNameNaturally: (pn) => `Usa el nombre del ${pn} naturalmente en la conversación.`,
     typeOfLabel: (cl) => `Tipo de ${cl.toLowerCase()}`,
+    gateLabel: (n) => `Evaluación de la lección ${n}`,
+    gatePassedNow: 'APROBADA justo ahora (aún no la has mencionado)',
+    gateFailedNow: 'NO aprobada justo ahora (aún no la has mencionado)',
+    gatePassedEarlier: 'aprobada anteriormente',
+    gateFailedEarlier: 'no aprobada anteriormente',
   },
   en: {
     contextHeader: (pn) => `${pn.toUpperCase()} CONTEXT`,
@@ -82,6 +101,11 @@ const CONTEXT_SCAFFOLDING: Record<SupportedLanguage, ContextScaffolding> = {
     friendLabel: 'Friend',
     useNameNaturally: (pn) => `Use the ${pn}'s name naturally in conversation.`,
     typeOfLabel: (cl) => `${cl} type`,
+    gateLabel: (n) => `Lesson ${n} assessment`,
+    gatePassedNow: 'PASSED just now (you have not acknowledged it yet)',
+    gateFailedNow: 'NOT passed just now (you have not acknowledged it yet)',
+    gatePassedEarlier: 'passed earlier',
+    gateFailedEarlier: 'not passed earlier',
   },
   pt: {
     contextHeader: (pn) => `CONTEXTO DO ${pn.toUpperCase()}`,
@@ -99,6 +123,11 @@ const CONTEXT_SCAFFOLDING: Record<SupportedLanguage, ContextScaffolding> = {
     friendLabel: 'Amigo',
     useNameNaturally: (pn) => `Use o nome do ${pn} naturalmente na conversa.`,
     typeOfLabel: (cl) => `Tipo de ${cl.toLowerCase()}`,
+    gateLabel: (n) => `Avaliação da lição ${n}`,
+    gatePassedNow: 'APROVADA agora mesmo (você ainda não mencionou isso)',
+    gateFailedNow: 'NÃO aprovada agora mesmo (você ainda não mencionou isso)',
+    gatePassedEarlier: 'aprovada anteriormente',
+    gateFailedEarlier: 'não aprovada anteriormente',
   },
 };
 
@@ -134,6 +163,33 @@ function formatActiveFlags(
   return `${parts.join(', ')}${suffix}`;
 }
 
+/**
+ * Renders the gate-result line, or nothing.
+ *
+ * Absent when there is no gate, no completed attempt, or no channel able to
+ * deliver one — see `prompts/gateRecency.ts`. Nothing is the right output for
+ * those: "no assessment has been taken" is not a fact worth spending prompt
+ * tokens asserting, and asserting it would invite the model to mention it.
+ *
+ * The `justResolved` wording carries the parenthetical "you have not
+ * acknowledged it yet" because the bare outcome is ambiguous to a model that
+ * cannot see the assessment transcript — it has no way to tell a result it
+ * already congratulated from one it has never seen.
+ */
+function formatGateRecency(
+  recency: GateRecency | undefined,
+  scf: ContextScaffolding,
+): string | null {
+  if (!recency) return null;
+
+  const passed = recency.outcome === 'passed';
+  const state = recency.justResolved
+    ? (passed ? scf.gatePassedNow : scf.gateFailedNow)
+    : (passed ? scf.gatePassedEarlier : scf.gateFailedEarlier);
+
+  return `- ${scf.gateLabel(recency.lessonNumber)}: ${state}`;
+}
+
 export async function buildContextPrompt(
   socio: Socio,
   progress: SocioProgress | undefined,
@@ -146,6 +202,12 @@ export async function buildContextPrompt(
    * merely true-by-hardcoding, because they have no socio state to read.
    */
   activeFlags?: readonly SocioFlag[],
+  /**
+   * The current lesson's most recent gate result and whether it is news. Same
+   * provenance as `activeFlags`: read once by the router, passed in rather than
+   * refetched. Absent outside the conversational path.
+   */
+  gateRecency?: GateRecency,
 ): Promise<string> {
   const context = await repo.getSocioContext(socio.id);
   const meta = await getCourseMeta(collectionKey);
@@ -159,7 +221,7 @@ export async function buildContextPrompt(
   const scf = CONTEXT_SCAFFOLDING[language] ?? CONTEXT_SCAFFOLDING['en'];
 
   if (!progress || progress.completedLessons.length === 0) {
-    return buildNewSocioContext(socio, context, collectionKey, meta, participantNoun, hasLearnerContext, language, contextLabel, scf, activeFlags);
+    return buildNewSocioContext(socio, context, collectionKey, meta, participantNoun, hasLearnerContext, language, contextLabel, scf, activeFlags, gateRecency);
   }
 
   const currentTitle = getLessonTitle(collectionKey, progress.currentLessonNumber);
@@ -198,6 +260,11 @@ export async function buildContextPrompt(
 - ${scf.daysSinceContactLabel}: ${progress.daysSinceLastInteraction}
 - ${scf.activeFlagsLabel}: ${formatActiveFlags(activeFlags, scf)}`;
 
+  const gateLine = formatGateRecency(gateRecency, scf);
+  if (gateLine) {
+    block += `\n${gateLine}`;
+  }
+
   const contextSection = buildPersistentContextSection(context, hasLearnerContext, language, contextLabel);
   if (contextSection) {
     block += contextSection;
@@ -225,6 +292,13 @@ function buildNewSocioContext(
   contextLabel: string | undefined,
   scf: ContextScaffolding,
   activeFlags?: readonly SocioFlag[],
+  /**
+   * Rendered here too, and this branch is the one that matters most: gates fire
+   * mid-lesson, so a learner can pass the lesson-1 teach-back while
+   * `completedLessons` is still empty — which routes them through here. The
+   * observed silent-after-gate bug was exactly this case.
+   */
+  gateRecency?: GateRecency,
 ): string {
   const lessonTitle = getLessonTitle(collectionKey, 1);
   const totalLessons = getLessonCount(collectionKey);
@@ -262,6 +336,11 @@ function buildNewSocioContext(
 - ${scf.currentLessonLabel}: 1${totalLessons > 0 ? ` de ${totalLessons}` : ''} — "${lessonTitle}"
 - ${firstLessonNote[language] ?? firstLessonNote['en']}
 - ${scf.activeFlagsLabel}: ${formatActiveFlags(activeFlags, scf)}`;
+
+  const gateLine = formatGateRecency(gateRecency, scf);
+  if (gateLine) {
+    block += `\n${gateLine}`;
+  }
 
   const contextSection = buildPersistentContextSection(context, hasLearnerContext, language, contextLabel);
   if (contextSection) {

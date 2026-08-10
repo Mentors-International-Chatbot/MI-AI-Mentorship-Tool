@@ -19,6 +19,9 @@ vi.mock('@/lib/repo', () => ({
   repo: {
     getSocioProgress: vi.fn(),
     getMessages: vi.fn(),
+    // Never spoken before: the turn measures a zero-day gap, which is what
+    // these suites are about. Cases that care about the gap set it themselves.
+    getLastAssistantMessageAt: vi.fn(async () => null),
     getAssessmentSessionsForSocioLesson: vi.fn(),
     getActiveFlags: vi.fn(),
     updateSocio: vi.fn(),
@@ -29,6 +32,20 @@ vi.mock('@/lib/lessons/db-lesson-service', () => ({
   hasLessonData: vi.fn(),
   getLessonData: vi.fn(),
   getGateAtPosition: vi.fn(),
+}));
+
+// The stance ladder can reach for course milestones, which walks scope → the
+// program version. Both are stubbed so this suite never opens a DB connection.
+vi.mock('../resolveScope', () => ({
+  resolvePromptScope: vi.fn(async (collectionKey: string) => ({
+    organizationId: 'org-1',
+    collectionKey,
+  })),
+}));
+
+vi.mock('../courseOutcome', () => ({
+  resolveCourseProject: vi.fn(async () => null),
+  resolveCourseMilestones: vi.fn(async () => []),
 }));
 
 import { repo } from '@/lib/repo';
@@ -180,6 +197,73 @@ describe('stance rides alongside mode', () => {
 
     expect(r.routerResult.mode).toBe(InteractionMode.LESSON_START);
     expect(r.routerResult.stance?.stance).toBe('tutor');
+  });
+
+  it('lets an UNGATED course reach coach, end to end', async () => {
+    // The headline fix. A curriculum imported without teach-back gates — the
+    // legacy MI collection among them — used to be pinned to tutor for the
+    // whole course, so the coach half of the system never ran for its learners.
+    // Asserted through `determineMode` rather than `resolveStance` because the
+    // unit-level rule was never the thing that was broken; the wiring was.
+    mockGetLessonData.mockReturnValue({
+      ...lesson,
+      gates: [],
+      messages: [
+        { order: 1, type: 'escenario' as const, contentEs: 'Scenario' },
+        { order: 2, type: 'explicación' as const, contentEs: 'Explanation' },
+      ],
+    });
+    mockRepo.getSocioProgress.mockResolvedValue({
+      currentLessonNumber: 2,
+      currentMessageIndex: 2, // every teaching message delivered
+      completedLessons: [1],
+      weeklyUnderstanding: 7,
+      weeklyImplementation: null,
+      remindersSent: 0,
+    });
+
+    const r = await determineMode(socio, 'I tried it and got stuck on the pricing part', 'mi');
+
+    expect(r.routerResult.mode).toBe(InteractionMode.FREEFORM_QUESTION);
+    expect(r.routerResult.stance).toEqual({ stance: 'coach', reason: 'lesson_taught_out' });
+    expect(mockRepo.getAssessmentSessionsForSocioLesson).not.toHaveBeenCalled();
+  });
+
+  it('does not lock a WhatsApp learner on a gate that channel cannot deliver', async () => {
+    // The live bug: on WhatsApp the router returned GATED_ASSESSMENT, the
+    // handler suppressed the message because a session was already open, and
+    // every subsequent turn answered with an empty string. Forever, with no
+    // route into /api/assessment/* to clear it.
+    mockGetLessonData.mockReturnValue({
+      ...lesson,
+      gates: [{ ...lesson.gates[0], afterMessageIndex: 0 }],
+    });
+    mockRepo.getSocioProgress.mockResolvedValue({
+      currentLessonNumber: 2, currentMessageIndex: 1, completedLessons: [1],
+      weeklyUnderstanding: 7, weeklyImplementation: null, remindersSent: 0,
+    });
+
+    const whatsappSocio = { ...socio, channelType: 'whatsapp' };
+    const r = await determineMode(whatsappSocio, 'ok', 'mi');
+
+    expect(r.routerResult.mode).not.toBe(InteractionMode.GATED_ASSESSMENT);
+    // And it still gets a stance, which the gated path would have skipped.
+    expect(r.routerResult.stance?.stance).toBeDefined();
+  });
+
+  it('still gates the same position on web', async () => {
+    // The guard is about the channel, not about disabling gates.
+    mockGetLessonData.mockReturnValue({
+      ...lesson,
+      gates: [{ ...lesson.gates[0], afterMessageIndex: 0 }],
+    });
+    mockRepo.getSocioProgress.mockResolvedValue({
+      currentLessonNumber: 2, currentMessageIndex: 1, completedLessons: [1],
+      weeklyUnderstanding: 7, weeklyImplementation: null, remindersSent: 0,
+    });
+
+    const r = await determineMode(socio, 'ok', 'mi');
+    expect(r.routerResult.mode).toBe(InteractionMode.GATED_ASSESSMENT);
   });
 
   it('skips stance selection on the gated-assessment path', async () => {

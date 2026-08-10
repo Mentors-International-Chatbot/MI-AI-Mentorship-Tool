@@ -44,13 +44,21 @@ export enum InteractionMode {
   GATED_ASSESSMENT = 'GATED_ASSESSMENT',
 }
 
-/** The modes `determineMode` can actually return. Enforced by test, not by hope. */
+/**
+ * The modes `determineMode` can actually return. Enforced by test, not by hope.
+ *
+ * REMINDER left this set on 2026-08-09. Its router branch was gated on a
+ * `daysSince` that was structurally always zero, so it had never fired; once
+ * that figure was corrected the branch would have started answering real
+ * learner messages with an unprompted "want to continue?" nudge. The mode is
+ * still live — `/api/cron/reminders` builds it directly, which is the context
+ * it was written for — it is simply not something the router selects.
+ */
 export const ROUTABLE_MODES: ReadonlySet<InteractionMode> = new Set([
   InteractionMode.LESSON_START,
   InteractionMode.LESSON_DELIVERY,
   InteractionMode.FREEFORM_QUESTION,
   InteractionMode.RETEACH,
-  InteractionMode.REMINDER,
   InteractionMode.GATED_ASSESSMENT,
 ]);
 
@@ -174,6 +182,11 @@ export interface ParsedMarkers {
   lessonsCompleted: number[];
   escalations: string[];
   financials: Array<{ revenue: number; netProfit: number }>;
+  /**
+   * Milestone keys the learner reported reaching this turn. The first signal in
+   * this system that a learner has DONE something, as opposed to been taught it.
+   */
+  milestones: string[];
 }
 
 // ─── Conciseness Levels ─────────────────────────────────────────────

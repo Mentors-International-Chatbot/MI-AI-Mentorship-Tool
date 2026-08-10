@@ -21,6 +21,7 @@ import {
   formatDbPromptVersion,
   type PromptVersionSink,
 } from '../loadPrompt';
+import { invalidateActivePromptCache } from '../activePromptCache';
 import { getContentIdentity } from '../layers/content';
 import { InteractionMode } from '../types';
 import type { RouterResult } from '../types';
@@ -47,6 +48,9 @@ function promptRow(version: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Prompt reads are memoized for 60s; without this every case after the first
+  // would assert against the previous case's row.
+  invalidateActivePromptCache();
 });
 
 describe('formatDbPromptVersion', () => {

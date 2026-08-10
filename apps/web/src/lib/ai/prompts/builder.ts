@@ -11,6 +11,7 @@ import type { PromptVersionSink } from './loadPrompt';
 import { resolvePromptScope } from './resolveScope';
 import { STANCE_DETOUR_KEY } from './stance';
 import type { SocioFlag } from '@/lib/repo/types';
+import type { GateRecency } from './gateRecency';
 
 // ─── Prompt Builder ─────────────────────────────────────────────────
 // Assembles the 4-layer system prompt at runtime.
@@ -53,6 +54,14 @@ export async function buildSystemPrompt(
    * callers outside the conversational path, which render "None".
    */
   activeFlags?: readonly SocioFlag[],
+  /** Milestone keys already reached. Coach stance renders these. */
+  reachedMilestoneKeys?: ReadonlySet<string>,
+  /**
+   * The current lesson's most recent gate result, and whether the AI has had a
+   * chance to acknowledge it. Layer 2 renders it; stance deliberately does not
+   * read it, because posture is a durable question and this is a recent one.
+   */
+  gateRecency?: GateRecency,
 ): Promise<string> {
   const overrides = stripInternalPromptOverrides(
     (socio as Record<string, unknown>).promptOverrides,
@@ -64,17 +73,23 @@ export async function buildSystemPrompt(
   // answer is waste. Cached across turns inside resolvePromptScope.
   const scope = await resolvePromptScope(collectionKey);
 
-  // Layer 1: Core identity + tone override + sliders + language directive (DB-backed, course-scoped)
-  const layer1 = await buildCorePrompt(collectionKey, overrides ?? undefined, language, sink, scope);
-
-  // Layer 2: Socio context (now async — fetches persistent SocioContext from DB)
-  const layer2 = await buildContextPrompt(socio, progress, collectionKey, language, activeFlags);
-
-  // Layer 3: Task context (mode-specific instructions + dimension state)
-  const layer3 = await buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState, language, sink, scope);
-
-  // Layer 4: Lesson content (only for teaching modes)
-  const layer4 = await buildContentPrompt(routerResult, collectionKey, language);
+  // The four layers are independent — each reads its own rows and none consumes
+  // another's output — so they are built concurrently rather than in sequence.
+  // Serially this was four waits on Neon for text that gets concatenated.
+  //
+  // They do share `sink`, but only by writing disjoint keys (Layer 1 writes
+  // `core`, Layer 3 writes `task` and `stanceText`), so concurrent writes into
+  // it cannot race.
+  const [layer1, layer2, layer3, layer4] = await Promise.all([
+    // Layer 1: Core identity + tone override + sliders + language directive (DB-backed, course-scoped)
+    buildCorePrompt(collectionKey, overrides ?? undefined, language, sink, scope),
+    // Layer 2: Socio context (async — fetches persistent SocioContext from DB)
+    buildContextPrompt(socio, progress, collectionKey, language, activeFlags, gateRecency),
+    // Layer 3: Task context (mode-specific instructions + dimension state)
+    buildTaskPrompt(socio, routerResult, progress, collectionKey, dimensionState, language, sink, scope, reachedMilestoneKeys),
+    // Layer 4: Lesson content (only for teaching modes)
+    buildContentPrompt(routerResult, collectionKey, language),
+  ]);
 
   const parts = [layer1, layer2, layer3];
   if (layer4) parts.push(layer4);
