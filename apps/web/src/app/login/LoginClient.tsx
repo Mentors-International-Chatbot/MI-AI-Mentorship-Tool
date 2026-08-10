@@ -56,7 +56,7 @@ export function LoginClient() {
       if (redirect && !redirect.startsWith('/login')) {
         router.push(redirect);
       } else if (data.role === 'socio') {
-        router.push('/chat');
+        router.push('/home');
       } else if (data.role === 'admin') {
         router.push('/admin');
       } else {
@@ -269,4 +269,3 @@ export function LoginClient() {
     </div>
   );
 }
-

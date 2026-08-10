@@ -9,9 +9,8 @@
  * Does NOT auto-publish. Publishing is a separate explicit action.
  * Uses upsert throughout — re-running is safe and idempotent.
  *
- * NOTE: Outcome/Milestone tables don't exist in the current schema.
- *       If pkg.outcome is present, we log a warning and skip it.
- *       TODO: Add Outcome/Milestone models to schema if needed.
+ * Outcome content is retained in ProgramVersion.config. Learner attainment is
+ * recorded separately in MilestoneProgress by the existing marker pipeline.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { prisma } from "@/lib/db";
@@ -285,6 +284,7 @@ export async function importJourneyPackage(
     },
     update: {
       config: config as object,
+      metadata: pkg.metadata as object,
       collectionId: collection.id,
       primaryLang: pkg.metadata.languages[0],
       // Don't change status on re-import — preserve draft/published state
@@ -293,6 +293,7 @@ export async function importJourneyPackage(
       programId: opts.programId,
       version: pkg.metadata.version,
       config: config as object,
+      metadata: pkg.metadata as object,
       status: "draft",
       primaryLang: pkg.metadata.languages[0],
       collectionId: collection.id,
@@ -301,19 +302,8 @@ export async function importJourneyPackage(
   });
 
   // ─── 5. Outcome ──────────────────────────────────────────────────────────
-  // Now stored on ProgramVersion.config above, so the project reaches the
-  // conversational path (coach stance reads it). Milestone *progress* per
-  // participant is still unbuilt and does need tables — the warning says which
-  // half landed so nobody reads "imported" as "tracked".
-  if (pkg.outcome && pkg.outcome.milestones.length > 0) {
-    warnings.push(
-      `Outcome imported (project: "${pkg.outcome.project.title}"), including ` +
-        `${pkg.outcome.milestones.length} milestone(s) and ` +
-        `${pkg.outcome.mentorResources.length} mentor resource(s). NOTE: the project is ` +
-        `read at runtime, but per-participant milestone tracking does not exist yet — ` +
-        `nothing records that a participant reached a milestone.`
-    );
-  }
+  // Stored in ProgramVersion.config above; MilestoneProgress records learner
+  // attainment when the validated marker pipeline observes it.
 
   // ─── 6. Audit log ────────────────────────────────────────────────────────
   if (opts.importedBy) {

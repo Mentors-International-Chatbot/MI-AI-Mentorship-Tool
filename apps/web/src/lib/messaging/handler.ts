@@ -17,6 +17,11 @@ import { getCourseMeta, buildWelcomeMessage } from '@/lib/courses/course-meta';
 import { createAssessmentSession } from '@/lib/ai/assessment/createAssessmentSession';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
+import { playerMilestoneAvailable, recordPlayerTutorSuccess, type ValidatedPlayerContext } from '@/lib/player/service';
+import { playerRuntimeRepo } from '@/lib/repo/playerRuntimeRepo';
+import { queueMilestoneGrade } from '@/lib/lti/grades';
+import { evaluateAlerts } from '@/lib/alerts/evaluateAlerts';
+import type { SensedDimension, DimensionStateMap } from '@/lib/ai/sensing';
 
 /**
  * A turn the system started, with no learner message behind it.
@@ -61,6 +66,8 @@ export interface HandleMessageInput {
      * Ignored for system-initiated turns, which have no one waiting on them.
      */
     onToken?: (delta: string) => void;
+    /** Server-resolved context for the course player; never trusted from the client. */
+    playerContext?: ValidatedPlayerContext;
 }
 
 export interface HandleMessageResult {
@@ -97,6 +104,22 @@ async function assistantSpokeAfter(socioId: string, after: Date): Promise<boolea
         console.error(`[Handler] Duplicate-guard read failed for socio ${socioId}:`, error);
         return true;
     }
+}
+
+async function playerLessonEntryExists(socioId: string, lessonKey: string): Promise<boolean> {
+    const existing = await playerRuntimeRepo.message.findFirst({
+        where: {
+            socioId,
+            role: 'assistant',
+            AND: [
+                { metadata: { path: ['surface'], equals: 'player' } },
+                { metadata: { path: ['intent'], equals: 'lesson_entry' } },
+                { metadata: { path: ['lessonKey'], equals: lessonKey } },
+            ],
+        },
+        select: { id: true },
+    });
+    return !!existing;
 }
 
 /**
@@ -136,9 +159,37 @@ function runPassiveAnalysis(params: {
     }
 }
 
+async function persistPlayerObservations(params: {
+    socioId: string; userMessageId: string; context: ValidatedPlayerContext;
+    dimensions: SensedDimension[]; state: DimensionStateMap;
+}) {
+    if (params.dimensions.length === 0) return;
+    const participant = await playerRuntimeRepo.participantProfile.findUnique({
+        where: { socioId: params.socioId },
+        include: { enrollments: { where: { status: 'active', programVersionId: params.context.programVersionId }, take: 1 } },
+    });
+    const enrollment = participant?.enrollments[0];
+    if (!participant || !enrollment) return;
+    const ctx = createTenantContext(participant.organizationId);
+    const metrics = await playerRuntimeRepo.metricDefinition.findMany({ where: { organizationId: participant.organizationId, key: { in: params.dimensions.map((item) => item.dimensionKey) } } });
+    const byKey = new Map(metrics.map((item) => [item.key, item]));
+    for (const dimension of params.dimensions) {
+        const metric = byKey.get(dimension.dimensionKey);
+        if (!metric) continue;
+        await playerRuntimeRepo.metricObservation.create({
+            data: {
+                metricId: metric.id, enrollmentId: enrollment.id, signalType: 'point', value: dimension.level,
+                confidence: dimension.confidence, source: 'ai_inferred', observedAt: new Date(),
+                evidenceRefs: { kind: 'lesson_sensing', lessonKey: params.context.lessonKey, blockId: params.context.blockId, messageIds: [params.userMessageId], evidence: dimension.evidence },
+            },
+        });
+    }
+    await evaluateAlerts({ ctx, repo: tenantPrismaRepo, state: params.state, enrollmentId: enrollment.id });
+}
+
 export async function handleIncomingMessage(input: HandleMessageInput): Promise<HandleMessageResult> {
     const startTime = performance.now();
-    const { externalId, channelType, message, channel, language, userName, systemInitiated, onToken } = input;
+    const { externalId, channelType, message, channel, language, userName, systemInitiated, onToken, playerContext } = input;
 
     let socio = await repo.getSocio(channelType, externalId);
     const isNewSocio = !socio;
@@ -256,14 +307,23 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         }
     }
 
+    if (playerContext?.intent === 'lesson_entry' && await playerLessonEntryExists(socio.id, playerContext.lessonKey)) {
+        return {
+            responseText: '', mode: InteractionMode.LESSON_START,
+            markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
+            socioId: socio.id, isNewSocio, suppressed: true,
+        };
+    }
+
     // Independent writes, so they go out together.
-    const [userMsg] = systemInitiated
+    const [userMsg] = systemInitiated || playerContext?.intent === 'lesson_entry'
         ? [null]
         : await Promise.all([
             repo.addMessage({
                 socioId: socio.id,
                 role: 'user',
                 content: message,
+                ...(playerContext ? { metadata: playerContext } : {}),
             }),
             repo.touchInteraction(socio.id),
         ]);
@@ -422,12 +482,28 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     //
     // Streaming is also skipped entirely for system-initiated turns — nobody is
     // holding a connection open for a turn they did not ask for.
+    const generationMessage = playerContext
+        ? [
+            `PLAYER CONTEXT (server verified): lesson=${playerContext.lessonKey}; block=${playerContext.blockId ?? 'none'}; intent=${playerContext.intent}.`,
+            playerContext.intent === 'teach_back'
+                ? playerContext.teachBackTurn === 1
+                    ? 'Evaluate the learner answer. Give concise affirmation or correction, then ask exactly one focused follow-up question.'
+                    : 'This is the final teach-back turn. Give concise closing feedback and do not ask another question.'
+                : playerContext.intent === 'lesson_entry'
+                    ? 'Give one short framing message for this lesson.'
+                    : playerContext.intent === 'capstone'
+                        ? 'Coach the learner on the capstone. Ask one focused question and do not do the project for them.'
+                        : 'Answer the learner question using the current lesson context without advancing lesson progress.',
+            `LEARNER MESSAGE: ${message}`,
+          ].join('\n')
+        : message;
     const aiResponse = await generateAIResponse(
         socio,
-        message,
+        generationMessage,
         collectionKey,
         undefined,
         systemInitiated ? undefined : onToken,
+        playerContext ? { context: playerContext, learnerText: message } : undefined,
     );
 
     // ── Handle gated assessment mode ──────────────────────────────────────────
@@ -512,7 +588,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         console.log(`[Flag:${flag.level}] socio=${socio.id} reason=${flag.reason}`);
     }
 
-    for (const lessonNum of aiResponse.markers.lessonsCompleted) {
+    for (const lessonNum of playerContext ? [] : aiResponse.markers.lessonsCompleted) {
         const score = parseScore(message);
         await repo.completeLesson(socio.id, lessonNum, {
             understanding: score ?? undefined,
@@ -542,6 +618,10 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
                 );
                 continue;
             }
+            if (playerContext && !(await playerMilestoneAvailable(socio.id, playerContext, key))) {
+                console.warn(`[Milestone] socio=${socio.id} milestone=${key} is not yet available in the player.`);
+                continue;
+            }
             if (!scope.organizationId) {
                 console.warn(`[Milestone] socio=${socio.id} unanchored — "${key}" not recorded.`);
                 continue;
@@ -554,6 +634,9 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
                 source: 'ai_marker',
                 evidence: message,
             });
+            queueMilestoneGrade(socio.id, collectionKey).catch((error) =>
+                console.error(`[LTI Grade] queue failed for socio=${socio.id} milestone=${key}:`, error)
+            );
             console.log(`[Milestone] socio=${socio.id} reached=${key}`);
         }
     }
@@ -577,13 +660,13 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     let responseText = aiResponse.text;
 
     // Prepend lesson number header when starting a new lesson
-    if (aiResponse.mode === InteractionMode.LESSON_START) {
+    if (!playerContext && aiResponse.mode === InteractionMode.LESSON_START) {
         const currentLesson = aiResponse.determineModeResult.progress?.currentLessonNumber ?? 1;
         responseText = `${lm.lessonHeader(currentLesson, getLessonCount(collectionKey))}\n\n${responseText}`;
     }
 
     // Periodic satisfaction check-in when a lesson finishes.
-    if (aiResponse.markers.lessonsCompleted.length > 0) {
+    if (!playerContext && aiResponse.markers.lessonsCompleted.length > 0) {
         const completedNum =
             aiResponse.markers.lessonsCompleted[aiResponse.markers.lessonsCompleted.length - 1];
 
@@ -678,6 +761,12 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             };
         }
     }
+    if (playerContext?.intent === 'lesson_entry' && await playerLessonEntryExists(socio.id, playerContext.lessonKey)) {
+        return {
+            responseText: '', mode: aiResponse.mode, markers: aiResponse.markers,
+            socioId: socio.id, isNewSocio, suppressed: true,
+        };
+    }
 
     const assistantMessage = await repo.addMessage({
         socioId: socio.id,
@@ -686,7 +775,9 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         senderType: 'ai',
         // Attribution for a turn nobody asked for. Without it there is no way
         // to tell, later, which messages the system volunteered.
-        ...(systemInitiated
+        ...(playerContext
+            ? { metadata: playerContext }
+            : systemInitiated
             ? { metadata: { kind: systemInitiated.kind, sessionId: systemInitiated.sessionId } }
             : {}),
     } as Parameters<typeof repo.addMessage>[0]);
@@ -703,6 +794,12 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             aiResponse: responseText,
             sentiment: aiResponse.sentiment,
         });
+        if (playerContext && aiResponse.sensedDimensions && aiResponse.dimensionState) {
+            persistPlayerObservations({
+                socioId: socio.id, userMessageId: userMsg.id, context: playerContext,
+                dimensions: aiResponse.sensedDimensions, state: aiResponse.dimensionState,
+            }).catch((error) => console.error('[Player Sensing] observation/alert persistence failed:', error));
+        }
     }
 
     const isLessonMode =
@@ -716,7 +813,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     // turn. When the gate sits at the end of a lesson there is nothing left to
     // deliver, the router falls through to FREEFORM_QUESTION, and this branch
     // does not run at all.
-    if (aiResponse.markers.lessonsCompleted.length === 0 && isLessonMode) {
+    if (!playerContext && aiResponse.markers.lessonsCompleted.length === 0 && isLessonMode) {
         await repo.advanceMessage(socio.id);
         const progress = await repo.getSocioProgress(socio.id);
         await repo.upsertLessonProgress(socio.id, progress.currentLessonNumber, null, false);
@@ -724,11 +821,15 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
     // Reminder counters track learner silence. The AI speaking is not the
     // learner breaking it.
-    if (!systemInitiated && (isLessonMode || aiResponse.mode === InteractionMode.REMINDER)) {
+    if (!playerContext && !systemInitiated && (isLessonMode || aiResponse.mode === InteractionMode.REMINDER)) {
         await repo.resetReminders(socio.id);
     }
 
     await channel.sendMessage(externalId, responseText);
+
+    if (playerContext && !aiResponse.isError) {
+        await recordPlayerTutorSuccess(socio.id, playerContext);
+    }
 
     const totalTime = performance.now() - startTime;
     console.log(`[MessageHandler] Total processing time: ${Math.round(totalTime)}ms for socio ${socio.id}`);

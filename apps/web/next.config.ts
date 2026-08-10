@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async headers() {
+    const ancestors = process.env.CANVAS_FRAME_ANCESTORS ?? "https://byu.instructure.com https://byu.beta.instructure.com https://byu.test.instructure.com";
+    return [
+      { source: "/learn/:path*", headers: [{ key: "Content-Security-Policy", value: `frame-ancestors 'self' ${ancestors}` }] },
+      { source: "/lti/:path*", headers: [{ key: "Content-Security-Policy", value: `frame-ancestors 'self' ${ancestors}` }] },
+    ];
+  },
   async redirects() {
     // The participant-facing pages moved from /socios to /learners. These keep
     // existing bookmarks, saved links, and anything a mentor pinned working.

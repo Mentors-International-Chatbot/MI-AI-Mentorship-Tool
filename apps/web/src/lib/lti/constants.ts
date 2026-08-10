@@ -1,0 +1,13 @@
+export const LTI_VERSION_CLAIM = "https://purl.imsglobal.org/spec/lti/claim/version";
+export const LTI_MESSAGE_TYPE_CLAIM = "https://purl.imsglobal.org/spec/lti/claim/message_type";
+export const LTI_DEPLOYMENT_CLAIM = "https://purl.imsglobal.org/spec/lti/claim/deployment_id";
+export const LTI_TARGET_LINK_CLAIM = "https://purl.imsglobal.org/spec/lti/claim/target_link_uri";
+export const LTI_ROLES_CLAIM = "https://purl.imsglobal.org/spec/lti/claim/roles";
+export const LTI_CONTEXT_CLAIM = "https://purl.imsglobal.org/spec/lti/claim/context";
+export const LTI_RESOURCE_LINK_CLAIM = "https://purl.imsglobal.org/spec/lti/claim/resource_link";
+export const LTI_CUSTOM_CLAIM = "https://purl.imsglobal.org/spec/lti/claim/custom";
+export const LTI_AGS_CLAIM = "https://purl.imsglobal.org/spec/lti-ags/claim/endpoint";
+export const LTI_DL_SETTINGS_CLAIM = "https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings";
+export const LTI_DL_CONTENT_CLAIM = "https://purl.imsglobal.org/spec/lti-dl/claim/content_items";
+export const LTI_DL_DATA_CLAIM = "https://purl.imsglobal.org/spec/lti-dl/claim/data";
+export const LTI_SCORE_SCOPE = "https://purl.imsglobal.org/spec/lti-ags/scope/score";

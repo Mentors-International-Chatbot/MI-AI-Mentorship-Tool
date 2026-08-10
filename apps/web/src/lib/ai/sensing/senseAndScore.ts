@@ -53,6 +53,8 @@ export interface SenseAndScoreResult {
   skipped: boolean;
 }
 
+export type SensingDimensionDefinition = { key: string; label: string; min: number; max: number };
+
 const ANALYSIS_SYSTEM_PROMPT_DEFAULT = `You assess a student's message in an educational mentorship program. Output ONLY valid JSON, no backticks and no explanation.
 
 Output exactly this shape:
@@ -124,17 +126,21 @@ function extractJsonObject(raw: string): Record<string, unknown> | null {
  * read the response: feeding 5/10 into the EMA would drag real state toward the
  * middle, which is exactly the dilution the triviality gate exists to prevent.
  */
-export function parseDimensions(parsed: Record<string, unknown> | null): SensedDimension[] {
+export function parseDimensions(
+  parsed: Record<string, unknown> | null,
+  definitions: readonly SensingDimensionDefinition[] = DIMENSION_DEFINITIONS.map((item) => ({ ...item, min: 0, max: 10 })),
+): SensedDimension[] {
   if (!parsed || !Array.isArray(parsed.dimensions)) return [];
 
-  const validKeys = DIMENSION_DEFINITIONS.map((d) => d.key);
+  const byKey = new Map(definitions.map((definition) => [definition.key, definition]));
 
   const sensed = parsed.dimensions
     .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
-    .filter((item) => validKeys.includes(String(item.dimensionKey)))
+    .filter((item) => byKey.has(String(item.dimensionKey)) && item.level !== null && item.level !== undefined)
+    .filter((item) => Number.isFinite(Number(item.level)))
     .map((item): SensedDimension => ({
       dimensionKey: String(item.dimensionKey),
-      level: clamp(Number(item.level) || 5, 0, 10),
+      level: clamp(Number(item.level), byKey.get(String(item.dimensionKey))!.min, byKey.get(String(item.dimensionKey))!.max),
       confidence: clamp(Number(item.confidence) || 0.5, 0, 1),
       evidence: String(item.evidence ?? '').slice(0, 100),
     }));
@@ -164,6 +170,7 @@ export async function senseAndScore(params: {
   lessonContext: string;
   socioId?: string;
   organizationId?: string;
+  dimensions?: SensingDimensionDefinition[];
 }): Promise<SenseAndScoreResult> {
   const { incomingText, priorState, lessonContext } = params;
 
@@ -175,12 +182,14 @@ export async function senseAndScore(params: {
   }
 
   const sink: PromptVersionSink = {};
-  const systemPrompt = await loadActivePrompt(
-    'sentiment',
-    ANALYSIS_SYSTEM_PROMPT_DEFAULT,
-    undefined,
-    sink,
-    'sentiment',
+  const dynamicPrompt = params.dimensions?.length ? `You assess a learner's message in an educational course. Output ONLY valid JSON.
+
+Return {"dimensions":[{"dimensionKey":"exact_key","level":number|null,"confidence":0-1,"evidence":"<=15 words"}],"sentiment":{"confusion":0-10,"frustration":0-10,"urgency":0-10,"sentiment":"positive|neutral|negative|distressed","topics":["learning"]}}.
+
+Assess only dimensions the learner actually demonstrates. Use null for untouched dimensions. Never invent evidence. Dimensions:
+${params.dimensions.map((item) => `- ${item.key}: ${item.label} (${item.min}-${item.max})`).join('\n')}` : null;
+  const systemPrompt = dynamicPrompt ?? await loadActivePrompt(
+    'sentiment', ANALYSIS_SYSTEM_PROMPT_DEFAULT, undefined, sink, 'sentiment',
   );
 
   const chat = createOpenRouterChat({
@@ -219,7 +228,7 @@ export async function senseAndScore(params: {
     }
 
     return {
-      dimensions: parseDimensions(parsed),
+      dimensions: parseDimensions(parsed, params.dimensions),
       sentiment: parseSentiment(parsed),
       skipped: false,
     };

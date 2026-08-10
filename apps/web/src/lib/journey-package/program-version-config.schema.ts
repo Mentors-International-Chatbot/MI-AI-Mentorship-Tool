@@ -25,7 +25,7 @@ import {
   trackedDimensionSchema,
   passingSchema,
   dashboardSchema,
-  configSchema as journeyPackageConfigSchema,
+  baselineDiagnosticSchema,
 } from "./journey-package.schema";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -113,12 +113,13 @@ export const programVersionConfigSchema = z.object({
       steps: z
         .array(
           z.object({
-            id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+            id: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
             promptKey: z.string(),
             field: z.string(),
           })
         )
         .default([]),
+      diagnostic: baselineDiagnosticSchema.optional(),
     })
     .optional(),
 
@@ -129,8 +130,8 @@ export const programVersionConfigSchema = z.object({
   alertRules: z
     .array(
       z.object({
-        id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-        dimensionKey: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+        id: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
+        dimensionKey: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
         operator: z.enum(["lt", "lte", "gt", "gte", "eq"]),
         threshold: z.number(),
         severity: z.enum(["low", "medium", "high"]),
@@ -142,8 +143,8 @@ export const programVersionConfigSchema = z.object({
   /** Graduation criteria. */
   graduation: z
     .object({
-      requiredLessonKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).default([]),
-      requiredDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).default([]),
+      requiredLessonKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9_-]*$/)).default([]),
+      requiredDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9_-]*$/)).default([]),
     })
     .optional(),
 
@@ -151,11 +152,12 @@ export const programVersionConfigSchema = z.object({
   assessment: z
     .object({
       passing: passingSchema,
-      studentVisibleDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).optional(),
-      recordedDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).optional(),
+      studentVisibleDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9_-]*$/)).optional(),
+      recordedDimensionKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9_-]*$/)).optional(),
       onMaxTurnsWithoutPass: z.enum(["complete_with_scores", "return_for_reteach", "flag_mentor"]).default("complete_with_scores"),
       allowRetake: z.boolean().default(true),
       blocking: z.boolean().default(true),
+      autoAppendTeachBack: z.boolean().default(false),
     })
     .optional(),
 
@@ -175,16 +177,7 @@ export const programVersionConfigSchema = z.object({
    *   authored content   what the project IS, per published version — belongs
    *                      with every other authored block, which is here
    *   per-learner state  which milestones THIS participant has reached —
-   *                      genuinely needs tables, and has no writer today
-   *
-   * Building the tables now would add three models whose per-learner half
-   * nothing writes, which is the exact shape `writePathAudit.test.ts` exists to
-   * catch. So the content lands here, milestone *tracking* stays unbuilt, and
-   * the difference is stated instead of blurred.
-   *
-   * `milestones` and `mentorResources` are stored even though nothing reads
-   * them yet: they are authored alongside the project and dropping them on
-   * import is what made `outcome` invisible in the first place.
+   *                      stored separately in MilestoneProgress
    */
   outcome: z
     .object({
@@ -198,9 +191,9 @@ export const programVersionConfigSchema = z.object({
       milestones: z
         .array(
           z.object({
-            key: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+            key: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
             name: z.string().min(1),
-            afterLessonKey: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+            afterLessonKey: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
             checkDescription: z.string().optional(),
           }),
         )
@@ -208,7 +201,7 @@ export const programVersionConfigSchema = z.object({
       mentorResources: z
         .array(
           z.object({
-            milestoneKey: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+            milestoneKey: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
             trigger: z.enum(["on_reach", "when_behind"]).default("on_reach"),
             body: z.string(),
             mentorPrompt: z.string().optional(),
@@ -231,7 +224,7 @@ export const programVersionConfigSchema = z.object({
    * Set on import from JourneyPackage.curriculum.collectionKey.
    * The actual lessons live in ContentLesson/LessonVersion rows.
    */
-  curriculumCollectionKey: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).optional(),
+  curriculumCollectionKey: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/).optional(),
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

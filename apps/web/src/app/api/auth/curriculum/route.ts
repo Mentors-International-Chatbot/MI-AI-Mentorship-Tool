@@ -8,6 +8,10 @@ import { DEFAULT_LANGUAGE } from '@/lib/i18n/languages';
 import { logEvent } from '@/lib/logging/logger';
 import { resolveCourseCode, getAvailableCourseCodes, getAvailableCourses } from '@/lib/courses/resolver';
 import { preloadCollection } from '@/lib/lessons/db-lesson-service';
+import { prisma } from '@/lib/db';
+import { resolveDelivery } from '@/lib/journey-package/delivery';
+import { resolveLearnerHome } from '@/lib/courses/learnerHome';
+import { selectPublishedPlayerVersion } from '@/lib/courses/selectPublishedPlayerVersion';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,6 +123,39 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Socio not found' }, { status: 404 });
     }
 
+    // AI Essentials is tenant-owned. A published version in a synthetic test
+    // organization must never make the course globally joinable, and a learner
+    // already anchored to one organization must not be enrolled into another.
+    // Unanchored direct-web learners may select the sole non-synthetic published
+    // version; its collection then establishes their tenant in the normal
+    // anchorParticipantProfile path below.
+    let published: Awaited<ReturnType<typeof prisma.programVersion.findFirst>> & {
+        program: { organizationId: string; organization: { settings: unknown } };
+    } | null = null;
+    let participant = collectionKey === 'ai-essentials'
+        ? await prisma.participantProfile.findUnique({
+            where: { socioId: socio.id },
+            select: { id: true, organizationId: true },
+        })
+        : null;
+    if (collectionKey === 'ai-essentials') {
+        const candidates = await prisma.programVersion.findMany({
+            where: { status: 'published', collection: { slug: collectionKey } },
+            include: { program: { include: { organization: { select: { settings: true } } } } },
+            orderBy: { publishedAt: 'desc' },
+        });
+        published = selectPublishedPlayerVersion(candidates, participant?.organizationId);
+        if (!published) {
+            return NextResponse.json(
+                { error: 'AI Essentials is not currently published for your organization' },
+                { status: 409 },
+            );
+        }
+        if (!resolveDelivery(published.metadata).supportedChannels.includes('web')) {
+            return NextResponse.json({ error: 'This course is not available through web enrollment' }, { status: 403 });
+        }
+    }
+
     // Order matters: the key must be committed before resolution runs, or
     // resolveOrganizationForSocio reads the stale row and falls to tier 3.
     // These are two separate statements rather than one transaction precisely
@@ -127,12 +164,37 @@ export async function POST(req: NextRequest) {
 
     await anchorParticipantProfile(socio, collectionKey);
 
+    if (published) {
+        const delivery = resolveDelivery(published.metadata);
+        if (delivery.surface === 'player') {
+            participant ??= await prisma.participantProfile.findUnique({
+                where: { socioId: socio.id },
+                select: { id: true, organizationId: true },
+            });
+            if (!participant) return NextResponse.json({ error: 'Unable to establish course tenancy' }, { status: 409 });
+            if (participant.organizationId !== published.program.organizationId) {
+                return NextResponse.json({ error: 'Course tenancy does not match learner tenancy' }, { status: 403 });
+            }
+            const cohort = await prisma.cohort.upsert({
+                where: { programId_slug: { programId: published.programId, slug: 'direct-web' } },
+                create: { programId: published.programId, programVersionId: published.id, slug: 'direct-web', name: 'Direct web enrollment' },
+                update: { programVersionId: published.id },
+            });
+            await prisma.enrollment.upsert({
+                where: { participantId_cohortId: { participantId: participant.id, cohortId: cohort.id } },
+                create: { participantId: participant.id, cohortId: cohort.id, programVersionId: published.id, metadata: { channel: 'web' } },
+                update: { programVersionId: published.id, status: 'active' },
+            });
+        }
+    }
+
     // Preload collection to warm cache for upcoming chat
     await preloadCollection(collectionKey);
 
     return NextResponse.json({
         success: true,
         collectionKey,
+        homePath: collectionKey === 'ai-essentials' ? await resolveLearnerHome(socio.id) : '/chat',
         message: `Curriculum set to ${collectionKey}`,
     });
 }

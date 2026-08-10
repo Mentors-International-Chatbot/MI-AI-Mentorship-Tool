@@ -11,13 +11,10 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { prisma } from "@/lib/db";
-import { z } from "zod";
 import {
   programVersionConfigSchema,
-  type ProgramVersionConfig,
 } from "./program-version-config.schema";
 import { lessonSchema } from "./journey-package.schema";
-import type { ProgramVersionStatus } from "@prisma/client";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -141,7 +138,8 @@ export async function validateForPublication(
  * Validates all LessonVersion.body entries in a collection against lessonSchema.
  */
 export async function validateLessonBodies(
-  collectionId: string
+  collectionId: string,
+  versionString?: string,
 ): Promise<PublicationValidationError[]> {
   const errors: PublicationValidationError[] = [];
 
@@ -149,7 +147,7 @@ export async function validateLessonBodies(
     where: { collectionId },
     include: {
       versions: {
-        where: { active: true },
+        where: versionString ? { version: versionString } : { active: true },
       },
     },
   });
@@ -197,7 +195,13 @@ export async function publishVersion(
 
   const version = await prisma.programVersion.findUnique({
     where: { id: versionId },
-    select: { programId: true, collectionId: true, version: true },
+    select: {
+      programId: true,
+      collectionId: true,
+      version: true,
+      config: true,
+      program: { select: { organizationId: true } },
+    },
   });
 
   if (!version) {
@@ -209,13 +213,14 @@ export async function publishVersion(
 
   // Also validate lesson bodies if there's a collection
   if (version.collectionId) {
-    const lessonErrors = await validateLessonBodies(version.collectionId);
+    const lessonErrors = await validateLessonBodies(version.collectionId, version.version);
     if (lessonErrors.length > 0) {
       return { success: false, errors: lessonErrors };
     }
   }
 
   const now = new Date();
+  const config = programVersionConfigSchema.parse(version.config);
 
   // Atomic transaction with extended timeout for bulk operations
   await prisma.$transaction(async (tx) => {
@@ -242,6 +247,33 @@ export async function publishVersion(
       },
     });
 
+    // Publication establishes every metric the sensing pipeline may emit.
+    // Upsert keeps existing descriptions/history while making new dimensions live.
+    for (const dimension of config.trackedDimensions) {
+      await tx.metricDefinition.upsert({
+        where: {
+          organizationId_key: {
+            organizationId: version.program.organizationId,
+            key: dimension.key,
+          },
+        },
+        update: {
+          name: dimension.label,
+          category: dimension.category === "comprehension" ? "learning" : dimension.category,
+          dataType: "continuous",
+          scale: dimension.scale,
+        },
+        create: {
+          organizationId: version.program.organizationId,
+          key: dimension.key,
+          name: dimension.label,
+          category: dimension.category === "comprehension" ? "learning" : dimension.category,
+          dataType: "continuous",
+          scale: dimension.scale,
+        },
+      });
+    }
+
     // Activate all lesson versions in the collection using batch operations
     if (version.collectionId) {
       // Get all lesson IDs in this collection
@@ -257,24 +289,12 @@ export async function publishVersion(
         data: { active: false },
       });
 
-      // Batch 2: Find and activate the latest version of each lesson
-      // Use raw query for efficiency with many lessons
-      const latestVersions = await tx.$queryRaw<{ id: string }[]>`
-        SELECT DISTINCT ON (lv.lesson_id) lv.id
-        FROM lesson_versions lv
-        WHERE lv.lesson_id = ANY(${lessonIds}::text[])
-        ORDER BY lv.lesson_id, lv.created_at DESC
-      `;
-
-      const latestVersionIds = latestVersions.map((v) => v.id);
-
-      // Batch 3: Activate the latest versions
-      if (latestVersionIds.length > 0) {
-        await tx.lessonVersion.updateMany({
-          where: { id: { in: latestVersionIds } },
-          data: { active: true, publishedAt: now },
-        });
-      }
+      // Batch 2: Activate exactly the cartridge version being published. A
+      // newer draft may already exist in the same collection and must stay dark.
+      await tx.lessonVersion.updateMany({
+        where: { lessonId: { in: lessonIds }, version: version.version },
+        data: { active: true, publishedAt: now },
+      });
     }
 
     // Audit log

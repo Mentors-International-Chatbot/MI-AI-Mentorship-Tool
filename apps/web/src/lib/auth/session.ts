@@ -16,7 +16,7 @@ export type { SessionIdentity, SessionPayload, VerifiedSession };
 
 /** Post-login landing path for each role (dashboard, admin, or socio chat). */
 export function homePathForRole(role: SessionPayload['role']): string {
-  if (role === 'socio') return '/chat';
+  if (role === 'socio') return '/home';
   if (role === 'admin') return '/admin';
   return '/dashboard/learners';
 }

@@ -37,6 +37,7 @@ const AUTHORIZATION_SIGNALS = [
   'CRON_SECRET',
   'MENTOR_API_KEY',
   'verifyToken',
+  'resolveRequestIdentity',
   'X-Hub-Signature', // WhatsApp webhook HMAC
   'APP_SECRET',
 ];
@@ -56,6 +57,11 @@ const INTENTIONALLY_PUBLIC: Record<string, string> = {
   'auth/reset-password': 'Authorized by the emailed reset token, not a session.',
   'config/public': 'Returns only the chatbot display name — nothing tenant-specific.',
   'auth/test-login': 'Gated on NODE_ENV plus ENABLE_TEST_LOGIN; refused outright in production.',
+  'lti/configuration': 'Public LTI registration metadata; contains no tenant data or secrets.',
+  'lti/jwks': 'Public verification keys required for LTI signatures.',
+  'lti/login': 'Pre-authentication OIDC initiation; validates a configured platform and deployment.',
+  'lti/launch': 'Authorized by a signed platform JWT plus expiring, single-use state and nonce.',
+  'lti/session-exchange': 'Authorized by an expiring, single-use random exchange code.',
 };
 
 /** Extra signals accepted for the environment-gated dev route. */

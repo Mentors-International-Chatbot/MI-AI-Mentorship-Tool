@@ -83,6 +83,10 @@ model Socio {
   participantProfile ParticipantProfile?
   assessmentSessions AssessmentSession[]
   milestoneProgress  MilestoneProgress[]
+  blockProgress      BlockProgress[]
+  diagnosticAttempts DiagnosticAttempt[]
+  ltiIdentities      LtiIdentity[]
+  gradeDeliveries    LtiGradeDelivery[]
 
   @@unique([channelType, externalId], map: "socios_channel_external_id_key")
   @@index([mentorId, status])
@@ -115,6 +119,7 @@ model Mentor {
 
   socios        Socio[]
   mentorProfile MentorProfile?
+  ltiIdentities LtiIdentity[]
 
   @@map("mentors")
 }
@@ -400,6 +405,8 @@ model Organization {
   metrics      MetricDefinition[]
   alertRules   AlertRule[]
   collections  ContentCollection[]
+  ltiPlatforms LtiPlatform[]
+  ltiContexts  LtiContext[]
 
   @@map("organizations")
 }
@@ -473,6 +480,7 @@ model ProgramVersion {
   programId    String               @map("program_id")
   version      String               // "1.0", "1.1-beta"
   config       Json                 // JourneyPackage.config validated by zod, not Prisma
+  metadata     Json?                // complete JourneyPackage.metadata, including delivery
   status       ProgramVersionStatus @default(draft)
   primaryLang  String               @default("es") @map("primary_lang") // from metadata.languages[0]
   collectionId String?              @map("collection_id") // FK to ContentCollection
@@ -485,6 +493,8 @@ model ProgramVersion {
   collection ContentCollection? @relation(fields: [collectionId], references: [id])
   cohorts    Cohort[]
   enrollments Enrollment[]
+  diagnosticAttempts DiagnosticAttempt[]
+  ltiContexts LtiContext[]
 
   @@unique([programId, version])
   @@index([programId, status])
@@ -506,6 +516,7 @@ model Cohort {
   programVersion ProgramVersion? @relation(fields: [programVersionId], references: [id])
   enrollments    Enrollment[]
   invitations    EnrollmentInvitation[]
+  ltiContexts    LtiContext[]
 
   @@unique([programId, slug])
   @@index([programId])
@@ -641,6 +652,50 @@ model LessonVersion {
   @@unique([lessonId, version, lang])
   @@index([lessonId, active])
   @@map("lesson_versions")
+}
+
+/// Current-version progress for player blocks. LessonProgress remains the
+/// compatibility aggregate and is intentionally not changed by this model.
+model BlockProgress {
+  id             String    @id @default(uuid())
+  socioId        String    @map("socio_id")
+  collectionKey  String    @map("collection_key")
+  lessonKey      String    @map("lesson_key")
+  blockId        String    @map("block_id")
+  contentVersion Int       @default(1) @map("content_version")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  score          Float?
+  response       Json?
+  state          Json?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  socio Socio @relation(fields: [socioId], references: [id], onDelete: Cascade)
+
+  @@unique([socioId, collectionKey, lessonKey, blockId], map: "block_progress_identity_key")
+  @@index([socioId, collectionKey, completedAt])
+  @@map("block_progress")
+}
+
+/// Append-only baseline attempts; retakes never overwrite earlier evidence.
+model DiagnosticAttempt {
+  id               String   @id @default(uuid())
+  socioId          String   @map("socio_id")
+  programVersionId String   @map("program_version_id")
+  collectionKey    String   @map("collection_key")
+  answers          Json
+  dimensionScores  Json     @map("dimension_scores")
+  overallScore     Float    @map("overall_score")
+  completedAt      DateTime @default(now()) @map("completed_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  socio          Socio          @relation(fields: [socioId], references: [id], onDelete: Cascade)
+  programVersion ProgramVersion @relation(fields: [programVersionId], references: [id], onDelete: Restrict)
+
+  @@index([socioId, collectionKey, completedAt])
+  @@index([programVersionId])
+  @@map("diagnostic_attempts")
 }
 
 // ── Measurement ─────────────────────────────────────────────────────────────
@@ -823,6 +878,180 @@ model MilestoneProgress {
   @@index([organizationId])
   @@index([socioId, collectionKey])
   @@map("milestone_progress")
+}
+
+model LtiPlatform {
+  id               String   @id @default(uuid())
+  organizationId   String   @map("organization_id")
+  issuer           String
+  clientId         String   @map("client_id")
+  authorizationUrl String   @map("authorization_url")
+  tokenUrl         String   @map("token_url")
+  jwksUrl          String   @map("jwks_url")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deployments  LtiDeployment[]
+  identities   LtiIdentity[]
+
+  @@unique([issuer, clientId])
+  @@index([organizationId])
+  @@map("lti_platforms")
+}
+
+model LtiDeployment {
+  id           String   @id @default(uuid())
+  platformId   String   @map("platform_id")
+  deploymentId String   @map("deployment_id")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  platform LtiPlatform   @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  contexts LtiContext[]
+  tokens   LtiOneTimeToken[]
+
+  @@unique([platformId, deploymentId])
+  @@map("lti_deployments")
+}
+
+model LtiContext {
+  id               String   @id @default(uuid())
+  deploymentId     String   @map("deployment_id")
+  contextId        String   @map("context_id")
+  organizationId   String   @map("organization_id")
+  programVersionId String   @map("program_version_id")
+  cohortId         String   @map("cohort_id")
+  title            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  deployment     LtiDeployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  programVersion ProgramVersion @relation(fields: [programVersionId], references: [id], onDelete: Restrict)
+  cohort         Cohort @relation(fields: [cohortId], references: [id], onDelete: Restrict)
+  enrollments    LtiEnrollment[]
+  resourceLinks  LtiResourceLink[]
+  sessions       LtiSession[]
+
+  @@unique([deploymentId, contextId])
+  @@index([organizationId])
+  @@map("lti_contexts")
+}
+
+/// Canvas subject is canonical within a platform. It can point at both a
+/// learner and instructor account when roles change; email is never an identity key.
+model LtiIdentity {
+  id         String   @id @default(uuid())
+  platformId String   @map("platform_id")
+  subject    String
+  socioId    String?  @map("socio_id")
+  mentorId   String?  @map("mentor_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  platform   LtiPlatform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  socio      Socio? @relation(fields: [socioId], references: [id])
+  mentor     Mentor? @relation(fields: [mentorId], references: [id])
+  enrollments LtiEnrollment[]
+  sessions    LtiSession[]
+
+  @@unique([platformId, subject])
+  @@index([socioId])
+  @@index([mentorId])
+  @@map("lti_identities")
+}
+
+model LtiEnrollment {
+  id         String   @id @default(uuid())
+  identityId String   @map("identity_id")
+  contextId  String   @map("context_id")
+  role       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  identity LtiIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  context  LtiContext @relation(fields: [contextId], references: [id], onDelete: Cascade)
+
+  @@unique([identityId, contextId, role])
+  @@index([contextId])
+  @@map("lti_enrollments")
+}
+
+model LtiResourceLink {
+  id             String   @id @default(uuid())
+  contextId      String   @map("context_id")
+  resourceLinkId String   @map("resource_link_id")
+  resourceType   String   @map("resource_type") // course | lesson | capstone
+  lessonKey      String?  @map("lesson_key")
+  lineItemUrl    String?  @map("line_item_url")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  context LtiContext @relation(fields: [contextId], references: [id], onDelete: Cascade)
+  gradeDeliveries LtiGradeDelivery[]
+
+  @@unique([contextId, resourceLinkId])
+  @@map("lti_resource_links")
+}
+
+model LtiOneTimeToken {
+  id            String    @id @default(uuid())
+  deploymentId  String?   @map("deployment_id")
+  tokenHash     String    @unique @map("token_hash")
+  purpose       String    // state | nonce
+  targetLinkUri String    @map("target_link_uri")
+  expiresAt     DateTime  @map("expires_at")
+  usedAt        DateTime? @map("used_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  deployment LtiDeployment? @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+
+  @@index([purpose, expiresAt])
+  @@map("lti_one_time_tokens")
+}
+
+model LtiSession {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique @map("token_hash")
+  exchangeTokenHash String @unique @map("exchange_token_hash")
+  identityId String   @map("identity_id")
+  contextId  String   @map("context_id")
+  role       String   // learner | instructor for this launch
+  destination String
+  expiresAt  DateTime @map("expires_at")
+  exchangedAt DateTime? @map("exchanged_at")
+  launchData Json?    @map("launch_data")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  identity LtiIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  context  LtiContext @relation(fields: [contextId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("lti_sessions")
+}
+
+model LtiGradeDelivery {
+  id             String    @id @default(uuid())
+  resourceLinkId String    @map("resource_link_id")
+  socioId        String    @map("socio_id")
+  milestoneCount Int       @map("milestone_count")
+  scoreGiven     Float     @map("score_given")
+  status         String    @default("pending") // pending | delivering | delivered | failed
+  attemptCount   Int       @default(0) @map("attempt_count")
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  lastError      String?   @map("last_error")
+  deliveredAt    DateTime? @map("delivered_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  resourceLink LtiResourceLink @relation(fields: [resourceLinkId], references: [id], onDelete: Cascade)
+  socio Socio @relation(fields: [socioId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceLinkId, socioId, milestoneCount])
+  @@index([status, nextAttemptAt])
+  @@map("lti_grade_deliveries")
 }
 
 model AiInvocation {

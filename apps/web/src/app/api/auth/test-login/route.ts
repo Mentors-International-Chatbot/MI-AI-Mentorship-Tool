@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSession, type SessionIdentity } from '@/lib/auth/session';
+import {
+  DevTestLearnerProvisionError,
+  provisionDevAiEssentialsLearner,
+} from '@/lib/repo/devTestLearnerRepo';
 
 /**
  * POST /api/auth/test-login
  * Body: { role: 'socio' | 'mentor' | 'admin' }
  *
- * Mints a session for a hardcoded test user with no password and no database
- * lookup. Local development only.
+ * Mints a session for a development test identity with no password. The learner
+ * role is backed by an idempotently provisioned synthetic Socio and
+ * ParticipantProfile; staff roles remain hardcoded identities. Local
+ * development only.
  *
  * ─────────────────────────────────────────────────────────────────────────
  * This shipped to production unguarded. `/api/auth` is in PUBLIC_PATHS
@@ -38,12 +44,16 @@ export async function POST(req: NextRequest) {
     const { role } = (await req.json()) as { role: string };
 
     const sessions: Record<string, SessionIdentity> = {
-      socio: { userId: 'test-socio-001', role: 'socio', name: 'Test Socio' },
       mentor: { userId: 'test-mentor-001', role: 'mentor', name: 'Test Mentor' },
       admin: { userId: 'test-admin-001', role: 'admin', name: 'Test Admin' },
     };
 
-    const session = sessions[role];
+    const learner = role === 'socio'
+      ? await provisionDevAiEssentialsLearner()
+      : null;
+    const session = learner
+      ? { userId: learner.socioId, role: 'socio' as const, name: learner.name }
+      : sessions[role];
     if (!session) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
     }
@@ -57,6 +67,9 @@ export async function POST(req: NextRequest) {
       name: session.name,
     });
   } catch (error) {
+    if (error instanceof DevTestLearnerProvisionError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error('Test login error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

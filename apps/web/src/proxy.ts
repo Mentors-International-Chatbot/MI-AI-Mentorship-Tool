@@ -19,6 +19,10 @@ const PUBLIC_PATHS = [
   '/api/feedback',
   '/api/chat',
   '/api/cron',
+  '/api/lti',
+  '/api/learn',
+  '/learn',
+  '/lti',
   '/_next',
   '/favicon.ico',
 ];
@@ -89,7 +93,7 @@ export async function proxy(req: NextRequest) {
 
   // If logged in and visiting /login, redirect to appropriate home
   if (pathname === '/login') {
-    const home = session.role === 'socio' ? '/chat' : '/dashboard/learners';
+    const home = session.role === 'socio' ? '/home' : '/dashboard/learners';
     return NextResponse.redirect(new URL(home, req.url));
   }
 

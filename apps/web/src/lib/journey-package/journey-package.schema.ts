@@ -1,5 +1,5 @@
 /**
- * Journey Package Schema — course cartridge format v1.0
+ * Journey Package Schema — course cartridge format v1.0 + v1.1
  * ----------------------------------------------------------------------------
  * The portable, self-contained definition of one course/journey. A Course Lead
  * (or a file importer) produces one of these; the importer decomposes it into
@@ -21,14 +21,15 @@
  */
 import { z } from "zod";
 
-export const SCHEMA_VERSION = "1.0" as const;
+export const LEGACY_SCHEMA_VERSION = "1.0" as const;
+export const SCHEMA_VERSION = "1.1" as const;
 
 // ── Shared primitives ────────────────────────────────────────────────────────
 
 /** Stable, human-readable identifier. Used for cross-references inside a package. */
 const key = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9-]*$/, "keys are lowercase, alphanumeric + hyphens");
+  .regex(/^[a-z0-9][a-z0-9_-]*$/, "keys are lowercase, alphanumeric, hyphens, or underscores");
 
 /**
  * Localized string: English required, other languages optional.
@@ -66,25 +67,53 @@ const provenanceSchema = z.object({
 // order = array position. The `order` field is kept (not just array index) so
 // block IDs survive a drag-reorder without renumbering every sibling.
 
-const quizQuestionSchema = z
+export function normalizeOption(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase("en-US");
+}
+
+export const quizQuestionSchema = z
   .object({
     id: key,
     prompt: z.string().min(1),
     format: z.enum(["multiple_choice", "short_answer"]),
     options: z.array(z.string()).optional(),
     answerKey: z.union([z.string(), z.array(z.string())]).optional(),
+    explanation: z.string().min(1).optional(),
     /** Ties this question to a tracked dimension for auto-assessment. */
     dimensionKey: key.optional(),
   })
   .refine(
     (q) => q.format !== "multiple_choice" || (q.options?.length ?? 0) >= 2,
     { message: "multiple_choice questions need at least 2 options", path: ["options"] },
-  );
+  )
+  .superRefine((q, ctx) => {
+    if (q.format !== "multiple_choice") return;
+    const options = q.options ?? [];
+    const normalized = options.map(normalizeOption);
+    if (new Set(normalized).size !== normalized.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "multiple_choice options must be unique after Unicode and whitespace normalization",
+        path: ["options"],
+      });
+    }
+    if (typeof q.answerKey !== "string" || options.filter((o) => o === q.answerKey).length !== 1) {
+      ctx.addIssue({
+        code: "custom",
+        message: "multiple_choice answerKey must equal exactly one raw option",
+        path: ["answerKey"],
+      });
+    }
+  });
 
 /** Discriminates each block variant. Shared by every entry in lessonBlockSchema. */
 const blockBase = {
   id: key, // stable across reorders; referenced by dimensionKey ties, provenance, etc.
   order: z.number().int().positive(),
+  /** Source concept keys survive conversion for sensing and provenance. */
+  concepts: z.array(key).default([]),
+  /** Increment intentionally to reset learner progress for this block. */
+  contentVersion: z.number().int().positive().default(1),
 };
 
 /**
@@ -113,6 +142,7 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
     blockType: z.literal("teach"),
     role: z.enum(["scenario", "explanation", "example", "question", "deepening"]),
     content: z.string().min(1),
+    presentation: z.enum(["narrated", "rendered"]).default("narrated"),
   }),
 
   /**
@@ -146,6 +176,25 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
     blockType: z.literal("quiz_checkpoint"),
     title: z.string().optional(),
     questions: z.array(quizQuestionSchema).min(1),
+  }),
+
+  /** A sortable sequence graded by exact source-item permutation. */
+  z.object({
+    ...blockBase,
+    blockType: z.literal("drag_order"),
+    prompt: z.string().min(1),
+    items: z.array(z.string().min(1)).min(2),
+    correctOrder: z.array(z.number().int().nonnegative()).min(2),
+  }).superRefine((block, ctx) => {
+    const expected = Array.from({ length: block.items.length }, (_, index) => index);
+    const actual = [...block.correctOrder].sort((a, b) => a - b);
+    if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
+      ctx.addIssue({
+        code: "custom",
+        message: "correctOrder must be a complete, duplicate-free permutation of item indices",
+        path: ["correctOrder"],
+      });
+    }
   }),
 
   /**
@@ -295,6 +344,15 @@ const alertRuleSchema = z.object({
   cooldownHours: z.number().nonnegative().default(24),
 });
 
+/** Baseline content is authored in the cartridge and graded only on the server. */
+export const baselineDiagnosticSchema = z.object({
+  id: key,
+  title: z.string().min(1),
+  description: z.string().optional(),
+  threshold: z.number().min(0).max(1),
+  questions: z.array(quizQuestionSchema).min(1),
+});
+
 // ── Config (-> ProgramVersion.config) ────────────────────────────────────────
 
 export const configSchema = z.object({
@@ -314,6 +372,7 @@ export const configSchema = z.object({
       steps: z
         .array(z.object({ id: key, promptKey: z.string(), field: z.string() }))
         .default([]),
+      diagnostic: baselineDiagnosticSchema.optional(),
     })
     .optional(),
   trackedDimensions: z.array(trackedDimensionSchema).default([]),
@@ -472,13 +531,19 @@ export const metadataSchema = z.object({
   learnerContext: learnerContextSchema.optional(),
   onboarding: onboardingConfigSchema.optional(),
   scheduledCheckins: z.array(scheduledCheckinSchema).optional(),
+  delivery: z
+    .object({
+      surface: z.enum(["chat", "player"]),
+      supportedChannels: z.array(z.enum(["whatsapp", "web", "canvas"])).min(1),
+    })
+    .optional(),
 });
 
 // ── Top-level package + cross-reference validation ───────────────────────────
 
 export const journeyPackageSchema = z
   .object({
-    schemaVersion: z.literal(SCHEMA_VERSION),
+    schemaVersion: z.enum([LEGACY_SCHEMA_VERSION, SCHEMA_VERSION]),
     metadata: metadataSchema,
     config: configSchema,
     curriculum: z.object({
@@ -488,6 +553,33 @@ export const journeyPackageSchema = z
     outcome: outcomeSchema.optional(),
   })
   .superRefine((pkg, ctx) => {
+    if (pkg.curriculum.collectionKey === "ai-essentials" && pkg.schemaVersion !== SCHEMA_VERSION) {
+      ctx.addIssue({
+        code: "custom",
+        message: `AI Essentials requires cartridge schema ${SCHEMA_VERSION}`,
+        path: ["schemaVersion"],
+      });
+    }
+
+    if (pkg.schemaVersion === LEGACY_SCHEMA_VERSION) {
+      if (pkg.metadata.delivery || pkg.config.onboarding?.diagnostic) {
+        ctx.addIssue({
+          code: "custom",
+          message: `delivery metadata and baseline diagnostics require cartridge schema ${SCHEMA_VERSION}`,
+          path: ["schemaVersion"],
+        });
+      }
+      for (const lesson of pkg.curriculum.lessons) {
+        if (lesson.blocks.some((block) => block.blockType === "drag_order")) {
+          ctx.addIssue({
+            code: "custom",
+            message: `drag_order blocks require cartridge schema ${SCHEMA_VERSION}`,
+            path: ["schemaVersion"],
+          });
+        }
+      }
+    }
+
     const lessonKeys = new Set<string>();
     const blockIds = new Set<string>();
     for (const l of pkg.curriculum.lessons) {
@@ -520,6 +612,12 @@ export const journeyPackageSchema = z
         }
         if (b.blockType === "quiz_checkpoint") {
           for (const q of b.questions) {
+            if (pkg.schemaVersion === SCHEMA_VERSION && !q.explanation) {
+              ctx.addIssue({
+                code: "custom",
+                message: `quiz question "${q.id}" requires an explanation in schema ${SCHEMA_VERSION}`,
+              });
+            }
             if (q.dimensionKey && !dimKeys.has(q.dimensionKey)) {
               ctx.addIssue({
                 code: "custom",
@@ -527,6 +625,37 @@ export const journeyPackageSchema = z
               });
             }
           }
+        }
+      }
+    }
+
+    const diagnostic = pkg.config.onboarding?.diagnostic;
+    if (pkg.config.onboarding?.mode === "baseline_quiz" && !diagnostic) {
+      ctx.addIssue({
+        code: "custom",
+        message: "baseline_quiz onboarding requires diagnostic content",
+        path: ["config", "onboarding", "diagnostic"],
+      });
+    }
+    if (diagnostic) {
+      for (const question of diagnostic.questions) {
+        if (question.format !== "multiple_choice") {
+          ctx.addIssue({
+            code: "custom",
+            message: `diagnostic question "${question.id}" must be multiple_choice`,
+          });
+        }
+        if (!question.explanation) {
+          ctx.addIssue({
+            code: "custom",
+            message: `diagnostic question "${question.id}" requires an explanation`,
+          });
+        }
+        if (!question.dimensionKey || !dimKeys.has(question.dimensionKey)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `diagnostic question "${question.id}" references an unknown dimension`,
+          });
         }
       }
     }
@@ -671,8 +800,12 @@ export type JourneyPackage = z.infer<typeof journeyPackageSchema>;
 /** Input type allows optional fields with defaults to be omitted */
 export type JourneyPackageInput = z.input<typeof journeyPackageSchema>;
 export type PassingConfig = z.infer<typeof passingSchema>;
-export type PackageLesson = z.infer<typeof lessonSchema>;
-export type LessonBlock = z.infer<typeof lessonBlockSchema>;
+/** Author/input shapes keep defaulted fields optional for v1.0 callers. */
+export type PackageLesson = z.input<typeof lessonSchema>;
+export type LessonBlock = z.input<typeof lessonBlockSchema>;
+/** Canonical parsed runtime shapes have all v1.1 defaults materialized. */
+export type ParsedPackageLesson = z.infer<typeof lessonSchema>;
+export type ParsedLessonBlock = z.infer<typeof lessonBlockSchema>;
 export type TrackedDimension = z.infer<typeof trackedDimensionSchema>;
 export type PackageConfig = z.infer<typeof configSchema>;
 export type PackageOutcome = z.infer<typeof outcomeSchema>;

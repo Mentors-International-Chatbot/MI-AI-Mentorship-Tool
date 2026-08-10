@@ -25,6 +25,7 @@ export interface CourseInfo {
 export const COURSE_CODES: Record<string, string> = {
   MI2024: "mi-colombia-curriculum",
   PBJ: "pbj-basics",
+  AIESS: "ai-essentials",
 };
 
 /**
@@ -40,6 +41,11 @@ export const COURSE_INFO: Record<string, Omit<CourseInfo, 'code'>> = {
     collectionKey: "pbj-basics",
     name: "PB&J Sandwich (Test Course)",
     description: "A simple test course for development purposes",
+  },
+  AIESS: {
+    collectionKey: "ai-essentials",
+    name: "AI Essentials",
+    description: "17-lesson practical AI literacy course",
   },
 };
 

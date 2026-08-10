@@ -3,4 +3,4 @@ export interface DeliveryChannel {
     getChannelType(): ChannelType;
 }
 
-export type ChannelType = 'whatsapp' | 'web';
+export type ChannelType = 'whatsapp' | 'web' | 'canvas';

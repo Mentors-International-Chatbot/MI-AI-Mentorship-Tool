@@ -1,0 +1,123 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+
+const mocks = vi.hoisted(() => ({
+  verifySession: vi.fn(),
+  getSocio: vi.fn(),
+  setSocioCurriculum: vi.fn(),
+  participantFindUnique: vi.fn(),
+  programVersionFindMany: vi.fn(),
+  cohortUpsert: vi.fn(),
+  enrollmentUpsert: vi.fn(),
+  createParticipant: vi.fn(),
+  resolveOrganizationForSocio: vi.fn(),
+  preloadCollection: vi.fn(),
+  resolveLearnerHome: vi.fn(),
+  logEvent: vi.fn(),
+}));
+
+vi.mock("@/lib/auth/session", () => ({ verifySession: mocks.verifySession }));
+vi.mock("@/lib/repo", () => ({
+  repo: { getSocio: mocks.getSocio, setSocioCurriculum: mocks.setSocioCurriculum },
+}));
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    participantProfile: { findUnique: mocks.participantFindUnique },
+    programVersion: { findMany: mocks.programVersionFindMany },
+    cohort: { upsert: mocks.cohortUpsert },
+    enrollment: { upsert: mocks.enrollmentUpsert },
+  },
+}));
+vi.mock("@/lib/repo/tenantPrismaRepo", () => ({
+  tenantPrismaRepo: {
+    createParticipant: mocks.createParticipant,
+    resolveOrganizationForSocio: mocks.resolveOrganizationForSocio,
+  },
+}));
+vi.mock("@/lib/lessons/db-lesson-service", () => ({
+  preloadCollection: mocks.preloadCollection,
+}));
+vi.mock("@/lib/courses/resolver", () => ({
+  resolveCourseCode: () => "ai-essentials",
+  getAvailableCourseCodes: () => ["AIESS"],
+  getAvailableCourses: () => [],
+}));
+vi.mock("@/lib/courses/learnerHome", () => ({
+  resolveLearnerHome: mocks.resolveLearnerHome,
+}));
+vi.mock("@/lib/logging/logger", () => ({ logEvent: mocks.logEvent }));
+
+import { POST } from "../route";
+
+const request = () => new NextRequest("http://localhost:3000/api/auth/curriculum", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ courseCode: "AIESS" }),
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.verifySession.mockResolvedValue({
+    userId: "learner-a",
+    role: "socio",
+    name: "Learner A",
+    rememberMe: false,
+    sessionStart: 0,
+  });
+  mocks.getSocio.mockResolvedValue({
+    id: "learner-a",
+    channelType: "web",
+    externalId: "learner-a",
+    language: "en",
+    name: "Learner A",
+    status: "ACTIVE",
+    aiPaused: false,
+    curriculumCollectionKey: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  });
+  mocks.participantFindUnique.mockResolvedValue({ id: "participant-a", organizationId: "org-a" });
+  mocks.programVersionFindMany.mockResolvedValue([{
+    id: "version-b",
+    programId: "program-b",
+    metadata: { delivery: { surface: "player", supportedChannels: ["web"] } },
+    program: {
+      organizationId: "org-b",
+      organization: { settings: null },
+    },
+  }]);
+});
+
+describe("POST /api/auth/curriculum — AI Essentials tenant isolation", () => {
+  it("refuses a published version owned by a different organization before any write", async () => {
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "AI Essentials is not currently published for your organization",
+    });
+    expect(mocks.setSocioCurriculum).not.toHaveBeenCalled();
+    expect(mocks.createParticipant).not.toHaveBeenCalled();
+    expect(mocks.cohortUpsert).not.toHaveBeenCalled();
+    expect(mocks.enrollmentUpsert).not.toHaveBeenCalled();
+  });
+
+  it("does not expose a synthetic publication to an unanchored learner", async () => {
+    mocks.participantFindUnique.mockResolvedValue(null);
+    mocks.programVersionFindMany.mockResolvedValue([{
+      id: "verification-version",
+      programId: "verification-program",
+      metadata: { delivery: { surface: "player", supportedChannels: ["web"] } },
+      program: {
+        organizationId: "verification-org",
+        organization: { settings: { syntheticDataOnly: true } },
+      },
+    }]);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(409);
+    expect(mocks.setSocioCurriculum).not.toHaveBeenCalled();
+    expect(mocks.enrollmentUpsert).not.toHaveBeenCalled();
+  });
+});

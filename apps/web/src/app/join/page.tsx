@@ -99,7 +99,7 @@ export default function JoinPage() {
 
                 // If already has curriculum, redirect to chat
                 if (data.curriculumCollectionKey) {
-                    router.replace('/chat');
+                    router.replace('/home');
                     return;
                 }
 
@@ -174,8 +174,7 @@ export default function JoinPage() {
                 return;
             }
 
-            // Success - redirect to chat
-            router.push('/chat');
+            router.push(data.homePath || '/home');
         } catch {
             setError(ui.error);
         } finally {
@@ -198,7 +197,7 @@ export default function JoinPage() {
                 <div className="w-full max-w-md text-center">
                     <p className="text-zinc-600 dark:text-zinc-400 mb-4">{ui.alreadyEnrolled}</p>
                     <button
-                        onClick={() => router.push('/chat')}
+                        onClick={() => router.push('/home')}
                         className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
                     >
                         {ui.goToChat}

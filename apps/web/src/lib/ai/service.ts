@@ -19,6 +19,7 @@ import {
     updateDimensionState,
     getDimensionStateMap,
     type DimensionStateMap,
+    type SensedDimension,
 } from './sensing';
 
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
@@ -31,6 +32,9 @@ import { CONTEXT_PROMPT_VERSION } from './prompts/layers/context';
 import { TASK_PROMPT_VERSION } from './prompts/layers/task';
 import { getContentIdentity } from './prompts/layers/content';
 import type { PromptVersionSink } from './prompts/loadPrompt';
+import { playerTutorGrounding, type ValidatedPlayerContext } from '@/lib/player/service';
+import { playerRuntimeRepo } from '@/lib/repo/playerRuntimeRepo';
+import { programVersionConfigSchema } from '@/lib/journey-package/program-version-config.schema';
 
 
 /**
@@ -294,6 +298,8 @@ export interface AIResponse {
      * The caller persists it; no LLM work remains.
      */
     sentiment?: SentimentResult | null;
+    /** Raw non-null player observations for enrollment-scoped evidence writes. */
+    sensedDimensions?: SensedDimension[];
     isError?: boolean;
     /** Gated assessment info - present when mode is GATED_ASSESSMENT */
     gatedAssessment?: {
@@ -321,6 +327,7 @@ export async function generateAIResponse(
      * the caller appends to the reply after generation ends.
      */
     onToken?: (delta: string) => void,
+    playerTurn?: { context: ValidatedPlayerContext; learnerText: string },
 ): Promise<AIResponse> {
     const startTime = performance.now();
     const timings: Record<string, number> = {};
@@ -355,7 +362,7 @@ export async function generateAIResponse(
     //    heuristic does, and a one-turn lag on an EMA signal is immaterial.
     const modeStart = performance.now();
     const modeResult = await determineMode(
-        socio, incomingText, collectionKey, priorState, prefetchedProgress,
+        socio, playerTurn?.learnerText ?? incomingText, collectionKey, priorState, prefetchedProgress,
     );
     timings.determineMode = performance.now() - modeStart;
 
@@ -371,39 +378,53 @@ export async function generateAIResponse(
     //     the LLM call — and buys the policy a mode to decide on. A learner
     //     typing "next" to advance a lesson is not reporting comprehension, and
     //     sensing it was a Haiku round trip spent to learn nothing.
-    const policy = resolveAnalysisPolicy({
+    const basePolicy = resolveAnalysisPolicy({
         mode: modeResult.routerResult.mode,
-        message: incomingText,
+        message: playerTurn?.learnerText ?? incomingText,
     });
+    const policy: AnalysisPolicy = playerTurn && playerTurn.context.intent !== 'lesson_entry'
+        ? { sensing: true, sentiment: true, contextExtraction: false }
+        : basePolicy;
+
+    const playerConfig = playerTurn ? await playerRuntimeRepo.programVersion.findFirst({
+        where: { id: playerTurn.context.programVersionId, status: 'published', collection: { slug: collectionKey } },
+        select: { config: true, program: { select: { organizationId: true } } },
+    }) : null;
+    const parsedPlayerConfig = playerConfig ? programVersionConfigSchema.safeParse(playerConfig.config) : null;
+    const playerDimensions = parsedPlayerConfig?.success
+        ? parsedPlayerConfig.data.trackedDimensions.map((item) => ({ key: item.key, label: item.label, min: item.scale.min, max: item.scale.max }))
+        : undefined;
 
     //     One call, both signals. Comprehension and emotion used to be two
     //     Haiku round trips scoring the same sentence, with `confusion` graded
     //     twice and no guarantee the answers agreed.
-    let analysisPromise: Promise<{ state: DimensionStateMap; sentiment: SentimentResult | null }>;
+    let analysisPromise: Promise<{ state: DimensionStateMap; sentiment: SentimentResult | null; dimensions: SensedDimension[] }>;
     if (overrideDimensionState || !policy.sensing) {
-        analysisPromise = Promise.resolve({ state: priorState, sentiment: null });
+        analysisPromise = Promise.resolve({ state: priorState, sentiment: null, dimensions: [] });
     } else {
         const repoProgress = prefetchedProgress ?? modeResult.repoProgress;
-        const lessonContext = hasLessonData(collectionKey, repoProgress.currentLessonNumber)
+        const lessonContext = playerTurn?.context.lessonKey ?? (hasLessonData(collectionKey, repoProgress.currentLessonNumber)
             ? getLessonData(collectionKey, repoProgress.currentLessonNumber).titleEs
-            : 'Conversación general de mentoría';
+            : 'Conversación general de mentoría');
 
         const stateAtDispatch = priorState;
         analysisPromise = senseAndScore({
-            incomingText,
+            incomingText: playerTurn?.learnerText ?? incomingText,
             priorState: stateAtDispatch,
             lessonContext,
             socioId: socio.id,
+            organizationId: playerConfig?.program.organizationId,
+            dimensions: playerDimensions,
         }).then(async (result) => {
             // Trivial or unreadable: nothing to fold in, so the prior state
             // carries forward untouched rather than being pulled toward neutral.
             const state = result.dimensions.length > 0
                 ? await updateDimensionState(socio.id, result.dimensions)
                 : stateAtDispatch;
-            return { state, sentiment: result.sentiment };
+            return { state, sentiment: result.sentiment, dimensions: result.dimensions };
         }).catch((error) => {
             console.error('[AI] Analysis pass failed, keeping prior state:', error);
-            return { state: stateAtDispatch, sentiment: null };
+            return { state: stateAtDispatch, sentiment: null, dimensions: [] };
         });
     }
 
@@ -449,7 +470,7 @@ export async function generateAIResponse(
     //    concurrently rather than back to back.
     const promptStart = performance.now();
     const dbPromptVersions: PromptVersionSink = {};
-    const [systemPrompt, recentHistory] = await Promise.all([
+    const [baseSystemPrompt, recentHistory, playerGrounding] = await Promise.all([
         buildSystemPrompt(
             socio,
             modeResult.routerResult,
@@ -462,7 +483,11 @@ export async function generateAIResponse(
             modeResult.gateRecency,
         ),
         repo.getMessages(socio.id, 10),
+        playerTurn ? playerTutorGrounding(playerTurn.context) : Promise.resolve(null),
     ]);
+    const systemPrompt = playerGrounding
+        ? `${baseSystemPrompt}\n\nPLAYER COURSE CONTEXT (authoritative; do not reveal hidden quiz answers):\n${playerGrounding}`
+        : baseSystemPrompt;
     timings.buildPrompt = performance.now() - promptStart;
     timings.fetchHistory = 0; // folded into buildPrompt above
 
@@ -513,7 +538,7 @@ export async function generateAIResponse(
         //     settled, so sensingJoinWait should be near zero on a normal turn -
         //     that number is how much sensing still costs after parallelization.
         const joinStart = performance.now();
-        const { state: liveState, sentiment } = await analysisPromise;
+        const { state: liveState, sentiment, dimensions } = await analysisPromise;
         timings.sensingJoinWait = performance.now() - joinStart;
         timings.sensing = performance.now() - sensingStart;
 
@@ -554,6 +579,7 @@ export async function generateAIResponse(
             dimensionState: liveState,
             analysisPolicy: policy,
             sentiment,
+            sensedDimensions: dimensions,
         };
     } catch (error) {
         console.error('[AI] All retry attempts failed:', error);

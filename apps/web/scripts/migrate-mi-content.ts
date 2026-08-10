@@ -24,7 +24,6 @@ import {
   journeyPackageSchema,
   type JourneyPackage,
   type PackageLesson,
-  type LessonBlock,
 } from "../src/lib/journey-package/journey-package.schema";
 import { importJourneyPackage } from "../src/lib/journey-package/import-journey-package";
 import { publishVersion } from "../src/lib/journey-package/publication.service";
@@ -116,7 +115,7 @@ async function buildMIJourneyPackage(): Promise<JourneyPackage> {
   console.log(`Transformed ${lessons.length} lessons from legacy format`);
 
   // Build the JourneyPackage
-  const pkg: JourneyPackage = {
+  const pkg = {
     schemaVersion: "1.0",
 
     metadata: {
@@ -234,9 +233,9 @@ async function buildMIJourneyPackage(): Promise<JourneyPackage> {
     },
 
     // No outcome for v1 — milestones tracked via existing SocioProgress
-  };
+  } as const;
 
-  return pkg;
+  return journeyPackageSchema.parse(pkg);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
