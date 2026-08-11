@@ -19,8 +19,11 @@ type Block = Teach | Quiz | Drag | TeachBack | BlockBase;
 type LessonDto = {
   lesson: { key: string; title: string; category?: string; keyConcepts: string[]; blocks: Block[] };
   previousLessonKey: string | null; nextLessonKey: string | null;
+  hasCapstone: boolean;
   progress: Array<{ blockId: string; completedAt: string | null; state?: { turnCount?: number } }>;
 };
+type ParentIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
+type TutorMessage = { role: "learner" | "mentor"; text: string; parentIntent?: ParentIntent; blockId?: string };
 
 export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey: string }) {
   const [data, setData] = useState<LessonDto | null>(null);
@@ -32,7 +35,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   const [order, setOrder] = useState<number[]>([]);
   const [teachBack, setTeachBack] = useState("");
   const [question, setQuestion] = useState("");
-  const [tutorMessages, setTutorMessages] = useState<Array<{ role: "learner" | "mentor"; text: string }>>([]);
+  const [tutorMessages, setTutorMessages] = useState<TutorMessage[]>([]);
   const [teachBackTurn, setTeachBackTurn] = useState(1);
   const [submittedComplete, setSubmittedComplete] = useState<Set<string>>(new Set());
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
@@ -54,11 +57,11 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
 
   useEffect(() => {
     if (!data) return;
-    playerFetch<{ response?: string }>("/api/chat", {
+    playerFetch<{ response?: string; isError?: boolean }>("/api/chat", {
       method: "POST",
       body: JSON.stringify({ message: "Introduce this lesson.", context: { surface: "player", courseCode: "AIESS", lessonKey, intent: "lesson_entry" } }),
     }).then((result) => {
-      if (result.response) setTutorMessages([{ role: "mentor", text: result.response }]);
+      if (result.response) setTutorMessages([{ role: "mentor", text: result.response, ...(result.isError ? {} : { parentIntent: "lesson_entry" as const }) }]);
     }).catch(() => undefined);
   }, [data, lessonKey]);
 
@@ -93,14 +96,16 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     if (!current || current.blockType !== "teach_back" || !teachBack.trim()) return;
     const answer = teachBack.trim(); setBusy(true); setError("");
     try {
-      const result = await playerFetch<{ response: string }>("/api/chat", {
+      const result = await playerFetch<{ response: string; isError?: boolean }>("/api/chat", {
         method: "POST",
         body: JSON.stringify({ message: answer, context: { surface: "player", courseCode: "AIESS", lessonKey, blockId: current.id, intent: "teach_back" } }),
       });
-      setTutorMessages((value) => [...value, { role: "learner", text: answer }, { role: "mentor", text: result.response }]);
+      setTutorMessages((value) => [...value, { role: "learner", text: answer }, { role: "mentor", text: result.response, ...(result.isError ? {} : { parentIntent: "teach_back" as const, blockId: current.id }) }]);
       setTeachBack("");
-      if (teachBackTurn === 2) setCompleted((value) => new Set(value).add(current.id));
-      else setTeachBackTurn(2);
+      if (!result.isError) {
+        if (teachBackTurn === 2) setCompleted((value) => new Set(value).add(current.id));
+        else setTeachBackTurn(2);
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Tutor reply failed"); }
     finally { setBusy(false); }
   }
@@ -109,13 +114,25 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     if (!question.trim()) return;
     const content = question.trim(); setBusy(true); setError("");
     try {
-      const result = await playerFetch<{ response: string }>("/api/chat", {
+      const result = await playerFetch<{ response: string; isError?: boolean }>("/api/chat", {
         method: "POST",
         body: JSON.stringify({ message: content, context: { surface: "player", courseCode: "AIESS", lessonKey, blockId: current?.id, intent: "question" } }),
       });
-      setTutorMessages((value) => [...value, { role: "learner", text: content }, { role: "mentor", text: result.response }]);
+      setTutorMessages((value) => [...value, { role: "learner", text: content }, { role: "mentor", text: result.response, ...(result.isError ? {} : { parentIntent: "question" as const, blockId: current?.id }) }]);
       setQuestion("");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Tutor reply failed"); }
+    finally { setBusy(false); }
+  }
+
+  async function explainMore(parentIntent: ParentIntent, blockId?: string) {
+    setBusy(true); setError("");
+    try {
+      const result = await playerFetch<{ response: string }>("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ context: { surface: "player", courseCode: "AIESS", lessonKey, blockId, intent: "expand", parentIntent } }),
+      });
+      setTutorMessages((value) => [...value, { role: "mentor", text: result.response }]);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Tutor expansion failed"); }
     finally { setBusy(false); }
   }
 
@@ -133,11 +150,11 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   return (
     <main className="player-shell">
       <header className="player-header">
-        <div><span className="player-eyebrow">{data.lesson.category ?? "AI Essentials"}</span><h1>{data.lesson.title}</h1></div>
+        <div><span className="player-eyebrow">{data.lesson.category ?? "AI Essentials"}</span><h1>{data.lesson.title}</h1>{data.hasCapstone && <Link className="player-project-link" href={`/learn/${course}/capstone`}>Open project</Link>}</div>
         <div className="player-progress" aria-label={`${done} of ${total} blocks complete`}><span style={{ width: `${100 * done / total}%` }} /></div>
       </header>
 
-      {tutorMessages.length > 0 && <aside className="player-tutor-log" aria-label="AI Mentor messages">{tutorMessages.slice(-3).map((message, index) => <div key={index} className={`player-message ${message.role}`}><strong>{message.role === "mentor" ? "AI Mentor" : "You"}</strong><p>{message.text}</p></div>)}</aside>}
+      {tutorMessages.length > 0 && <aside className="player-tutor-log" aria-label="AI Mentor messages">{tutorMessages.slice(-3).map((message, index, visible) => <div key={`${tutorMessages.length}-${index}`} className={`player-message ${message.role}`}><strong>{message.role === "mentor" ? "AI Mentor" : "You"}</strong><p>{message.text}</p>{message.role === "mentor" && message.parentIntent && index === visible.length - 1 && <button type="button" className="player-chip" disabled={busy} aria-label="Ask AI Mentor to explain the previous reply in more detail" onClick={() => explainMore(message.parentIntent!, message.blockId)}>Explain more</button>}</div>)}</aside>}
 
       {current ? <><section className="player-card" aria-live="polite">
         <div className="player-step">Step {done + 1} of {total}</div>

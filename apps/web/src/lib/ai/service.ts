@@ -35,6 +35,8 @@ import type { PromptVersionSink } from './prompts/loadPrompt';
 import { playerTutorGrounding, type ValidatedPlayerContext } from '@/lib/player/service';
 import { playerRuntimeRepo } from '@/lib/repo/playerRuntimeRepo';
 import { programVersionConfigSchema } from '@/lib/journey-package/program-version-config.schema';
+import { buildResponseStyleInstruction, resolvePlayerMaxTokens } from '@/lib/player/responseStyle';
+import { assembleOrderedModelMessages } from '@/lib/ai/modelMessages';
 
 
 /**
@@ -86,10 +88,10 @@ export function contentToText(content: unknown): string {
  * retry still absorbs the transient 5xx that motivated retrying at all.
  */
 async function invokeWithRetry(
-    chat: { invoke: (messages: (SystemMessage | HumanMessage | AIMessage)[]) => Promise<{ content: unknown }> },
+    chat: { invoke: (messages: (SystemMessage | HumanMessage | AIMessage)[]) => Promise<{ content: unknown; response_metadata?: unknown }> },
     messages: (SystemMessage | HumanMessage | AIMessage)[],
     maxRetries: number = 1,
-): Promise<string> {
+): Promise<{ content: unknown; response_metadata?: unknown }> {
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -99,7 +101,7 @@ async function invokeWithRetry(
                 AI_TIMEOUT_MS,
                 `AI request timeout after ${AI_TIMEOUT_MS}ms`
             );
-            return contentToText(response.content);
+            return response;
         } catch (error) {
             lastError = error as Error;
             console.error(`[AI] Attempt ${attempt + 1}/${maxRetries + 1} failed:`, error);
@@ -332,9 +334,18 @@ export async function generateAIResponse(
     const startTime = performance.now();
     const timings: Record<string, number> = {};
 
-    const chat = createOpenRouterChat({
-        temperature: 0.7,
-    });
+    // Resolve course behavior before constructing the model so only configured
+    // learner-visible player turns receive a token cap. MI, PB&J, sensing,
+    // extraction, summaries, and gated assessments keep their existing limits.
+    const playerConfig = playerTurn ? await playerRuntimeRepo.programVersion.findFirst({
+        where: { id: playerTurn.context.programVersionId, status: { in: ['published', 'archived'] }, collection: { slug: collectionKey } },
+        select: { config: true, program: { select: { organizationId: true } } },
+    }) : null;
+    const parsedPlayerConfig = playerConfig ? programVersionConfigSchema.safeParse(playerConfig.config) : null;
+    const responseStyle = parsedPlayerConfig?.success ? parsedPlayerConfig.data.responseStyle : undefined;
+    const expanded = playerTurn?.context.intent === 'expand';
+    const maxTokens = resolvePlayerMaxTokens(responseStyle, expanded);
+    const chat = createOpenRouterChat({ temperature: 0.7, ...(maxTokens ? { maxTokens } : {}) });
 
     // 0. State the router needs. Both reads are independent, so they go out
     //    together rather than one after the other.
@@ -382,15 +393,11 @@ export async function generateAIResponse(
         mode: modeResult.routerResult.mode,
         message: playerTurn?.learnerText ?? incomingText,
     });
-    const policy: AnalysisPolicy = playerTurn && playerTurn.context.intent !== 'lesson_entry'
+    const policy: AnalysisPolicy = playerTurn?.context.intent === 'expand'
+        ? { sensing: false, sentiment: false, contextExtraction: false }
+        : playerTurn && playerTurn.context.intent !== 'lesson_entry'
         ? { sensing: true, sentiment: true, contextExtraction: false }
         : basePolicy;
-
-    const playerConfig = playerTurn ? await playerRuntimeRepo.programVersion.findFirst({
-        where: { id: playerTurn.context.programVersionId, status: 'published', collection: { slug: collectionKey } },
-        select: { config: true, program: { select: { organizationId: true } } },
-    }) : null;
-    const parsedPlayerConfig = playerConfig ? programVersionConfigSchema.safeParse(playerConfig.config) : null;
     const playerDimensions = parsedPlayerConfig?.success
         ? parsedPlayerConfig.data.trackedDimensions.map((item) => ({ key: item.key, label: item.label, min: item.scale.min, max: item.scale.max }))
         : undefined;
@@ -485,25 +492,19 @@ export async function generateAIResponse(
         repo.getMessages(socio.id, 10),
         playerTurn ? playerTutorGrounding(playerTurn.context) : Promise.resolve(null),
     ]);
-    const systemPrompt = playerGrounding
+    const groundedSystemPrompt = playerGrounding
         ? `${baseSystemPrompt}\n\nPLAYER COURSE CONTEXT (authoritative; do not reveal hidden quiz answers):\n${playerGrounding}`
         : baseSystemPrompt;
+    const responseInstruction = buildResponseStyleInstruction(responseStyle, expanded);
+    const systemPrompt = responseInstruction ? `${groundedSystemPrompt}\n\n${responseInstruction}` : groundedSystemPrompt;
     timings.buildPrompt = performance.now() - promptStart;
     timings.fetchHistory = 0; // folded into buildPrompt above
 
-    const previousMessages = recentHistory
-        .map((msg: Message) => {
-            if (msg.role === 'user') return new HumanMessage(msg.content);
-            if (msg.role === 'assistant' || msg.role === 'mentor') return new AIMessage(msg.content);
-            return null; // skip system messages — only allowed at position 0
-        })
-        .filter((m): m is HumanMessage | AIMessage => m !== null);
-
-    const messages = [
-        new SystemMessage(systemPrompt),
-        ...previousMessages,
-        new HumanMessage(incomingText),
-    ];
+    const messages = assembleOrderedModelMessages(systemPrompt, recentHistory as Message[], incomingText).map((message) => {
+        if (message.role === 'system') return new SystemMessage(message.content);
+        if (message.role === 'assistant') return new AIMessage(message.content);
+        return new HumanMessage(message.content);
+    });
 
     // 4. Call LLM with retry
     try {
@@ -524,12 +525,22 @@ export async function generateAIResponse(
             // The exact router mode (RETEACH, FREEFORM_QUESTION, ...) lives here;
             // operation stays coarse so the whole chat path is queryable as one.
             mode: modeResult.routerResult.mode,
+            context: playerTurn ? {
+                surface: 'player',
+                courseCode: playerTurn.context.courseCode,
+                collectionKey: playerTurn.context.collectionKey,
+                programVersionId: playerTurn.context.programVersionId,
+                lessonKey: playerTurn.context.lessonKey,
+                ...(playerTurn.context.blockId ? { blockId: playerTurn.context.blockId } : {}),
+                intent: playerTurn.context.intent,
+                ...(playerTurn.context.parentIntent ? { parentIntent: playerTurn.context.parentIntent } : {}),
+            } : undefined,
             // markFirstToken is what stamps ttftMs; only the streaming branch
             // ever calls it, so non-streaming rows keep a null TTFT.
             invoke: async (markFirstToken): Promise<{ content: unknown }> =>
                 onToken
                     ? await streamWithRetry(chat, messages, onToken, markFirstToken)
-                    : { content: await invokeWithRetry(chat, messages) },
+                    : await invokeWithRetry(chat, messages),
         });
         const rawContent = contentToText(rawMessageContent);
         timings.llmInvoke = performance.now() - invokeStart;

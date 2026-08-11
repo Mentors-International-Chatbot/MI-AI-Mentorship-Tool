@@ -72,6 +72,21 @@ describe('invokeTraced — success path', () => {
     expect(row.promptVersion).toEqual({ sensing: 'v1' });
   });
 
+  it('records structured context and provider finish reason', async () => {
+    await invokeTraced({
+      ...BASE,
+      context: { surface: 'player', programVersionId: 'pv-1', intent: 'expand', parentIntent: 'question' },
+      invoke: async () => ({ content: 'hello', response_metadata: { finish_reason: 'stop' } }),
+    });
+    expect(lastRow().context).toEqual({ surface: 'player', programVersionId: 'pv-1', intent: 'expand', parentIntent: 'question' });
+    expect(lastRow().finishReason).toBe('stop');
+  });
+
+  it('reports an unknown finish reason as null', async () => {
+    await invokeTraced({ ...BASE, invoke: async () => ({ content: 'hello' }) });
+    expect(lastRow().finishReason).toBeNull();
+  });
+
   it('nulls the optional identifiers when not supplied', async () => {
     await invokeTraced({ ...BASE, invoke: async () => ({ content: 'x' }) });
     const row = lastRow();

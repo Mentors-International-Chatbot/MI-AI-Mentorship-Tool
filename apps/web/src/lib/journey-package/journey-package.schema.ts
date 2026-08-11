@@ -1,5 +1,5 @@
 /**
- * Journey Package Schema — course cartridge format v1.0 + v1.1
+ * Journey Package Schema — course cartridge format v1.0 through v1.2
  * ----------------------------------------------------------------------------
  * The portable, self-contained definition of one course/journey. A Course Lead
  * (or a file importer) produces one of these; the importer decomposes it into
@@ -22,7 +22,8 @@
 import { z } from "zod";
 
 export const LEGACY_SCHEMA_VERSION = "1.0" as const;
-export const SCHEMA_VERSION = "1.1" as const;
+export const V11_SCHEMA_VERSION = "1.1" as const;
+export const SCHEMA_VERSION = "1.2" as const;
 
 // ── Shared primitives ────────────────────────────────────────────────────────
 
@@ -30,6 +31,59 @@ export const SCHEMA_VERSION = "1.1" as const;
 const key = z
   .string()
   .regex(/^[a-z0-9][a-z0-9_-]*$/, "keys are lowercase, alphanumeric, hyphens, or underscores");
+
+export const responseStyleSchema = z.object({
+  maxSentences: z.number().int().min(1).optional(),
+  maxOutputTokens: z.number().int().min(64).max(2048).optional(),
+  markdown: z.enum(["allowed", "none"]).optional(),
+  maxQuestions: z.number().int().min(0).optional(),
+  expanded: z.object({
+    maxSentences: z.number().int().min(1),
+    maxOutputTokens: z.number().int().min(64).max(2048),
+  }).optional(),
+}).superRefine((style, ctx) => {
+  if (style.expanded && style.maxSentences !== undefined && style.expanded.maxSentences < style.maxSentences) {
+    ctx.addIssue({ code: "custom", message: "expanded.maxSentences cannot be lower than maxSentences", path: ["expanded", "maxSentences"] });
+  }
+  if (style.expanded && style.maxOutputTokens !== undefined && style.expanded.maxOutputTokens < style.maxOutputTokens) {
+    ctx.addIssue({ code: "custom", message: "expanded.maxOutputTokens cannot be lower than maxOutputTokens", path: ["expanded", "maxOutputTokens"] });
+  }
+});
+export type ResponseStyle = z.infer<typeof responseStyleSchema>;
+
+export const milestoneAvailabilitySchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("immediate") }),
+  z.object({ type: z.literal("after_lesson"), lessonKey: key }),
+  z.object({ type: z.literal("after_milestone"), milestoneKey: key }),
+]);
+export type MilestoneAvailability = z.infer<typeof milestoneAvailabilitySchema>;
+
+export const milestoneSchema = z.object({
+  key,
+  name: z.string().min(1),
+  availability: milestoneAvailabilitySchema.optional(),
+  /** Legacy v1.0/v1.1 input. Import normalizes it to availability.after_lesson. */
+  afterLessonKey: key.optional(),
+  checkDescription: z.string().optional(),
+}).superRefine((milestone, ctx) => {
+  if (!milestone.availability && !milestone.afterLessonKey) {
+    ctx.addIssue({ code: "custom", message: "milestone requires availability or legacy afterLessonKey", path: ["availability"] });
+  }
+  if (milestone.availability && milestone.afterLessonKey) {
+    ctx.addIssue({ code: "custom", message: "milestone cannot declare both availability and afterLessonKey" });
+  }
+});
+
+export type MilestoneInput = z.infer<typeof milestoneSchema>;
+export type NormalizedMilestone = Omit<MilestoneInput, "availability" | "afterLessonKey"> & { availability: MilestoneAvailability };
+
+export function normalizeMilestoneAvailability(milestone: MilestoneInput): NormalizedMilestone {
+  const { afterLessonKey, ...rest } = milestone;
+  return {
+    ...rest,
+    availability: milestone.availability ?? { type: "after_lesson", lessonKey: afterLessonKey! },
+  };
+}
 
 /**
  * Localized string: English required, other languages optional.
@@ -366,6 +420,8 @@ export const configSchema = z.object({
     })
     .partial()
     .optional(),
+  /** Learner-visible generation limits. Omission preserves legacy behavior. */
+  responseStyle: responseStyleSchema.optional(),
   onboarding: z
     .object({
       mode: z.enum(["survey", "baseline_quiz", "skip"]),
@@ -420,16 +476,7 @@ export const outcomeSchema = z.object({
       .array(z.object({ name: z.string(), description: z.string().optional() }))
       .default([]),
   }),
-  milestones: z
-    .array(
-      z.object({
-        key,
-        name: z.string().min(1),
-        afterLessonKey: key,
-        checkDescription: z.string().optional(),
-      }),
-    )
-    .default([]),
+  milestones: z.array(milestoneSchema).default([]),
   mentorResources: z
     .array(
       z.object({
@@ -440,6 +487,16 @@ export const outcomeSchema = z.object({
       }),
     )
     .default([]),
+}).superRefine((outcome, ctx) => {
+  const seen = new Set<string>();
+  for (const milestone of outcome.milestones) {
+    if (seen.has(milestone.key)) ctx.addIssue({ code: "custom", message: `duplicate milestone key "${milestone.key}"` });
+    const availability = normalizeMilestoneAvailability(milestone);
+    if (availability.availability.type === "after_milestone" && !seen.has(availability.availability.milestoneKey)) {
+      ctx.addIssue({ code: "custom", message: `milestone "${milestone.key}" must reference an earlier milestone, not "${availability.availability.milestoneKey}"` });
+    }
+    seen.add(milestone.key);
+  }
 });
 
 // ── Identity & Terminology (Phase A' additions) ──────────────────────────────
@@ -543,7 +600,7 @@ export const metadataSchema = z.object({
 
 export const journeyPackageSchema = z
   .object({
-    schemaVersion: z.enum([LEGACY_SCHEMA_VERSION, SCHEMA_VERSION]),
+    schemaVersion: z.enum([LEGACY_SCHEMA_VERSION, V11_SCHEMA_VERSION, SCHEMA_VERSION]),
     metadata: metadataSchema,
     config: configSchema,
     curriculum: z.object({
@@ -553,10 +610,10 @@ export const journeyPackageSchema = z
     outcome: outcomeSchema.optional(),
   })
   .superRefine((pkg, ctx) => {
-    if (pkg.curriculum.collectionKey === "ai-essentials" && pkg.schemaVersion !== SCHEMA_VERSION) {
+    if (pkg.curriculum.collectionKey === "ai-essentials" && pkg.schemaVersion === LEGACY_SCHEMA_VERSION) {
       ctx.addIssue({
         code: "custom",
-        message: `AI Essentials requires cartridge schema ${SCHEMA_VERSION}`,
+        message: `AI Essentials requires cartridge schema ${V11_SCHEMA_VERSION} or newer`,
         path: ["schemaVersion"],
       });
     }
@@ -612,7 +669,7 @@ export const journeyPackageSchema = z
         }
         if (b.blockType === "quiz_checkpoint") {
           for (const q of b.questions) {
-            if (pkg.schemaVersion === SCHEMA_VERSION && !q.explanation) {
+            if (pkg.schemaVersion !== LEGACY_SCHEMA_VERSION && !q.explanation) {
               ctx.addIssue({
                 code: "custom",
                 message: `quiz question "${q.id}" requires an explanation in schema ${SCHEMA_VERSION}`,
@@ -775,13 +832,28 @@ export const journeyPackageSchema = z
 
     if (pkg.outcome) {
       const milestoneKeys = new Set(pkg.outcome.milestones.map((m) => m.key));
+      const seenMilestones = new Set<string>();
       for (const m of pkg.outcome.milestones) {
-        if (!lessonKeys.has(m.afterLessonKey)) {
+        if (seenMilestones.has(m.key)) {
+          ctx.addIssue({ code: "custom", message: `duplicate milestone key "${m.key}"` });
+        }
+        if (pkg.schemaVersion === SCHEMA_VERSION && m.afterLessonKey) {
+          ctx.addIssue({ code: "custom", message: `milestone "${m.key}" must use availability in schema ${SCHEMA_VERSION}` });
+        }
+        const availability = normalizeMilestoneAvailability(m);
+        if (availability.availability.type === "after_lesson" && !lessonKeys.has(availability.availability.lessonKey)) {
           ctx.addIssue({
             code: "custom",
-            message: `milestone "${m.key}" placed after unknown lesson "${m.afterLessonKey}"`,
+            message: `milestone "${m.key}" placed after unknown lesson "${availability.availability.lessonKey}"`,
           });
         }
+        if (availability.availability.type === "after_milestone" && !seenMilestones.has(availability.availability.milestoneKey)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `milestone "${m.key}" must reference an earlier milestone, not "${availability.availability.milestoneKey}"`,
+          });
+        }
+        seenMilestones.add(m.key);
       }
       for (const r of pkg.outcome.mentorResources) {
         if (!milestoneKeys.has(r.milestoneKey)) {

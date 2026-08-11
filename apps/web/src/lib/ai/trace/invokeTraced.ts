@@ -44,6 +44,8 @@ export interface InvokeTracedParams<T> {
   assessmentSessionId?: string;
   /** Router mode when applicable. */
   mode?: string;
+  /** Structured operation context used by acceptance reporting. */
+  context?: Record<string, unknown>;
   /**
    * The real LLM call, already configured by the caller.
    *
@@ -59,8 +61,14 @@ export interface InvokeTracedParams<T> {
 /** LangChain attaches token counts here when the provider returns them. */
 type MaybeUsage = {
   usage_metadata?: { input_tokens?: number };
-  response_metadata?: { tokenUsage?: { promptTokens?: number } };
+  response_metadata?: { tokenUsage?: { promptTokens?: number }; finish_reason?: unknown; finishReason?: unknown };
 };
+
+export function extractFinishReason(result: unknown): string | null {
+  const metadata = (result as MaybeUsage | null | undefined)?.response_metadata;
+  const value = metadata?.finish_reason ?? metadata?.finishReason;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
 
 export function hashPrompt(prompt: string): string {
   return createHash('sha256').update(prompt).digest('hex');
@@ -104,6 +112,8 @@ async function writeTrace(row: {
   promptText: string | null;
   promptTokensApprox: number | null;
   responseLength: number | null;
+  context: Record<string, unknown> | null;
+  finishReason: string | null;
   latencyMs: number;
   ttftMs: number | null;
   success: boolean;
@@ -123,6 +133,8 @@ async function writeTrace(row: {
         promptText: row.promptText,
         promptTokensApprox: row.promptTokensApprox,
         responseLength: row.responseLength,
+        context: row.context ? row.context as object : undefined,
+        finishReason: row.finishReason,
         latencyMs: row.latencyMs,
         ttftMs: row.ttftMs,
         success: row.success,
@@ -166,6 +178,8 @@ export async function invokeTraced<T>(params: InvokeTracedParams<T>): Promise<T>
       promptText,
       promptTokensApprox: approxPromptTokens(systemPrompt, result),
       responseLength: contentLength(result) ?? null,
+      context: params.context ?? null,
+      finishReason: extractFinishReason(result),
       latencyMs: Date.now() - startedAt,
       ttftMs,
       success: true,
@@ -186,6 +200,8 @@ export async function invokeTraced<T>(params: InvokeTracedParams<T>): Promise<T>
       promptText,
       promptTokensApprox: approxPromptTokens(systemPrompt, null),
       responseLength: null,
+      context: params.context ?? null,
+      finishReason: null,
       latencyMs: Date.now() - startedAt,
       // A stream that emitted tokens and then failed still has a real TTFT.
       ttftMs,

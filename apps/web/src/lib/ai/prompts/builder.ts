@@ -36,6 +36,10 @@ function stripInternalPromptOverrides(raw: unknown): PromptOverrides | null {
   return o as PromptOverrides;
 }
 
+export function assemblePromptLayers(layers: readonly [string, string, string, string | null]): string {
+  return layers.filter((layer): layer is string => typeof layer === 'string' && layer.length > 0).join('\n\n');
+}
+
 export async function buildSystemPrompt(
   socio: Socio,
   routerResult: RouterResult,
@@ -91,8 +95,5 @@ export async function buildSystemPrompt(
     buildContentPrompt(routerResult, collectionKey, language),
   ]);
 
-  const parts = [layer1, layer2, layer3];
-  if (layer4) parts.push(layer4);
-
-  return parts.join('\n\n');
+  return assemblePromptLayers([layer1, layer2, layer3, layer4]);
 }

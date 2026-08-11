@@ -14,7 +14,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { prisma } from "@/lib/db";
-import type { JourneyPackage, PackageLesson } from "./journey-package.schema";
+import { normalizeMilestoneAvailability, type JourneyPackage, type PackageLesson } from "./journey-package.schema";
 import type { ProgramVersionConfig } from "./program-version-config.schema";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -193,7 +193,9 @@ export async function importJourneyPackage(
         },
       },
       update: {
-        orderIndex: i,
+        // Shared ContentLesson rows serve every released ProgramVersion. Their
+        // legacy order must not move when a newer version reorders lessons;
+        // current versions read the immutable curriculumLessonKeys snapshot.
       },
       create: {
         collectionId: collection.id,
@@ -235,6 +237,7 @@ export async function importJourneyPackage(
     // Per-course fields from package
     terminology: pkg.config.terminology,
     aiBehavior: pkg.config.aiBehavior,
+    responseStyle: pkg.config.responseStyle,
     onboarding: pkg.config.onboarding,
     trackedDimensions: pkg.config.trackedDimensions,
     alertRules: pkg.config.alertRules,
@@ -246,10 +249,14 @@ export async function importJourneyPackage(
     // because there were no Outcome/Milestone tables. That made every project,
     // milestone and mentor resource an author wrote invisible at runtime — the
     // schema cross-validated them, and nothing could ever read them.
-    outcome: pkg.outcome,
+    outcome: pkg.outcome ? {
+      ...pkg.outcome,
+      milestones: pkg.outcome.milestones.map(normalizeMilestoneAvailability),
+    } : undefined,
 
     // Reference to curriculum
     curriculumCollectionKey: pkg.curriculum.collectionKey,
+    curriculumLessonKeys: lessons.map((lesson) => lesson.key),
 
     // Org-level fields — inherit from org if requested, else leave undefined
     branding: undefined,

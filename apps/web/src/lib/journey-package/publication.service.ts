@@ -14,7 +14,7 @@ import { prisma } from "@/lib/db";
 import {
   programVersionConfigSchema,
 } from "./program-version-config.schema";
-import { lessonSchema } from "./journey-package.schema";
+import { lessonSchema, normalizeMilestoneAvailability } from "./journey-package.schema";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -90,6 +90,26 @@ export async function validateForPublication(
   }
 
   const config = configResult.data;
+
+  // Current cartridges snapshot both membership and order. Check the exact
+  // LessonVersion rows, not merely shared ContentLesson slugs left by an older
+  // release in the same collection.
+  if (config.curriculumLessonKeys) {
+    const releasedLessons = version.collectionId ? await prisma.contentLesson.findMany({
+      where: { collectionId: version.collectionId, slug: { in: config.curriculumLessonKeys }, versions: { some: { version: version.version } } },
+      select: { slug: true },
+    }) : [];
+    const releasedKeys = new Set(releasedLessons.map((lesson) => lesson.slug));
+    for (const lessonKey of config.curriculumLessonKeys) {
+      if (!releasedKeys.has(lessonKey)) errors.push({ code: "missing_lesson", message: `curriculum snapshot requires missing lesson version "${lessonKey}"`, path: ["curriculumLessonKeys"] });
+    }
+    for (const milestone of config.outcome?.milestones ?? []) {
+      const availability = normalizeMilestoneAvailability(milestone).availability;
+      if (availability.type === "after_lesson" && !releasedKeys.has(availability.lessonKey)) {
+        errors.push({ code: "missing_lesson", message: `milestone "${milestone.key}" references lesson "${availability.lessonKey}" outside this version`, path: ["outcome", "milestones", milestone.key] });
+      }
+    }
+  }
 
   // 2. Build set of dimension keys
   const dimensionKeys = new Set(config.trackedDimensions.map((d) => d.key));

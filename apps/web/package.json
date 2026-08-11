@@ -12,7 +12,9 @@
     "postinstall": "prisma generate",
     "db:seed": "prisma db seed",
     "db:seed:metrics": "npx tsx scripts/seed-metric-definitions.ts",
-    "import:ai-essentials": "tsx scripts/import-ai-essentials.ts"
+    "import:ai-essentials": "tsx scripts/import-ai-essentials.ts",
+    "report:ai-essentials": "tsx scripts/report-ai-essentials-telemetry.ts",
+    "accept:ai-essentials-responses": "tsx scripts/run-ai-essentials-response-acceptance.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

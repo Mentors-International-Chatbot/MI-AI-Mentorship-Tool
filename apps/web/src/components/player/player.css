@@ -33,4 +33,6 @@
 .capstone-locked { color: var(--player-muted); }
 .capstone-graduated { color: var(--player-accent); font-weight: 800; }
 .capstone-chat { display: grid; gap: .5rem; max-height: 360px; overflow: auto; margin-bottom: 1rem; }
+.player-chip { width: auto; min-height: 2.25rem; padding: .35rem .75rem; border-radius: 999px; font-size: .875rem; }
+.player-project-link { display: inline-block; margin-top: .35rem; font-weight: 700; }
 @media (max-width: 760px) { .capstone-grid { grid-template-columns: 1fr; } }

@@ -1,10 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { lessonBlockSchema } from "@/lib/journey-package/journey-package.schema";
-import { gradePlayerBlock, PlayerError, sanitizePlayerBlock } from "../service";
+import { gradePlayerBlock, matchesExpansionParent, milestoneStates, PlayerError, sanitizePlayerBlock } from "../service";
 
 const quiz = lessonBlockSchema.parse({
   id: "quiz", order: 1, blockType: "quiz_checkpoint", concepts: ["ai_impact"],
   questions: [{ id: "q1", prompt: "Pick", format: "multiple_choice", options: ["A", "B"], answerKey: "B", explanation: "B is correct", dimensionKey: "ai_impact" }],
+});
+
+describe("sequential milestone availability", () => {
+  const milestones = [
+    { key: "m1", name: "One", availability: { type: "immediate" as const } },
+    { key: "m2", name: "Two", availability: { type: "after_milestone" as const, milestoneKey: "m1" } },
+    { key: "m3", name: "Three", availability: { type: "after_milestone" as const, milestoneKey: "m2" } },
+  ];
+
+  it("shows every milestone but marks only the first as current", () => {
+    expect(milestoneStates(milestones, new Set(), new Set()).map((item) => item.status)).toEqual(["current", "locked", "locked"]);
+  });
+
+  it("unlocks only the immediate successor on the next snapshot", () => {
+    expect(milestoneStates(milestones, new Set(), new Set(["m1"])).map((item) => item.status)).toEqual(["reached", "current", "locked"]);
+  });
+});
+
+describe("expansion parent validation", () => {
+  const params = { collectionKey: "ai-essentials", programVersionId: "pv-1", lessonKey: "lesson-1", blockId: "block-1", parentIntent: "teach_back" as const };
+  const metadata = { surface: "player", courseCode: "AIESS", ...params, intent: "teach_back" };
+
+  it("requires the same released course, lesson, block, and parent intent", () => {
+    expect(matchesExpansionParent(metadata, params)).toBe(true);
+    expect(matchesExpansionParent({ ...metadata, programVersionId: "pv-2" }, params)).toBe(false);
+    expect(matchesExpansionParent({ ...metadata, blockId: "other" }, params)).toBe(false);
+    expect(matchesExpansionParent({ ...metadata, intent: "question" }, params)).toBe(false);
+  });
 });
 const drag = lessonBlockSchema.parse({
   id: "drag", order: 2, blockType: "drag_order", prompt: "Order", items: ["A", "B", "C"], correctOrder: [2, 0, 1],

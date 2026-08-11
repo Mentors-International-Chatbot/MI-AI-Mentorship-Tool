@@ -26,6 +26,8 @@ import {
   passingSchema,
   dashboardSchema,
   baselineDiagnosticSchema,
+  responseStyleSchema,
+  outcomeSchema,
 } from "./journey-package.schema";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -106,6 +108,9 @@ export const programVersionConfigSchema = z.object({
     .partial()
     .optional(),
 
+  /** Learner-visible generation limits. Absent for legacy programs. */
+  responseStyle: responseStyleSchema.optional(),
+
   /** Onboarding flow configuration. */
   onboarding: z
     .object({
@@ -179,37 +184,7 @@ export const programVersionConfigSchema = z.object({
    *   per-learner state  which milestones THIS participant has reached —
    *                      stored separately in MilestoneProgress
    */
-  outcome: z
-    .object({
-      project: z.object({
-        title: z.string().min(1),
-        description: z.string().optional(),
-        deliverables: z
-          .array(z.object({ name: z.string(), description: z.string().optional() }))
-          .default([]),
-      }),
-      milestones: z
-        .array(
-          z.object({
-            key: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
-            name: z.string().min(1),
-            afterLessonKey: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
-            checkDescription: z.string().optional(),
-          }),
-        )
-        .default([]),
-      mentorResources: z
-        .array(
-          z.object({
-            milestoneKey: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/),
-            trigger: z.enum(["on_reach", "when_behind"]).default("on_reach"),
-            body: z.string(),
-            mentorPrompt: z.string().optional(),
-          }),
-        )
-        .default([]),
-    })
-    .optional(),
+  outcome: outcomeSchema.optional(),
 
   // ─── Org-Level Fields (not from JourneyPackage) ─────────────────────────────
   /** Visual branding (logo, colors). Inherited from org or overridden. */
@@ -225,6 +200,10 @@ export const programVersionConfigSchema = z.object({
    * The actual lessons live in ContentLesson/LessonVersion rows.
    */
   curriculumCollectionKey: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/).optional(),
+  /** Immutable per-version lesson order; legacy configs fall back to ContentLesson.orderIndex. */
+  curriculumLessonKeys: z.array(z.string().regex(/^[a-z0-9][a-z0-9_-]*$/))
+    .refine((keys) => new Set(keys).size === keys.length, "curriculumLessonKeys must be unique")
+    .optional(),
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -17,7 +17,7 @@ import { getCourseMeta, buildWelcomeMessage } from '@/lib/courses/course-meta';
 import { createAssessmentSession } from '@/lib/ai/assessment/createAssessmentSession';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
-import { playerMilestoneAvailable, recordPlayerTutorSuccess, type ValidatedPlayerContext } from '@/lib/player/service';
+import { playerMilestoneAvailabilitySnapshot, recordPlayerTutorSuccess, type ValidatedPlayerContext } from '@/lib/player/service';
 import { playerRuntimeRepo } from '@/lib/repo/playerRuntimeRepo';
 import { queueMilestoneGrade } from '@/lib/lti/grades';
 import { evaluateAlerts } from '@/lib/alerts/evaluateAlerts';
@@ -316,7 +316,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     }
 
     // Independent writes, so they go out together.
-    const [userMsg] = systemInitiated || playerContext?.intent === 'lesson_entry'
+    const [userMsg] = systemInitiated || playerContext?.intent === 'lesson_entry' || playerContext?.intent === 'expand'
         ? [null]
         : await Promise.all([
             repo.addMessage({
@@ -485,7 +485,9 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     const generationMessage = playerContext
         ? [
             `PLAYER CONTEXT (server verified): lesson=${playerContext.lessonKey}; block=${playerContext.blockId ?? 'none'}; intent=${playerContext.intent}.`,
-            playerContext.intent === 'teach_back'
+            playerContext.intent === 'expand'
+                ? `Expand the immediately preceding ${playerContext.parentIntent} reply. Add useful detail without advancing progress, emitting markers, or asking more than the configured question limit.`
+                : playerContext.intent === 'teach_back'
                 ? playerContext.teachBackTurn === 1
                     ? 'Evaluate the learner answer. Give concise affirmation or correction, then ask exactly one focused follow-up question.'
                     : 'This is the final teach-back turn. Give concise closing feedback and do not ask another question.'
@@ -578,7 +580,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         };
     }
 
-    for (const flag of aiResponse.markers.flags) {
+    for (const flag of playerContext?.intent === 'expand' ? [] : aiResponse.markers.flags) {
         await repo.createFlag({
             socioId: socio.id,
             level: flag.level,
@@ -605,10 +607,13 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     // comes out of model output, and an unrecognised one is a hallucination, not
     // a milestone. Silently creating a row for it would put a key in the table
     // that no course defines and nothing can ever render.
-    if (aiResponse.markers.milestones.length > 0) {
+    if (aiResponse.markers.milestones.length > 0 && playerContext?.intent !== 'expand') {
         const scope = await resolvePromptScope(collectionKey);
         const declared = await resolveCourseMilestones(scope);
         const declaredKeys = new Set(declared.map((m) => m.key));
+        const availableAtResponseStart = playerContext
+            ? await playerMilestoneAvailabilitySnapshot(socio.id, playerContext)
+            : null;
 
         for (const key of aiResponse.markers.milestones) {
             if (!declaredKeys.has(key)) {
@@ -618,7 +623,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
                 );
                 continue;
             }
-            if (playerContext && !(await playerMilestoneAvailable(socio.id, playerContext, key))) {
+            if (playerContext && !availableAtResponseStart?.has(key)) {
                 console.warn(`[Milestone] socio=${socio.id} milestone=${key} is not yet available in the player.`);
                 continue;
             }
@@ -641,7 +646,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         }
     }
 
-    for (const fin of aiResponse.markers.financials) {
+    for (const fin of playerContext?.intent === 'expand' ? [] : aiResponse.markers.financials) {
         const now = new Date();
         const day = now.getUTCDay();
         const mondayOffset = day === 0 ? 6 : day - 1;
@@ -715,7 +720,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         }
     }
 
-    if (aiResponse.markers.escalations.length > 0) {
+    if (aiResponse.markers.escalations.length > 0 && playerContext?.intent !== 'expand') {
         for (const reason of aiResponse.markers.escalations) {
             await repo.createFlag({
                 socioId: socio.id,
@@ -776,7 +781,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         // Attribution for a turn nobody asked for. Without it there is no way
         // to tell, later, which messages the system volunteered.
         ...(playerContext
-            ? { metadata: playerContext }
+            ? { metadata: { ...playerContext, generationStatus: aiResponse.isError ? 'fallback' : 'success' } }
             : systemInitiated
             ? { metadata: { kind: systemInitiated.kind, sessionId: systemInitiated.sessionId } }
             : {}),

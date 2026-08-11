@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/messaging/handler';
 import { WebChannel } from '@/lib/delivery';
 import { resolveRequestIdentity } from '@/lib/auth/requestIdentity';
-import { PlayerError, preparePlayerContext, resolvePlayerAccess, type PlayerIntent, type ValidatedPlayerContext } from '@/lib/player/service';
+import { PlayerError, preparePlayerContext, resolvePlayerAccess, type PlayerIntent, type PlayerParentIntent, type ValidatedPlayerContext } from '@/lib/player/service';
 import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 import { toClientMessage } from './toClientMessage';
 
@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
 
         let body: {
             message?: string; language?: string; stream?: boolean;
-            context?: { surface?: string; courseCode?: string; lessonKey?: string; blockId?: string; intent?: string };
+            context?: { surface?: string; courseCode?: string; lessonKey?: string; blockId?: string; intent?: string; parentIntent?: string };
         };
         try {
             body = await req.json();
@@ -217,17 +217,23 @@ export async function POST(req: NextRequest) {
         let playerContext: ValidatedPlayerContext | undefined;
         if (body.context) {
             const candidate = body.context;
-            const intents: PlayerIntent[] = ['question', 'teach_back', 'lesson_entry', 'capstone'];
+            const intents: PlayerIntent[] = ['question', 'teach_back', 'lesson_entry', 'capstone', 'expand'];
+            const parentIntents: PlayerParentIntent[] = ['question', 'teach_back', 'lesson_entry', 'capstone'];
             if (candidate.surface !== 'player' || candidate.courseCode !== 'AIESS' || typeof candidate.lessonKey !== 'string' || !intents.includes(candidate.intent as PlayerIntent)) {
                 return NextResponse.json({ error: 'Invalid player context' }, { status: 400 });
+            }
+            if (candidate.intent === 'expand' && !parentIntents.includes(candidate.parentIntent as PlayerParentIntent)) {
+                return NextResponse.json({ error: 'Invalid expansion context' }, { status: 400 });
             }
             const access = await resolvePlayerAccess(identity, candidate.courseCode);
             playerContext = await preparePlayerContext(access, {
                 lessonKey: candidate.lessonKey,
                 blockId: typeof candidate.blockId === 'string' ? candidate.blockId : undefined,
                 intent: candidate.intent as PlayerIntent,
+                parentIntent: candidate.intent === 'expand' ? candidate.parentIntent as PlayerParentIntent : undefined,
             }, identity.ltiContextId);
             if (!message && playerContext.intent === 'lesson_entry') message = 'Introduce this lesson.';
+            if (!message && playerContext.intent === 'expand') message = 'Explain more.';
         }
 
         if (!message) {
@@ -255,7 +261,8 @@ export async function POST(req: NextRequest) {
         }
 
         // Check for duplicate request (prevents double-click spam)
-        const cachedResponse = getCachedResponse(identity.userId, `${playerContext?.lessonKey ?? ''}:${playerContext?.blockId ?? ''}:${message}`);
+        const requestIdentity = `${playerContext?.programVersionId ?? ''}:${playerContext?.lessonKey ?? ''}:${playerContext?.blockId ?? ''}:${playerContext?.intent ?? ''}:${playerContext?.parentIntent ?? ''}:${message}`;
+        const cachedResponse = getCachedResponse(identity.userId, requestIdentity);
         if (cachedResponse) {
             console.log(`[Chat] Returning cached response for duplicate request from ${identity.userId}`);
             return NextResponse.json(cachedResponse);
@@ -276,7 +283,7 @@ export async function POST(req: NextRequest) {
         const responseData = buildResponseData(result, webChannel);
 
         // Cache response to prevent duplicate processing
-        cacheResponse(identity.userId, `${playerContext?.lessonKey ?? ''}:${playerContext?.blockId ?? ''}:${message}`, responseData);
+        cacheResponse(identity.userId, requestIdentity, responseData);
 
         return NextResponse.json(responseData);
     } catch (error) {

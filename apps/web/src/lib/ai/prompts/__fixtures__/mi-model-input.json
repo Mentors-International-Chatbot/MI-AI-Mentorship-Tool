@@ -1,0 +1,23 @@
+{
+  "layers": [
+    "You are the AI mentor for the Mentors International entrepreneurship program.",
+    "Participant: Ana\nBusiness: neighborhood bakery\nProgress: lesson 4, message 2.",
+    "Teach the current cash-flow concept in Spanish and ask one practical question.",
+    "Lesson content: Separate business cash from household cash before calculating profit."
+  ],
+  "history": [
+    { "role": "user", "content": "Quiero entender mejor mi flujo de caja." },
+    { "role": "assistant", "content": "Empecemos separando las entradas y salidas del negocio." },
+    { "role": "system", "content": "This stored system row must be ignored." },
+    { "role": "mentor", "content": "Usa los números reales de esta semana." }
+  ],
+  "incomingText": "Vendí 800 y gasté 500, pero saqué 100 para la casa.",
+  "systemPrompt": "You are the AI mentor for the Mentors International entrepreneurship program.\n\nParticipant: Ana\nBusiness: neighborhood bakery\nProgress: lesson 4, message 2.\n\nTeach the current cash-flow concept in Spanish and ask one practical question.\n\nLesson content: Separate business cash from household cash before calculating profit.",
+  "messages": [
+    { "role": "system", "content": "You are the AI mentor for the Mentors International entrepreneurship program.\n\nParticipant: Ana\nBusiness: neighborhood bakery\nProgress: lesson 4, message 2.\n\nTeach the current cash-flow concept in Spanish and ask one practical question.\n\nLesson content: Separate business cash from household cash before calculating profit." },
+    { "role": "user", "content": "Quiero entender mejor mi flujo de caja." },
+    { "role": "assistant", "content": "Empecemos separando las entradas y salidas del negocio." },
+    { "role": "assistant", "content": "Usa los números reales de esta semana." },
+    { "role": "user", "content": "Vendí 800 y gasté 500, pero saqué 100 para la casa." }
+  ]
+}

@@ -2,7 +2,7 @@ import { playerRuntimeRepo } from "@/lib/repo/playerRuntimeRepo";
 import type { RequestIdentity } from "@/lib/auth/requestIdentity";
 import { resolveCourseCode } from "@/lib/courses/resolver";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
-import { lessonSchema, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
+import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
 import { programVersionConfigSchema } from "@/lib/journey-package/program-version-config.schema";
 
 export class PlayerError extends Error {
@@ -21,19 +21,35 @@ export type PlayerAccess = {
   enrollmentId: string;
 };
 
-export type PlayerIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
+export type PlayerParentIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
+export type PlayerIntent = PlayerParentIntent | "expand";
 export type ValidatedPlayerContext = {
   surface: "player";
   courseCode: "AIESS";
   lessonKey: string;
   blockId?: string;
   intent: PlayerIntent;
+  parentIntent?: PlayerParentIntent;
   collectionKey: string;
   programVersionId: string;
   contentVersion?: number;
   teachBackTurn?: 1 | 2;
   ltiContextId?: string;
 };
+
+export function matchesExpansionParent(metadata: unknown, params: {
+  collectionKey: string; programVersionId: string; lessonKey: string; blockId?: string; parentIntent: PlayerParentIntent;
+}): boolean {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  const value = metadata as Record<string, unknown>;
+  return value.surface === "player"
+    && value.courseCode === "AIESS"
+    && value.collectionKey === params.collectionKey
+    && value.programVersionId === params.programVersionId
+    && value.lessonKey === params.lessonKey
+    && value.intent === params.parentIntent
+    && (typeof params.blockId === "string" ? value.blockId === params.blockId : value.blockId === undefined);
+}
 
 export async function resolvePlayerAccess(identity: RequestIdentity, courseCode: string): Promise<PlayerAccess> {
   if (identity.role !== "socio" || !identity.socioId) throw new PlayerError(403, "learner_required", "Learner access required");
@@ -64,7 +80,7 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
       where: {
         participantId: socio.participantProfile.id,
         status: "active",
-        programVersion: { status: "published", collection: { slug: collectionKey } },
+        programVersion: { status: { in: ["published", "archived"] }, collection: { slug: collectionKey } },
       },
       include: { programVersion: { include: { collection: true, program: true } } },
       orderBy: { enrolledAt: "desc" },
@@ -72,7 +88,7 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
     if (!enrollment?.programVersion) throw new PlayerError(403, "not_enrolled", "An active enrollment in this course is required");
     programVersion = enrollment.programVersion;
   }
-  if (!programVersion?.collection || programVersion.status !== "published") throw new PlayerError(404, "course_unpublished", "Course is not published");
+  if (!programVersion?.collection || !["published", "archived"].includes(programVersion.status)) throw new PlayerError(404, "course_unpublished", "Course is not released");
   const delivery = resolveDelivery(programVersion.metadata);
   if (delivery.surface !== "player" || !delivery.supportedChannels.includes(identity.channel)) {
     throw new PlayerError(403, "channel_not_supported", `Course is not available through ${identity.channel}`);
@@ -110,7 +126,7 @@ export async function playerTutorGrounding(context: ValidatedPlayerContext): Pro
     select: { version: true, config: true },
   });
   if (!version) throw new PlayerError(404, "course_unpublished", "Course version not found");
-  if (context.intent === "capstone") {
+  if (context.intent === "capstone" || (context.intent === "expand" && context.parentIntent === "capstone")) {
     const config = programVersionConfigSchema.parse(version.config);
     return `Capstone: ${JSON.stringify(config.outcome?.project ?? {})}`;
   }
@@ -130,19 +146,43 @@ export async function playerTutorGrounding(context: ValidatedPlayerContext): Pro
 }
 
 async function lessonRows(access: PlayerAccess) {
-  return playerRuntimeRepo.contentLesson.findMany({
-    where: { collection: { slug: access.collectionKey, programVersions: { some: { id: access.programVersionId } } } },
+  const rows = await playerRuntimeRepo.contentLesson.findMany({
+    where: {
+      collection: { slug: access.collectionKey, programVersions: { some: { id: access.programVersionId } } },
+      versions: { some: { version: access.programVersion } },
+    },
     orderBy: { orderIndex: "asc" },
     include: { versions: { where: { version: access.programVersion }, take: 1 } },
   });
+  const declaredOrder = access.config.curriculumLessonKeys;
+  if (!declaredOrder) return rows;
+  const index = new Map(declaredOrder.map((key, position) => [key, position]));
+  return rows.filter((row) => index.has(row.slug)).sort((a, b) => index.get(a.slug)! - index.get(b.slug)!);
 }
 
 export async function preparePlayerContext(
   access: PlayerAccess,
-  input: { lessonKey: string; blockId?: string; intent: PlayerIntent },
+  input: { lessonKey: string; blockId?: string; intent: PlayerIntent; parentIntent?: PlayerParentIntent },
   ltiContextId?: string,
 ): Promise<ValidatedPlayerContext> {
-  if (input.intent === "capstone") {
+  if (input.intent === "expand") {
+    if (!input.parentIntent) throw new PlayerError(400, "invalid_context", "Expansion requires a parent intent");
+    const recent = await playerRuntimeRepo.message.findMany({
+      where: { socioId: access.socioId, role: "assistant" },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { metadata: true },
+    });
+    const prior = recent.some((row) => matchesExpansionParent(row.metadata, {
+      collectionKey: access.collectionKey,
+      programVersionId: access.programVersionId,
+      lessonKey: input.lessonKey,
+      blockId: input.blockId,
+      parentIntent: input.parentIntent!,
+    }));
+    if (!prior) throw new PlayerError(409, "no_prior_reply", "There is no matching tutor reply to expand");
+  }
+  if (input.intent === "capstone" || (input.intent === "expand" && input.parentIntent === "capstone")) {
     return { surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, ltiContextId };
   }
   const rows = await lessonRows(access);
@@ -208,6 +248,7 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
     lesson: { ...lesson, blocks: lesson.blocks.map(sanitizePlayerBlock) },
     previousLessonKey: rows[index - 1]?.slug ?? null,
     nextLessonKey: rows[index + 1]?.slug ?? null,
+    hasCapstone: !!access.config.outcome,
     progress: lesson.blocks.map((block) => {
       const item = progressById.get(block.id);
       const current = item?.contentVersion === block.contentVersion;
@@ -304,35 +345,56 @@ export async function getCapstoneDto(access: PlayerAccess) {
   const progress = await getCourseProgress(access);
   const completedLessonKeys = new Set(progress.lessons.filter((lesson) => lesson.complete).map((lesson) => lesson.lessonKey));
   const reached = new Set(progress.milestones.map((milestone) => milestone.key));
+  const states = milestoneStates(outcome.milestones.map(normalizeMilestoneAvailability), completedLessonKeys, reached);
   return {
     project: outcome.project,
-    milestones: outcome.milestones.map((milestone) => ({
-      ...milestone,
-      available: completedLessonKeys.has(milestone.afterLessonKey) || reached.has(milestone.key),
-      reached: reached.has(milestone.key),
-    })),
+    milestones: states,
+    nextMilestone: states.find((milestone) => milestone.status === "current") ?? null,
     completedMilestones: reached.size,
     graduated: outcome.milestones.length > 0 && outcome.milestones.every((milestone) => reached.has(milestone.key)),
   };
 }
 
-export async function playerMilestoneAvailable(socioId: string, context: ValidatedPlayerContext, milestoneKey: string) {
-  if (context.intent !== "capstone") return true;
+export function milestoneStates(
+  milestones: NormalizedMilestone[],
+  completedLessonKeys: ReadonlySet<string>,
+  reached: ReadonlySet<string>,
+) {
+  let currentAssigned = false;
+  return milestones.map((milestone) => {
+    const isReached = reached.has(milestone.key);
+    const eligible = milestone.availability.type === "immediate"
+      || (milestone.availability.type === "after_lesson" && completedLessonKeys.has(milestone.availability.lessonKey))
+      || (milestone.availability.type === "after_milestone" && reached.has(milestone.availability.milestoneKey));
+    const available = !isReached && eligible && !currentAssigned;
+    if (available) currentAssigned = true;
+    return { ...milestone, reached: isReached, available, status: isReached ? "reached" as const : available ? "current" as const : "locked" as const };
+  });
+}
+
+/** One pre-response snapshot prevents marker N from unlocking marker N+1 in the same model reply. */
+export async function playerMilestoneAvailabilitySnapshot(socioId: string, context: ValidatedPlayerContext): Promise<ReadonlySet<string>> {
+  if (context.intent !== "capstone") return new Set();
   const version = await playerRuntimeRepo.programVersion.findUnique({ where: { id: context.programVersionId }, select: { version: true, config: true } });
-  if (!version) return false;
+  if (!version) return new Set();
   const config = programVersionConfigSchema.safeParse(version.config);
-  const milestone = config.success ? config.data.outcome?.milestones.find((item) => item.key === milestoneKey) : undefined;
-  if (!milestone) return false;
-  const lesson = await playerRuntimeRepo.contentLesson.findFirst({
-    where: { slug: milestone.afterLessonKey, collection: { programVersions: { some: { id: context.programVersionId } } } },
+  const milestones = config.success ? config.data.outcome?.milestones.map(normalizeMilestoneAvailability) : undefined;
+  if (!milestones) return new Set();
+  const lessons = await playerRuntimeRepo.contentLesson.findMany({
+    where: { collection: { programVersions: { some: { id: context.programVersionId } } }, versions: { some: { version: version.version } } },
     include: { versions: { where: { version: version.version }, take: 1 } },
   });
-  const body = lesson?.versions[0] ? lessonSchema.safeParse(lesson.versions[0].body) : null;
-  if (!body?.success) return false;
-  const progress = await playerRuntimeRepo.blockProgress.findMany({
-    where: { socioId, collectionKey: context.collectionKey, lessonKey: milestone.afterLessonKey, completedAt: { not: null } },
-  });
-  return body.data.blocks.every((block) => progress.some((item) => item.blockId === block.id && item.contentVersion === block.contentVersion));
+  const [progress, milestoneProgress] = await Promise.all([
+    playerRuntimeRepo.blockProgress.findMany({ where: { socioId, collectionKey: context.collectionKey, completedAt: { not: null } } }),
+    playerRuntimeRepo.milestoneProgress.findMany({ where: { socioId, collectionKey: context.collectionKey } }),
+  ]);
+  const completedLessonKeys = new Set(lessons.flatMap((lesson) => {
+    const body = lesson.versions[0] ? lessonSchema.safeParse(lesson.versions[0].body) : null;
+    if (!body?.success) return [];
+    return body.data.blocks.every((block) => progress.some((item) => item.lessonKey === lesson.slug && item.blockId === block.id && item.contentVersion === block.contentVersion)) ? [lesson.slug] : [];
+  }));
+  const reached = new Set(milestoneProgress.map((item) => item.milestoneKey));
+  return new Set(milestoneStates(milestones, completedLessonKeys, reached).filter((item) => item.available).map((item) => item.key));
 }
 
 export function diagnosticDto(access: PlayerAccess) {

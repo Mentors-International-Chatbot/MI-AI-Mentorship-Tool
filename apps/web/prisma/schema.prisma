@@ -1068,6 +1068,10 @@ model AiInvocation {
   model               String
   promptTokensApprox  Int?     @map("prompt_tokens_approx")
   responseLength      Int?     @map("response_length")
+  // Structured call-site context (player course/version/lesson/block/intent).
+  context             Json?
+  // Provider termination reason when LangChain exposes one (stop, length, ...).
+  finishReason        String?  @map("finish_reason")
   latencyMs           Int      @map("latency_ms")
   // Time to first token. Only streamed calls set it; every non-streaming call
   // and every pre-existing row leaves it null. A real column, not a

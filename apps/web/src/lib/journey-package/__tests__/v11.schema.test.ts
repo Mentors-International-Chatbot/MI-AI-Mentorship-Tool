@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { journeyPackageSchema } from "../journey-package.schema";
 import { resolveDelivery } from "../delivery";
 
-function base(schemaVersion: "1.0" | "1.1" = "1.1") {
+function base(schemaVersion: "1.0" | "1.1" | "1.2" = "1.1") {
   return {
     schemaVersion,
     metadata: { packageId: "test", title: "Test", languages: ["en"], version: "1" },
@@ -46,5 +46,34 @@ describe("journey package v1.1", () => {
   it("resolves legacy and explicit player delivery through one resolver", () => {
     expect(resolveDelivery(undefined)).toEqual({ surface: "chat", supportedChannels: ["web", "whatsapp"] });
     expect(resolveDelivery({ delivery: { surface: "player", supportedChannels: ["web", "canvas"] } })).toEqual({ surface: "player", supportedChannels: ["web", "canvas"] });
+  });
+});
+
+describe("journey package v1.2", () => {
+  it("validates response limits and expanded ceilings", () => {
+    const pkg = base("1.2");
+    Object.assign(pkg.config, { responseStyle: { maxSentences: 3, maxOutputTokens: 240, markdown: "none", maxQuestions: 1, expanded: { maxSentences: 2, maxOutputTokens: 200 } } });
+    const result = journeyPackageSchema.safeParse(pkg);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues.map((issue) => issue.message).join(" ")).toContain("cannot be lower");
+  });
+
+  it("accepts legacy afterLessonKey in v1.1 and requires availability in v1.2", () => {
+    const legacy = base("1.1");
+    Object.assign(legacy, { outcome: { project: { title: "Project", deliverables: [] }, milestones: [{ key: "m1", name: "One", afterLessonKey: "lesson" }], mentorResources: [] } });
+    expect(journeyPackageSchema.safeParse(legacy).success).toBe(true);
+    const current = { ...legacy, schemaVersion: "1.2" };
+    expect(journeyPackageSchema.safeParse(current).success).toBe(false);
+  });
+
+  it("accepts a sequential chain and rejects forward/self references", () => {
+    const pkg = base("1.2");
+    Object.assign(pkg, { outcome: { project: { title: "Project", deliverables: [] }, milestones: [
+      { key: "m1", name: "One", availability: { type: "immediate" } },
+      { key: "m2", name: "Two", availability: { type: "after_milestone", milestoneKey: "m1" } },
+    ], mentorResources: [] } });
+    expect(journeyPackageSchema.safeParse(pkg).success).toBe(true);
+    ((pkg as unknown as { outcome: { milestones: Array<{ availability: { milestoneKey?: string } }> } }).outcome).milestones[1].availability.milestoneKey = "m2";
+    expect(journeyPackageSchema.safeParse(pkg).success).toBe(false);
   });
 });
