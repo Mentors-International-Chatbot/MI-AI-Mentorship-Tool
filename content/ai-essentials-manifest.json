@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "1.2",
+  "contentVersion": "1.1.0",
+  "lessonKeys": [
+    "ai-day-in-the-life",
+    "ai-magic-examples",
+    "ai-revolution-vs-past",
+    "ai-prospering-gameplan",
+    "ai-ceo-explain-models",
+    "ai-expert-vs-ml",
+    "ai-pattern-vs-truth",
+    "ai-train-infer-failures",
+    "ai-prompting-iteration",
+    "ai-reasoning-context-tools",
+    "ai-harness-control",
+    "ai-model-landscape",
+    "ai-cost-context-windows",
+    "ai-specialize-and-route",
+    "ai-tool-shapes",
+    "ai-build-vs-buy",
+    "ai-safety-deploy"
+  ],
+  "expectedLessonCount": 17,
+  "expectedBlockCount": 112,
+  "responseStyle": {
+    "maxSentences": 3,
+    "maxOutputTokens": 240,
+    "markdown": "none",
+    "maxQuestions": 1,
+    "expanded": {
+      "maxSentences": 6,
+      "maxOutputTokens": 480
+    }
+  },
+  "milestones": [
+    { "key": "capstone-1", "name": "Frame the decision and success criteria", "availability": { "type": "after_lesson", "lessonKey": "ai-prospering-gameplan" }, "checkDescription": "Frame the decision and success criteria" },
+    { "key": "capstone-2", "name": "Draft and improve the prompt", "availability": { "type": "after_lesson", "lessonKey": "ai-prompting-iteration" }, "checkDescription": "Draft and improve the prompt" },
+    { "key": "capstone-3", "name": "Design the tools and harness", "availability": { "type": "after_lesson", "lessonKey": "ai-tool-shapes" }, "checkDescription": "Design the tools and harness" },
+    { "key": "capstone-4", "name": "Build guardrails and evaluation tests", "availability": { "type": "after_lesson", "lessonKey": "ai-safety-deploy" }, "checkDescription": "Build guardrails and evaluation tests" },
+    { "key": "capstone-5", "name": "Synthesize the final operating brief", "availability": { "type": "after_lesson", "lessonKey": "ai-safety-deploy" }, "checkDescription": "Synthesize the final operating brief" }
+  ]
+}

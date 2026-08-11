@@ -1,0 +1,1126 @@
+{
+  "version": 1,
+  "nextSequence": 113,
+  "entries": [
+    {
+      "stableId": "aiess-l01-b001",
+      "lessonKey": "ai-day-in-the-life",
+      "blockType": "prose",
+      "discriminator": "ai-day-in-the-life:prose:ai_impact",
+      "contentHash": "0fd70bfdb577640615b6a02f2bf05db82fe27392d27e21e30146f73f70bf5a25",
+      "fingerprint": "concepts ai impact ai productivity content ai is a workflow amplifier not a substitute for judgment in supply chain work it can summarize a supplier update draft a demand planning memo and turn a meeting transcript into action items you still own the facts trade offs and decision discriminator ai day in the life prose ai impact type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l01-b002",
+      "lessonKey": "ai-day-in-the-life",
+      "blockType": "drag_order",
+      "discriminator": "ai-day-in-the-life:drag_order:ai_productivity",
+      "contentHash": "6587487dfb2230835325c690a5bc71a83043a043128772050ffbd3130e178c19",
+      "fingerprint": "concepts ai productivity correctorder 0 1 2 3 discriminator ai day in the life drag order ai productivity items define the business question and audience give the model relevant source material and constraints review claims against source data edit approve and send the deliverable prompt put a responsible ai assisted task workflow in order type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l01-b003",
+      "lessonKey": "ai-day-in-the-life",
+      "blockType": "mcq",
+      "discriminator": "ai-day-in-the-life:mcq:ai_impact",
+      "contentHash": "068ccec3754559fba0d2da5ff266f510eb93d3a8aca2159d6ccdacb6ffa5b965",
+      "fingerprint": "concepts ai impact correct 1 discriminator ai day in the life mcq ai impact explanation ai can speed up structuring known information contract approval and negotiation accountability remain human responsibilities options approve a supplier contract without reading it draft a comparison table from approved supplier quotes invent a new vendor score from no data replace the final negotiation decision prompt which task is the strongest first use of ai for a buyer type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l01-b004",
+      "lessonKey": "ai-day-in-the-life",
+      "blockType": "mcq",
+      "discriminator": "ai-day-in-the-life:mcq:ai_productivity",
+      "contentHash": "6e14d7496f7980eeef9750ddb5d3ffebee037231e2e9129bce929cb871dc0221",
+      "fingerprint": "concepts ai productivity correct 1 discriminator ai day in the life mcq ai productivity explanation a useful output is a starting point verify important claims against the source before acting options forward it immediately check the cited shipments and dates against the report assume the summary is correct because it is concise delete the original report prompt a model summarizes a late shipment report what is the best next step type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l01-b005",
+      "lessonKey": "ai-day-in-the-life",
+      "blockType": "prose",
+      "discriminator": "ai-day-in-the-life:prose:ai_productivity",
+      "contentHash": "26cbfcfa385b6f0b2ce29943d9f7de39951f65f57fb8f2cb3bb0e861394f5334",
+      "fingerprint": "concepts ai productivity content practical habit keep the original spreadsheet email or policy next to the draft ask ai to reduce clerical work use your domain knowledge to make the call discriminator ai day in the life prose ai productivity type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l01-b006",
+      "lessonKey": "ai-day-in-the-life",
+      "blockType": "teach_back",
+      "discriminator": "ai-day-in-the-life:teach_back:ai_impact",
+      "contentHash": "dd7f8b5a20134d246364e24e8b3258bc507a67e0ecb25740022d434fe823165c",
+      "fingerprint": "concepts ai impact discriminator ai day in the life teach back ai impact prompt in your own words explain ai impact on work and life use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l02-b007",
+      "lessonKey": "ai-magic-examples",
+      "blockType": "prose",
+      "discriminator": "ai-magic-examples:prose:machine_learning",
+      "contentHash": "ceb8ef62673454bd2167fe8300418106673cb5b4b6fdeb12225b120d96da02b5",
+      "fingerprint": "concepts machine learning content modern ai can generate fluent text images code and classifications because it learns patterns from large datasets that capability can feel magical but it does not guarantee understanding or accuracy discriminator ai magic examples prose machine learning type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l02-b008",
+      "lessonKey": "ai-magic-examples",
+      "blockType": "drag_order",
+      "discriminator": "ai-magic-examples:drag_order:ai_impact",
+      "contentHash": "5659f8169797048c9ce62bc041682279c16d50ba151cc79c4437d663f0c1e85e",
+      "fingerprint": "concepts ai impact correctorder 0 1 2 3 discriminator ai magic examples drag order ai impact items provide a clean inventory exception list ask for a manager ready summary with defined columns receive a draft prioritized by stated rules validate the priority and share with the manager prompt order this demonstration from input to useful result type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l02-b009",
+      "lessonKey": "ai-magic-examples",
+      "blockType": "mcq",
+      "discriminator": "ai-magic-examples:mcq:hallucinations",
+      "contentHash": "bee984718cc23ed2e2cf6ca3793abe7ae0d78c2bcd8247669fc90da5c305f81c",
+      "fingerprint": "concepts hallucinations correct 1 discriminator ai magic examples mcq hallucinations explanation generative models can hallucinate they may state unsupported or incorrect details confidently options fluent wording proves the model is correct the model may generate plausible details not supported by evidence ai can only repeat exact training sentences grammar errors are the only risk prompt why can a polished ai answer still be unsafe to use type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l02-b010",
+      "lessonKey": "ai-magic-examples",
+      "blockType": "mcq",
+      "discriminator": "ai-magic-examples:mcq:machine_learning",
+      "contentHash": "faa1d1479cb48b85372b4986b43ae1e8667f49e1fc1fb305af34d93c84d85980",
+      "fingerprint": "concepts machine learning correct 1 discriminator ai magic examples mcq machine learning explanation models estimate likely outputs from patterns they do not guarantee future outcomes or take accountability options guarantee the next quarter s demand recognize relationships in examples and generate likely outputs know facts it was never given accept legal responsibility for recommendations prompt what does pattern learning help a model do type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l02-b011",
+      "lessonKey": "ai-magic-examples",
+      "blockType": "prose",
+      "discriminator": "ai-magic-examples:prose:hallucinations",
+      "contentHash": "4158c14b334a18df2e9689a59722347e0d9e29689e3978d461acf7e44f01ff83",
+      "fingerprint": "concepts hallucinations content the useful question is not is ai magic it is what evidence would make this output trustworthy enough for this decision discriminator ai magic examples prose hallucinations type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l02-b012",
+      "lessonKey": "ai-magic-examples",
+      "blockType": "teach_back",
+      "discriminator": "ai-magic-examples:teach_back:ai_impact",
+      "contentHash": "53eadd73e8c2365e1caca96140db7b1d6be28344cf72f5aa586901df92c53ba8",
+      "fingerprint": "concepts ai impact discriminator ai magic examples teach back ai impact prompt in your own words explain ai impact on work and life use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l03-b013",
+      "lessonKey": "ai-revolution-vs-past",
+      "blockType": "prose",
+      "discriminator": "ai-revolution-vs-past:prose:ai_impact",
+      "contentHash": "85cd5e0b8a9c91a211b553f77e8e517b9697a449ac5a8acdb4156cc0dcbfde0d",
+      "fingerprint": "concepts ai impact content spreadsheets made calculation cheaper the web made information easier to reach generative ai makes drafting transforming and interacting with information cheaper the change matters when it reshapes a whole workflow not when it creates a clever demo discriminator ai revolution vs past prose ai impact type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l03-b014",
+      "lessonKey": "ai-revolution-vs-past",
+      "blockType": "prose",
+      "discriminator": "ai-revolution-vs-past:prose:ai_impact",
+      "contentHash": "107ee14e651942cd37983d23ba39c15635d1a80a985ed47fb2ca24ff3575d33d",
+      "fingerprint": "concepts ai impact content past industrial revolutions lowered the cost of physical work transportation and calculation this wave lowers the cost of some mental tasks the comparison has limits ai does not understand a workplace the way a colleague does and adoption depends on data process changes trust and accountability discriminator ai revolution vs past prose ai impact type prose",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l03-b015",
+      "lessonKey": "ai-revolution-vs-past",
+      "blockType": "drag_order",
+      "discriminator": "ai-revolution-vs-past:drag_order:ai_impact",
+      "contentHash": "3de707642e1cb31f694293cb49c0d9e530129e210acb3a2ca59ecd18948611fa",
+      "fingerprint": "concepts ai impact correctorder 0 1 2 3 discriminator ai revolution vs past drag order ai impact items spreadsheets automate calculations the web broadens access to information cloud software connects shared workflows generative ai creates and transforms content from instructions prompt order these technology shifts from older to newer type drag order",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l03-b016",
+      "lessonKey": "ai-revolution-vs-past",
+      "blockType": "mcq",
+      "discriminator": "ai-revolution-vs-past:mcq:ai_impact",
+      "contentHash": "9a18c82d9a8efb3b2e58f252388ddcbc20e0caf0e706af812b4be09ed9f2dcc5",
+      "fingerprint": "concepts ai impact correct 1 discriminator ai revolution vs past mcq ai impact explanation formulas are deterministic when inputs are fixed generative outputs are probabilistic and require review options generative ai never needs inputs a formula follows fixed logic a generative model produces probabilistic output from instructions and context spreadsheets cannot support business decisions generative ai is always more accurate prompt which statement best distinguishes generative ai from a traditional spreadsheet formula type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l03-b017",
+      "lessonKey": "ai-revolution-vs-past",
+      "blockType": "mcq",
+      "discriminator": "ai-revolution-vs-past:mcq:machine_learning",
+      "contentHash": "73743e882540bc337e52c4099fb293fcccc07306da9ca252f22727b98f2b4860",
+      "fingerprint": "concepts machine learning correct 1 discriminator ai revolution vs past mcq machine learning explanation ai is especially useful where teams repeatedly transform information provided controls match the risk options only in jobs that never use language in workflows with repeated interpretation drafting search or classification work only in tasks with no human owner only where errors have no cost prompt where is the current ai wave most likely to create value type mcq",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l03-b018",
+      "lessonKey": "ai-revolution-vs-past",
+      "blockType": "prose",
+      "discriminator": "ai-revolution-vs-past:prose:ai_impact",
+      "contentHash": "d3f5d0124a5f626da1579594ffa07562118b32a41b6d329d0ddf34177df66861",
+      "fingerprint": "concepts ai impact content for gscm look for bottlenecks reading exceptions compiling updates translating requirements and preparing decisions measure time saved and error rate not novelty discriminator ai revolution vs past prose ai impact type prose",
+      "sourceOrdinal": "6",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l03-b019",
+      "lessonKey": "ai-revolution-vs-past",
+      "blockType": "teach_back",
+      "discriminator": "ai-revolution-vs-past:teach_back:ai_impact",
+      "contentHash": "126c07ecb7fc6eb6c6f3b7e5d2e4f0e1b053d36fea031657458795a7123ec316",
+      "fingerprint": "concepts ai impact discriminator ai revolution vs past teach back ai impact prompt in your own words explain ai impact on work and life use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l04-b020",
+      "lessonKey": "ai-prospering-gameplan",
+      "blockType": "prose",
+      "discriminator": "ai-prospering-gameplan:prose:ai_productivity",
+      "contentHash": "d54cc5064668c67813f0f495cde184dafd9aca1d52ae26c60b8a90177b6f69fc",
+      "fingerprint": "concepts ai productivity content ai raises the value of people who can frame a problem supply context test an answer and coordinate action build a portfolio of repeatable workflows rather than collecting prompt tricks discriminator ai prospering gameplan prose ai productivity type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l04-b021",
+      "lessonKey": "ai-prospering-gameplan",
+      "blockType": "prose",
+      "discriminator": "ai-prospering-gameplan:prose:ai_productivity",
+      "contentHash": "1f46ecbbafb4af96f70fa202e05e6a031e8d30bf5d4c8b528d0a6ba10aa69fc7",
+      "fingerprint": "concepts ai productivity ai impact content efficiency can increase demand instead of reducing it this is the jevons paradox when a resource becomes cheaper to use people may use more of it cheaper analysis can mean more scenarios more frequent forecasts and higher expectations your advantage comes from deciding which extra work is worth doing discriminator ai prospering gameplan prose ai productivity type prose",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l04-b022",
+      "lessonKey": "ai-prospering-gameplan",
+      "blockType": "mcq",
+      "discriminator": "ai-prospering-gameplan:mcq:ai_productivity",
+      "contentHash": "2ada29723b515891e55673898405c10c28ce0e568fefb23edd0eb3e648c5aa83",
+      "fingerprint": "concepts ai productivity correct 0 discriminator ai prospering gameplan mcq ai productivity explanation the cheaper workflow encouraged more frequent forecasting that is the jevons style rebound effect options lower cost can increase total use of a capability automation always reduces demand for work models become accurate when used more often forecasting no longer needs an owner prompt a team uses ai to cut forecast preparation from two days to two hours then starts updating forecasts weekly instead of monthly what idea does this illustrate type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l04-b023",
+      "lessonKey": "ai-prospering-gameplan",
+      "blockType": "drag_order",
+      "discriminator": "ai-prospering-gameplan:drag_order:ai_productivity",
+      "contentHash": "b88acf47517fce74dc42b58f1ca4f93237d0786481061acd7be6679f43ee24a8",
+      "fingerprint": "concepts ai productivity correctorder 0 1 2 3 discriminator ai prospering gameplan drag order ai productivity items choose one recurring low risk task document the current time and quality baseline design and test an ai assisted workflow keep the version that improves results with review prompt build an ai ready work habit in order type drag order",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l04-b024",
+      "lessonKey": "ai-prospering-gameplan",
+      "blockType": "mcq",
+      "discriminator": "ai-prospering-gameplan:mcq:guardrails",
+      "contentHash": "9871767056ff57bfa27de3f0bd1272ba255139e128d166628093d00750efb3cd",
+      "fingerprint": "concepts guardrails correct 1 discriminator ai prospering gameplan mcq guardrails explanation use approved tools and authorized data treat outputs as drafts you must understand and verify options paste confidential supplier pricing into a public tool use a course approved tool with fictional or authorized data ask ai to fabricate citations submit ai output without reading it prompt which is a safe student practice type mcq",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l04-b025",
+      "lessonKey": "ai-prospering-gameplan",
+      "blockType": "mcq",
+      "discriminator": "ai-prospering-gameplan:mcq:ai_impact",
+      "contentHash": "eb838a530d3ac8fb9ba054191c132af9577f69dd27c7e9f42fbf9d148a242609",
+      "fingerprint": "concepts ai impact correct 1 discriminator ai prospering gameplan mcq ai impact explanation problem framing and evidence based judgment transfer across tools and models options memorizing one tool s button locations framing a business problem and evaluating evidence avoiding all automation copying the longest prompt online prompt which skill remains most durable as ai tools change type mcq",
+      "sourceOrdinal": "6",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l04-b026",
+      "lessonKey": "ai-prospering-gameplan",
+      "blockType": "prose",
+      "discriminator": "ai-prospering-gameplan:prose:ai_productivity",
+      "contentHash": "ccb6c22d7ab96b45dfe34ece442724c9c7fc19d01c67b12156c3e7201938b6fa",
+      "fingerprint": "concepts ai productivity content start small turn one weekly logistics update into a reviewed template record what ai did what you checked and where it failed keep practicing the underlying skill too if you outsource every calculation summary or first draft your judgment can get rusty just as an unused muscle does discriminator ai prospering gameplan prose ai productivity type prose",
+      "sourceOrdinal": "7",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l04-b027",
+      "lessonKey": "ai-prospering-gameplan",
+      "blockType": "teach_back",
+      "discriminator": "ai-prospering-gameplan:teach_back:ai_impact",
+      "contentHash": "f1109407fa8f90064e8595a2e193b64d49b82010a9c60e44d1bfef714885de78",
+      "fingerprint": "concepts ai impact discriminator ai prospering gameplan teach back ai impact prompt in your own words explain ai impact on work and life use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l05-b028",
+      "lessonKey": "ai-ceo-explain-models",
+      "blockType": "prose",
+      "discriminator": "ai-ceo-explain-models:prose:machine_learning",
+      "contentHash": "c76adebdc7e9f986f3cefbcc4a14480ceebf3db0e9b386f5f2f16bc9cb116c10",
+      "fingerprint": "concepts machine learning content a model is a trained system that maps inputs to likely outputs explain it to a ceo as a capability with boundaries it can summarize approved documents and draft options but it needs source access and human review for decisions discriminator ai ceo explain models prose machine learning type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l05-b029",
+      "lessonKey": "ai-ceo-explain-models",
+      "blockType": "prose",
+      "discriminator": "ai-ceo-explain-models:prose:machine_learning",
+      "contentHash": "0e021cb5520b465e3c71eef3de09abf9cc9894dc92b3e4f6d255efba0678a69a",
+      "fingerprint": "concepts machine learning content during training the model sees a corpus of examples and adjusts many numeric parameters to reduce prediction error backpropagation is the accounting mechanism for those adjustments it traces how much each parameter contributed to an error then nudges the parameters it does not install a database of verified facts discriminator ai ceo explain models prose machine learning type prose",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l05-b030",
+      "lessonKey": "ai-ceo-explain-models",
+      "blockType": "mcq",
+      "discriminator": "ai-ceo-explain-models:mcq:machine_learning",
+      "contentHash": "53346c4bf52e5689da25f88c49987c4cce971643a73d28ef6c9f342543b0ec15",
+      "fingerprint": "concepts machine learning correct 1 discriminator ai ceo explain models mcq machine learning explanation backpropagation helps optimize parameters source quality and factual verification require separate controls options checks every statement against a trusted source adjusts parameters based on how they contributed to prediction error stores the training corpus as a searchable spreadsheet lets the model approve its own output prompt what does backpropagation do during model training type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l05-b031",
+      "lessonKey": "ai-ceo-explain-models",
+      "blockType": "drag_order",
+      "discriminator": "ai-ceo-explain-models:drag_order:machine_learning",
+      "contentHash": "efc562fd3b49eba35055673a364eeaf69ffe649097d7ad6d63a0f2e0adbbff74",
+      "fingerprint": "concepts machine learning correctorder 0 1 2 3 discriminator ai ceo explain models drag order machine learning items collect and prepare training data train a model to learn patterns deploy the trained model for inference monitor output quality and update controls prompt order the model lifecycle at a high level type drag order",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l05-b032",
+      "lessonKey": "ai-ceo-explain-models",
+      "blockType": "mcq",
+      "discriminator": "ai-ceo-explain-models:mcq:model_selection",
+      "contentHash": "08452d19ebb31e7592f906f30fe062dfb8ea13c9545126dff41b606ded507cc4",
+      "fingerprint": "concepts model selection correct 1 discriminator ai ceo explain models mcq model selection explanation a model generates or classifies based on learned patterns and the context it receives it is not a guaranteed source of truth options the model knows everything on the internet the model predicts useful outputs from patterns and supplied context the model replaces every analyst the model guarantees factual answers prompt which ceo explanation is most accurate type mcq",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l05-b033",
+      "lessonKey": "ai-ceo-explain-models",
+      "blockType": "mcq",
+      "discriminator": "ai-ceo-explain-models:mcq:ai_impact",
+      "contentHash": "5e8961e549c06465e6f2fed0e97225fb2f128527d1115b4f20c0335714c60cdd",
+      "fingerprint": "concepts ai impact correct 1 discriminator ai ceo explain models mcq ai impact explanation a pilot should demonstrate an operational outcome with a quality control not merely activity options number of prompts written reduction in report preparation time while maintaining verified accuracy how impressive the demo sounds number of models purchased prompt what business metric best supports an ai pilot type mcq",
+      "sourceOrdinal": "6",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l05-b034",
+      "lessonKey": "ai-ceo-explain-models",
+      "blockType": "prose",
+      "discriminator": "ai-ceo-explain-models:prose:model_selection",
+      "contentHash": "b6e903e5617dbb3c41f9bf01bb450c00e817986e8c1a2047e7d28b5ab0478781",
+      "fingerprint": "concepts model selection content good executive communication names the task the data boundary the owner the expected benefit and the failure mode discriminator ai ceo explain models prose model selection type prose",
+      "sourceOrdinal": "7",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l05-b035",
+      "lessonKey": "ai-ceo-explain-models",
+      "blockType": "teach_back",
+      "discriminator": "ai-ceo-explain-models:teach_back:machine_learning",
+      "contentHash": "24b7e6d56b93d7686033ef39af1cdd7fc99846a3808e0ebac017cc7890cf2a55",
+      "fingerprint": "concepts machine learning discriminator ai ceo explain models teach back machine learning prompt in your own words explain machine learning basics use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l06-b036",
+      "lessonKey": "ai-expert-vs-ml",
+      "blockType": "prose",
+      "discriminator": "ai-expert-vs-ml:prose:expert_systems",
+      "contentHash": "7076d8de4a9e0890ea039bea55ffb1bc8d10a4062d62a9d14336f4d2bec2a797",
+      "fingerprint": "concepts expert systems machine learning content an expert system applies explicit rules written by people if temperature is below a threshold flag a cold chain exception machine learning learns a pattern from examples given past shipments estimate which are likely to arrive late discriminator ai expert vs ml prose expert systems type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l06-b037",
+      "lessonKey": "ai-expert-vs-ml",
+      "blockType": "drag_order",
+      "discriminator": "ai-expert-vs-ml:drag_order:expert_systems",
+      "contentHash": "e47aba49514625fd84455bc724fbf104e771b60caba29252ee4a8e94eceed584",
+      "fingerprint": "concepts expert systems machine learning correctorder 0 1 2 3 discriminator ai expert vs ml drag order expert systems items interview subject matter experts write explicit if then rules test edge cases deploy and revise rules when policy changes prompt classify the development sequence for a rule based system type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l06-b038",
+      "lessonKey": "ai-expert-vs-ml",
+      "blockType": "mcq",
+      "discriminator": "ai-expert-vs-ml:mcq:expert_systems",
+      "contentHash": "cd414561ba5cfc49d0c99db0ebbe12acc6bcdd0833fb689d9002667c01fbb3af",
+      "fingerprint": "concepts expert systems correct 0 discriminator ai expert vs ml mcq expert systems explanation explicit stable rules are transparent and auditable which suits policy and compliance checks options apply a published compliance rule to every order write a nuanced supplier relationship summary generate several creative campaign ideas predict an unknown demand pattern from history prompt which task is a strong fit for an expert system type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l06-b039",
+      "lessonKey": "ai-expert-vs-ml",
+      "blockType": "mcq",
+      "discriminator": "ai-expert-vs-ml:mcq:machine_learning",
+      "contentHash": "86cf313974cf6aa5436df5e0c37e0802e2b912861084f1751f1e5f75bf1edbd6",
+      "fingerprint": "concepts machine learning correct 1 discriminator ai expert vs ml mcq machine learning explanation machine learning is valuable when examples contain predictive patterns that are difficult to hand code options enforce a fixed minimum order policy estimate delivery delay risk from historical shipment features guarantee a factual policy answer replace a formal approval workflow prompt which task is a strong fit for machine learning type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l06-b040",
+      "lessonKey": "ai-expert-vs-ml",
+      "blockType": "prose",
+      "discriminator": "ai-expert-vs-ml:prose:expert_systems",
+      "contentHash": "e31910563837757c9aa124a5150bb1d6bf86a5e3da1f1aa08637721b8d852f9e",
+      "fingerprint": "concepts expert systems machine learning content use rules when requirements are clear and traceability matters use ml when patterns are complex and you have representative data plus monitoring discriminator ai expert vs ml prose expert systems type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l06-b041",
+      "lessonKey": "ai-expert-vs-ml",
+      "blockType": "teach_back",
+      "discriminator": "ai-expert-vs-ml:teach_back:expert_systems",
+      "contentHash": "db18d21ccb241da1011ac4aaf414ffec1ccca5fd1beb347cb4adc2537655d7c8",
+      "fingerprint": "concepts expert systems discriminator ai expert vs ml teach back expert systems prompt in your own words explain expert systems use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l07-b042",
+      "lessonKey": "ai-pattern-vs-truth",
+      "blockType": "prose",
+      "discriminator": "ai-pattern-vs-truth:prose:hallucinations",
+      "contentHash": "dc24fd3959a861a32cb59f48e4455eca3beb9782f67ef6093576723639580ef0",
+      "fingerprint": "concepts hallucinations content a language model generates the next likely token not a signed statement of fact it can help synthesize evidence but it cannot turn missing stale or conflicting evidence into truth discriminator ai pattern vs truth prose hallucinations type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l07-b043",
+      "lessonKey": "ai-pattern-vs-truth",
+      "blockType": "drag_order",
+      "discriminator": "ai-pattern-vs-truth:drag_order:guardrails",
+      "contentHash": "9a9bd926f741bd7d30c4b522967012fac96c8aa0fefe678fc2a55c14881a3fda",
+      "fingerprint": "concepts guardrails correctorder 0 1 2 3 discriminator ai pattern vs truth drag order guardrails items mark the claims that drive a decision open the source documents or system records correct unsupported claims and add citations approve the brief only after review prompt order a fact check loop for an ai generated supplier brief type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l07-b044",
+      "lessonKey": "ai-pattern-vs-truth",
+      "blockType": "mcq",
+      "discriminator": "ai-pattern-vs-truth:mcq:hallucinations",
+      "contentHash": "e5bce15d04d4e91a6319287829deb0b0fd7f1a473d3c1f3b51054a00a4e9ce2d",
+      "fingerprint": "concepts hallucinations correct 1 discriminator ai pattern vs truth mcq hallucinations explanation hallucinations are generated content that sounds credible but is not grounded in reliable evidence options a verified answer with a citation a plausible but unsupported or false generated claim a faster search result a rule based validation prompt what is a hallucination type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l07-b045",
+      "lessonKey": "ai-pattern-vs-truth",
+      "blockType": "mcq",
+      "discriminator": "ai-pattern-vs-truth:mcq:machine_learning",
+      "contentHash": "9649fc8ad88b086f55683be8b59968eac18681ce8304806c2105128b414dd716",
+      "fingerprint": "concepts machine learning correct 1 discriminator ai pattern vs truth mcq machine learning explanation variation is normal for generative models control it with clear constraints grounding and review options it is necessarily broken generative outputs can vary because they are probabilistic the source data changed automatically all answers are false prompt a model gives different wording when asked the same question twice what does that indicate type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l07-b046",
+      "lessonKey": "ai-pattern-vs-truth",
+      "blockType": "prose",
+      "discriminator": "ai-pattern-vs-truth:prose:guardrails",
+      "contentHash": "8ee8a6cd8132f82c5f6f2306aeec91d3584e47bdc9368ce722493eda25a2c403",
+      "fingerprint": "concepts guardrails content for high stakes claims require a source a reviewer and a path to correct the record confidence in tone is not evidence discriminator ai pattern vs truth prose guardrails type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l07-b047",
+      "lessonKey": "ai-pattern-vs-truth",
+      "blockType": "teach_back",
+      "discriminator": "ai-pattern-vs-truth:teach_back:machine_learning",
+      "contentHash": "f8bbcad210a7d817754621258607e116b180571d958f874b490de3414d4377ee",
+      "fingerprint": "concepts machine learning discriminator ai pattern vs truth teach back machine learning prompt in your own words explain machine learning basics use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l08-b048",
+      "lessonKey": "ai-train-infer-failures",
+      "blockType": "prose",
+      "discriminator": "ai-train-infer-failures:prose:machine_learning",
+      "contentHash": "62384dd8492993bace2061093c310c53c111c4e31945164fe0cc392f93fd5814",
+      "fingerprint": "concepts machine learning content training is the expensive process of learning parameters from examples inference is using the trained model to answer a new request a model can fail because training data was weak the prompt lacked context or the task exceeds its capability discriminator ai train infer failures prose machine learning type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l08-b049",
+      "lessonKey": "ai-train-infer-failures",
+      "blockType": "drag_order",
+      "discriminator": "ai-train-infer-failures:drag_order:machine_learning",
+      "contentHash": "e2193a0933f7f863046fee8f1b5ebf5b1b0cd3e2f90252481b75162f2294c9c8",
+      "fingerprint": "concepts machine learning correctorder 0 1 2 3 discriminator ai train infer failures drag order machine learning items examples are collected and prepared the model is trained on patterns a user submits a new request the deployed model generates an inference prompt put these stages in order type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l08-b050",
+      "lessonKey": "ai-train-infer-failures",
+      "blockType": "mcq",
+      "discriminator": "ai-train-infer-failures:mcq:machine_learning",
+      "contentHash": "33aad6d1106283d449e5187d721318246ab1b9e7aa4ef791a900474bb0f619aa",
+      "fingerprint": "concepts machine learning correct 1 discriminator ai train infer failures mcq machine learning explanation inference is the live use of a trained model on a new input options adjusting model parameters using training examples a planner asking a deployed model to summarize today s exception report writing the original labeling guidelines removing a biased training record prompt which is inference type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l08-b051",
+      "lessonKey": "ai-train-infer-failures",
+      "blockType": "mcq",
+      "discriminator": "ai-train-infer-failures:mcq:guardrails",
+      "contentHash": "820d2c76f97ba3a23807a277824eab728b473e7b646c96097e26da975c7ecaf5",
+      "fingerprint": "concepts guardrails correct 1 discriminator ai train infer failures mcq guardrails explanation risk based human review and escalation limit the effect of errors before an action is taken options let the model take irreversible action automatically set review and escalation rules based on decision risk hide the output from users use a longer model name prompt which control most directly reduces damage from an uncertain model output type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l08-b052",
+      "lessonKey": "ai-train-infer-failures",
+      "blockType": "prose",
+      "discriminator": "ai-train-infer-failures:prose:hallucinations",
+      "contentHash": "5fefc36aa19081c981efc43311178f2b706818048056a154889c1bfcd37fb448",
+      "fingerprint": "concepts hallucinations content diagnose failures before switching models ask was the source available was the instruction clear did the model have the right capability and was there a review gate discriminator ai train infer failures prose hallucinations type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l08-b053",
+      "lessonKey": "ai-train-infer-failures",
+      "blockType": "teach_back",
+      "discriminator": "ai-train-infer-failures:teach_back:machine_learning",
+      "contentHash": "cec71ab50f4b493602960fe38339aefece148236abe5d624e414e8069c524415",
+      "fingerprint": "concepts machine learning discriminator ai train infer failures teach back machine learning prompt in your own words explain machine learning basics use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l09-b054",
+      "lessonKey": "ai-prompting-iteration",
+      "blockType": "prose",
+      "discriminator": "ai-prompting-iteration:prose:prompting",
+      "contentHash": "b7c55470b0f6b85b549c9a4ba641351925a5817365b758245c30e3a49786a522",
+      "fingerprint": "concepts prompting content a strong prompt is a work brief role task context constraints and output format start with a small real example inspect the output then revise one variable at a time discriminator ai prompting iteration prose prompting type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l09-b055",
+      "lessonKey": "ai-prompting-iteration",
+      "blockType": "drag_order",
+      "discriminator": "ai-prompting-iteration:drag_order:prompting",
+      "contentHash": "55e8150f0d3a92db0d2d9ac27fb482983b216b79e7662309411c21d3599b567f",
+      "fingerprint": "concepts prompting correctorder 0 1 2 3 discriminator ai prompting iteration drag order prompting items state the task and success criteria add the relevant context and constraints review the first output against the criteria revise the instruction or example and retest prompt order a practical prompt iteration type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l09-b056",
+      "lessonKey": "ai-prompting-iteration",
+      "blockType": "mcq",
+      "discriminator": "ai-prompting-iteration:mcq:prompting",
+      "contentHash": "dd9dd25db115e4af4733ef2c48b8f188fcd2d6389e1da8a026a0be751a3f698d",
+      "fingerprint": "concepts prompting correct 2 discriminator ai prompting iteration mcq prompting explanation it defines source context audience length structure and a factual constraint options tell me about logistics write an update using the attached exception list draft a 100 word update for operations leaders group by root cause list only verified counts and end with two actions make it better prompt which prompt is most likely to produce a usable shipment update type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l09-b057",
+      "lessonKey": "ai-prompting-iteration",
+      "blockType": "mcq",
+      "discriminator": "ai-prompting-iteration:mcq:hallucinations",
+      "contentHash": "b3b248ed40a8cf1a53caf1c6ac979e302a14aa7c2899bf27bea140e7b60be2d0",
+      "fingerprint": "concepts hallucinations correct 1 discriminator ai prompting iteration mcq hallucinations explanation grounding the task in source material or acknowledging missing information is safer than inviting invention options tell it to be more confident provide the approved source or ask it to state what information is missing ask it to invent a reasonable value remove all constraints prompt what should you do when a model lacks a needed fact type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l09-b058",
+      "lessonKey": "ai-prompting-iteration",
+      "blockType": "prose",
+      "discriminator": "ai-prompting-iteration:prose:ai_productivity",
+      "contentHash": "d6b2e5587a1a74423710fe3db156704599e641cd64f26dcbb24bf9c4edf9deb6",
+      "fingerprint": "concepts ai productivity content save prompts that work as templates but keep the review checklist with them a reusable prompt is a small process not a magic phrase discriminator ai prompting iteration prose ai productivity type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l09-b059",
+      "lessonKey": "ai-prompting-iteration",
+      "blockType": "teach_back",
+      "discriminator": "ai-prompting-iteration:teach_back:prompting",
+      "contentHash": "d7a46f863bb9d11dd8a385673c1607ac0106865770f0a77ec4ba0de85fd10005",
+      "fingerprint": "concepts prompting discriminator ai prompting iteration teach back prompting prompt in your own words explain prompting and iteration use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l10-b060",
+      "lessonKey": "ai-reasoning-context-tools",
+      "blockType": "prose",
+      "discriminator": "ai-reasoning-context-tools:prose:reasoning",
+      "contentHash": "2318dc24f89b4bf6378b9a5aeda027e729a9db50556f55c135a27f371007b696",
+      "fingerprint": "concepts reasoning tools harness content for a complex task a model may need context and access to tools such as a document search calculator or inventory system the model coordinates steps tools retrieve data or perform reliable operations discriminator ai reasoning context tools prose reasoning type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l10-b061",
+      "lessonKey": "ai-reasoning-context-tools",
+      "blockType": "drag_order",
+      "discriminator": "ai-reasoning-context-tools:drag_order:tools_harness",
+      "contentHash": "92d046abacae254f6dffb2eb1b14d848dd312475be01313b55bc25ea17866a1f",
+      "fingerprint": "concepts tools harness correctorder 0 1 2 3 discriminator ai reasoning context tools drag order tools harness items receive the business question retrieve relevant approved records use a calculator or system tool for exact values draft an answer tied to the retrieved evidence prompt order a grounded analysis workflow type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l10-b062",
+      "lessonKey": "ai-reasoning-context-tools",
+      "blockType": "mcq",
+      "discriminator": "ai-reasoning-context-tools:mcq:tools_harness",
+      "contentHash": "65a17fb2e149017b0d09a794c3bcbc4d81162aea8c08c4a88b3b4a3d28ef2e7d",
+      "fingerprint": "concepts tools harness correct 1 discriminator ai reasoning context tools mcq tools harness explanation a calculator can reliably execute arithmetic but the user still must provide valid inputs and assumptions options it makes the model more creative it reduces arithmetic errors and makes a deterministic operation reliable it removes the need for inputs it guarantees the right business assumption prompt why give a model a calculator tool for a cost calculation type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l10-b063",
+      "lessonKey": "ai-reasoning-context-tools",
+      "blockType": "mcq",
+      "discriminator": "ai-reasoning-context-tools:mcq:reasoning",
+      "contentHash": "e06e81c9426597e056eb9ddd84a1886452f25a3bc281b2dc0a4a80e3f064116c",
+      "fingerprint": "concepts reasoning correct 1 discriminator ai reasoning context tools mcq reasoning explanation relevant context lets the model tailor the output unrelated context can distract it and increase cost options add unrelated text until the prompt is long supply the relevant policies data definitions and audience needs hide the decision criteria replace verification prompt what is the best use of context in a prompt type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l10-b064",
+      "lessonKey": "ai-reasoning-context-tools",
+      "blockType": "prose",
+      "discriminator": "ai-reasoning-context-tools:prose:reasoning",
+      "contentHash": "011376bfa08d58718a44916513bb8eef521bfc7e32ad910a5c4c7674e4a3c406",
+      "fingerprint": "concepts reasoning content separate thinking from authority a model can propose a plan but a system of record and a human owner should confirm facts and authorize changes discriminator ai reasoning context tools prose reasoning type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l10-b065",
+      "lessonKey": "ai-reasoning-context-tools",
+      "blockType": "teach_back",
+      "discriminator": "ai-reasoning-context-tools:teach_back:reasoning",
+      "contentHash": "3b6fe0c705b416f1f659081e3397a391184df90183a746fef39b1694b0e4f6e1",
+      "fingerprint": "concepts reasoning discriminator ai reasoning context tools teach back reasoning prompt in your own words explain reasoning and context use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l11-b066",
+      "lessonKey": "ai-harness-control",
+      "blockType": "prose",
+      "discriminator": "ai-harness-control:prose:tools_harness",
+      "contentHash": "1dc8c1166df2d962b6db55ac2d254f1f8ca353475d799010f7f9b83a3d9d0507",
+      "fingerprint": "concepts tools harness guardrails content a harness is the surrounding system that gives a model instructions tools memory permissions and checks the model is only one component reliable outcomes come from the full workflow design discriminator ai harness control prose tools harness type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l11-b067",
+      "lessonKey": "ai-harness-control",
+      "blockType": "drag_order",
+      "discriminator": "ai-harness-control:drag_order:ai_systems",
+      "contentHash": "c9e6dbd00f568bffefc6f154e635e6c66b154a298e2b9f594661c77cba32d0cf",
+      "fingerprint": "concepts ai systems correctorder 0 1 2 3 discriminator ai harness control drag order ai systems items classify the exception from authorized data retrieve the relevant policy draft a recommended next step route high risk cases to a human approver prompt order a controlled purchase order exception workflow type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l11-b068",
+      "lessonKey": "ai-harness-control",
+      "blockType": "mcq",
+      "discriminator": "ai-harness-control:mcq:guardrails",
+      "contentHash": "183e171293f6a5e52c368d0dc5cbc2a24e4ab8e258d4aec89227c8e06f700bd3",
+      "fingerprint": "concepts guardrails correct 1 discriminator ai harness control mcq guardrails explanation permissions and approval gates are concrete controls that limit what the system can do and make actions reviewable options a vague instruction to be careful restricting the model to read only access and requiring approval before sending a supplier message giving it more unrelated documents removing audit logs prompt which is a guardrail in an ai workflow type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l11-b069",
+      "lessonKey": "ai-harness-control",
+      "blockType": "mcq",
+      "discriminator": "ai-harness-control:mcq:tools_harness",
+      "contentHash": "611bcfc5a5219b15c4117593ad2498c6a9de18b281ce676ebf69b9c0b44f2b05",
+      "fingerprint": "concepts tools harness correct 1 discriminator ai harness control mcq tools harness explanation least privilege access reduces exposure and the impact of tool misuse or model error options make outputs sound more natural limit what data and actions the ai can access to what the task requires ensure every recommendation is correct avoid documenting the workflow prompt what is the main purpose of tool permissions type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l11-b070",
+      "lessonKey": "ai-harness-control",
+      "blockType": "prose",
+      "discriminator": "ai-harness-control:prose:ai_systems",
+      "contentHash": "f72fe79eac00c0706c089c3f369539fa5257f80eaeb09ceff6d9cdad3034b89f",
+      "fingerprint": "concepts ai systems content design the harness first define the user inputs allowed tools escalation path audit trail and owner then choose the model discriminator ai harness control prose ai systems type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l11-b071",
+      "lessonKey": "ai-harness-control",
+      "blockType": "teach_back",
+      "discriminator": "ai-harness-control:teach_back:tools_harness",
+      "contentHash": "5e778e164b89b3451e8847f0cbb5de5703a1d1c56ad7e702186420fd8462582c",
+      "fingerprint": "concepts tools harness discriminator ai harness control teach back tools harness prompt in your own words explain tools skills and harnesses use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l12-b072",
+      "lessonKey": "ai-model-landscape",
+      "blockType": "prose",
+      "discriminator": "ai-model-landscape:prose:model_selection",
+      "contentHash": "505c81889e54baa9239b7607714c4d913bba5b02150199de63ab33a21699a1c7",
+      "fingerprint": "concepts model selection content model selection is not a leaderboard contest compare models by the task quality latency cost context capacity tool use privacy and deployment constraints a smaller model may be the best business choice discriminator ai model landscape prose model selection type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l12-b073",
+      "lessonKey": "ai-model-landscape",
+      "blockType": "prose",
+      "discriminator": "ai-model-landscape:prose:model_selection",
+      "contentHash": "0b0252713cd914bdb113ff6a34623bf45ebf944307315c6271cb05e7364b1d8e",
+      "fingerprint": "concepts model selection ai systems content the model zoo includes text only and multimodal systems open weight models you can run yourself and proprietary models accessed through a vendor aggregators provide one interface to several vendors that can make switching easier but it adds another provider to the security reliability and cost review discriminator ai model landscape prose model selection type prose",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l12-b074",
+      "lessonKey": "ai-model-landscape",
+      "blockType": "mcq",
+      "discriminator": "ai-model-landscape:mcq:model_selection",
+      "contentHash": "2d29c9218131ebf1cf4e741d5c144d7df2d5613b01574bb71b92c95db6e0bf9c",
+      "fingerprint": "concepts model selection correct 1 discriminator ai model landscape mcq model selection explanation the task combines images and text so the evaluated model must support both modalities options text only generation multimodal image and text input a larger context window only speech synthesis prompt a warehouse team needs a model to interpret photos of damaged cartons alongside written notes which capability is required type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l12-b075",
+      "lessonKey": "ai-model-landscape",
+      "blockType": "drag_order",
+      "discriminator": "ai-model-landscape:drag_order:model_selection",
+      "contentHash": "8a76f5afabf757469f594706f48a6e1f4cded7d33e13d8dac912dc0090d46691",
+      "fingerprint": "concepts model selection correctorder 0 1 2 3 discriminator ai model landscape drag order model selection items define the task and acceptance test shortlist models that meet security and deployment needs evaluate quality speed and cost on representative cases choose and monitor the model for the workflow prompt order a model selection process type drag order",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l12-b076",
+      "lessonKey": "ai-model-landscape",
+      "blockType": "mcq",
+      "discriminator": "ai-model-landscape:mcq:model_selection",
+      "contentHash": "bed5a8ee7049ecf14d9bbaa564422965a13e4a477c07cb289ee2333af910b216",
+      "fingerprint": "concepts model selection correct 1 discriminator ai model landscape mcq model selection explanation the selected model must meet the workflow s real quality throughput and cost requirements options only the largest model s benchmark score accuracy on representative invoices latency and cost per document the model s marketing tagline whether it can write poetry prompt a team needs fast classification of standard invoice fields at high volume which consideration is most important type mcq",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l12-b077",
+      "lessonKey": "ai-model-landscape",
+      "blockType": "mcq",
+      "discriminator": "ai-model-landscape:mcq:ai_systems",
+      "contentHash": "df8b826c7623fcb69096bc8197c696c245105f529e0aa7736c9e97420a82f8c7",
+      "fingerprint": "concepts ai systems correct 1 discriminator ai model landscape mcq ai systems explanation use the simplest system that meets the requirement specialized approaches can be better for narrow or regulated work options the task uses ordinary language a specialized system already performs a narrow regulated task more accurately and transparently the team needs an api a human will review the result prompt when might a general model be a poor fit type mcq",
+      "sourceOrdinal": "6",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l12-b078",
+      "lessonKey": "ai-model-landscape",
+      "blockType": "prose",
+      "discriminator": "ai-model-landscape:prose:model_selection",
+      "contentHash": "ee1ba575bdf98e83f3a393a168167f7012df43d993614dfa57bbdb949980186c",
+      "fingerprint": "concepts model selection content build a small evaluation set from realistic authorized cases test before launch and keep it for regression checks when prompts or models change discriminator ai model landscape prose model selection type prose",
+      "sourceOrdinal": "7",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l12-b079",
+      "lessonKey": "ai-model-landscape",
+      "blockType": "teach_back",
+      "discriminator": "ai-model-landscape:teach_back:model_selection",
+      "contentHash": "60296b1ea4e96a1d914a95fbba31efadf2d42170bc892f83d7dbe03f9c20d2b0",
+      "fingerprint": "concepts model selection discriminator ai model landscape teach back model selection prompt in your own words explain choosing ai models use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l13-b080",
+      "lessonKey": "ai-cost-context-windows",
+      "blockType": "prose",
+      "discriminator": "ai-cost-context-windows:prose:model_selection",
+      "contentHash": "1d7b02d7a6d91acdda861273850665075776bf7996573b997b5981a61c9caf83",
+      "fingerprint": "concepts model selection content a context window is the amount of input and output a model can consider in one request more context can help but it also raises cost latency and distraction risk send the relevant slice not every document discriminator ai cost context windows prose model selection type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l13-b081",
+      "lessonKey": "ai-cost-context-windows",
+      "blockType": "drag_order",
+      "discriminator": "ai-cost-context-windows:drag_order:prompting",
+      "contentHash": "0d608b5d952ed04b483feaef626895638cd62197ab4179ededce7719890ce587",
+      "fingerprint": "concepts prompting correctorder 0 1 2 3 discriminator ai cost context windows drag order prompting items identify the question to answer retrieve only relevant sections and metadata send the selected context with a structured instruction log quality latency and cost for review prompt order a cost conscious document workflow type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l13-b082",
+      "lessonKey": "ai-cost-context-windows",
+      "blockType": "mcq",
+      "discriminator": "ai-cost-context-windows:mcq:model_selection",
+      "contentHash": "2d8b70c3bf389d52ed2a84152983495996b1123b2c5d7893dc483230663de248",
+      "fingerprint": "concepts model selection correct 1 discriminator ai cost context windows mcq model selection explanation longer inputs consume more tokens and can bury the evidence that matters options it always improves accuracy it can increase token cost and latency and irrelevant material can distract the model it eliminates the need for retrieval it guarantees no hallucinations prompt what is the most direct effect of sending much more text to a model type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l13-b083",
+      "lessonKey": "ai-cost-context-windows",
+      "blockType": "mcq",
+      "discriminator": "ai-cost-context-windows:mcq:prompting",
+      "contentHash": "a050d9b3592ccec77c21103c63cef78c9bd7c9f0f26e7c29cad009ef5bff042c",
+      "fingerprint": "concepts prompting correct 1 discriminator ai cost context windows mcq prompting explanation targeted retrieval gives the model the relevant evidence while controlling cost and attention options paste the entire contract into every prompt retrieve the relevant clause and its surrounding definitions ask the model to guess the clause ignore the contract prompt a 200 page supplier contract must be checked for one delivery clause what is the best first step type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l13-b084",
+      "lessonKey": "ai-cost-context-windows",
+      "blockType": "prose",
+      "discriminator": "ai-cost-context-windows:prose:ai_productivity",
+      "contentHash": "dda007c3693c6cfc0c68ecd64a2c0108699e228ab05d311a858b41721de65a18",
+      "fingerprint": "concepts ai productivity content track cost per successful task not only cost per token an inexpensive answer that needs extensive rework is not economical discriminator ai cost context windows prose ai productivity type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l13-b085",
+      "lessonKey": "ai-cost-context-windows",
+      "blockType": "teach_back",
+      "discriminator": "ai-cost-context-windows:teach_back:model_selection",
+      "contentHash": "f15d4a333c7cb4e6e81d6269f296b301630316d29e4484a5631b0f8dab660797",
+      "fingerprint": "concepts model selection discriminator ai cost context windows teach back model selection prompt in your own words explain choosing ai models use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l14-b086",
+      "lessonKey": "ai-specialize-and-route",
+      "blockType": "prose",
+      "discriminator": "ai-specialize-and-route:prose:ai_systems",
+      "contentHash": "c3a25a305c36af66eea58e153fe407b2381ff55e6b1c3cb30683b9ff0259bda9",
+      "fingerprint": "concepts ai systems content a routing system directs each request to the right model tool or human queue for example a low risk translation can use a fast model while a contract exception goes to a stronger model and legal review discriminator ai specialize and route prose ai systems type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l14-b087",
+      "lessonKey": "ai-specialize-and-route",
+      "blockType": "prose",
+      "discriminator": "ai-specialize-and-route:prose:model_selection",
+      "contentHash": "0e261b23738748b554fae7f059ddb4fa623d2aa2675b3dc0250e21d1e036b472",
+      "fingerprint": "concepts model selection ai systems content specialization has several forms a system prompt sets behavior for the current application fine tuning changes model weights using examples distillation trains a smaller model to imitate a stronger one while quantization stores weights with less precision to reduce memory and compute start with prompting and retrieval change the model only when evaluation shows a real gap discriminator ai specialize and route prose model selection type prose",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l14-b088",
+      "lessonKey": "ai-specialize-and-route",
+      "blockType": "mcq",
+      "discriminator": "ai-specialize-and-route:mcq:model_selection",
+      "contentHash": "2046755a32453934736d1167450f8520380d3a2720af9fd7adff3015946c521a",
+      "fingerprint": "concepts model selection correct 0 discriminator ai specialize and route mcq model selection explanation prompt level controls are cheaper and easier to change fine tuning is justified only when simpler controls fail an evaluated requirement options a clear system prompt and evaluated examples training a foundation model from scratch quantization to change the writing style removing the evaluation set prompt a team wants consistent answer structure but the base model already handles the task accurately what should it try first type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l14-b089",
+      "lessonKey": "ai-specialize-and-route",
+      "blockType": "drag_order",
+      "discriminator": "ai-specialize-and-route:drag_order:ai_systems",
+      "contentHash": "8b6afd4023f954e508388c9ccb6c7cff216b77daf707ee389c777bd452f5eb57",
+      "fingerprint": "concepts ai systems correctorder 0 1 2 3 discriminator ai specialize and route drag order ai systems items classify the request and risk level select the approved model tool or human queue process with the required controls log the result and route failures for review prompt order a request routing workflow type drag order",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l14-b090",
+      "lessonKey": "ai-specialize-and-route",
+      "blockType": "mcq",
+      "discriminator": "ai-specialize-and-route:mcq:model_selection",
+      "contentHash": "050b8cd14c3e14c47fc0ba8c988a34b38dc3c57b0ff189f4bae5fe4f2a47bd66",
+      "fingerprint": "concepts model selection correct 1 discriminator ai specialize and route mcq model selection explanation right sizing models can preserve quality while reducing the operating cost of routine work options smaller models are always more accurate it can reduce cost and latency when the quality target is still met it removes the need to test outputs it makes policies unnecessary prompt why route simple tasks to a smaller model type mcq",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l14-b091",
+      "lessonKey": "ai-specialize-and-route",
+      "blockType": "mcq",
+      "discriminator": "ai-specialize-and-route:mcq:tools_harness",
+      "contentHash": "6bcf8bdf82d16bf5f9bd440641c2ec6e33ab8c28e0f0bb92fc8c7565e4efb7fb",
+      "fingerprint": "concepts tools harness correct 1 discriminator ai specialize and route mcq tools harness explanation high impact or irreversible decisions need human authority even if ai prepares analysis options formatting a public meeting agenda taking an irreversible action with significant financial or safety consequences summarizing an approved internal memo translating a non sensitive draft prompt which request should be routed to a human by default type mcq",
+      "sourceOrdinal": "6",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l14-b092",
+      "lessonKey": "ai-specialize-and-route",
+      "blockType": "prose",
+      "discriminator": "ai-specialize-and-route:prose:ai_systems",
+      "contentHash": "1470387674d0cd2181788210a1e2b81baa446b76e3ca6d8317ee0ef4de797b36",
+      "fingerprint": "concepts ai systems content routing rules should be visible and testable task category sensitivity risk performance target fallback and accountable owner discriminator ai specialize and route prose ai systems type prose",
+      "sourceOrdinal": "7",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l14-b093",
+      "lessonKey": "ai-specialize-and-route",
+      "blockType": "teach_back",
+      "discriminator": "ai-specialize-and-route:teach_back:model_selection",
+      "contentHash": "71623903bade265280a0d2af8cbb57eb53d7ce00565f30ce18cabc481af645c9",
+      "fingerprint": "concepts model selection discriminator ai specialize and route teach back model selection prompt in your own words explain choosing ai models use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l15-b094",
+      "lessonKey": "ai-tool-shapes",
+      "blockType": "prose",
+      "discriminator": "ai-tool-shapes:prose:ai_systems",
+      "contentHash": "5a193e3211d2f8a8725735279bb8911f5e4e0fd352991dd712cc3cd4ce9647f1",
+      "fingerprint": "concepts ai systems content ai appears in several shapes chat assistants embedded copilots search and answer systems workflow automations and agents that coordinate tools choose the shape that fits the job not the flashiest interface discriminator ai tool shapes prose ai systems type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l15-b095",
+      "lessonKey": "ai-tool-shapes",
+      "blockType": "prose",
+      "discriminator": "ai-tool-shapes:prose:ai_systems",
+      "contentHash": "48ad7fc2ea2a219dcbab4d750031dcc899d26a3b3e5596a8a61e02091bfb8e0f",
+      "fingerprint": "concepts ai systems tools harness content the same feature can run in a vendor platform inside an existing business application in your cloud account or on infrastructure you operate the choice affects data residency integration effort updates observability and who responds when it fails put the feature where the required data and controls can be managed discriminator ai tool shapes prose ai systems type prose",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l15-b096",
+      "lessonKey": "ai-tool-shapes",
+      "blockType": "drag_order",
+      "discriminator": "ai-tool-shapes:drag_order:ai_systems",
+      "contentHash": "ed05477af09e55b73474a775bdc8afa941b78ac1035d338e0f2e9e06e96a9fe7",
+      "fingerprint": "concepts ai systems correctorder 0 1 2 3 discriminator ai tool shapes drag order ai systems items chat assistant drafts a response copilot suggests text inside an application automation processes a defined trigger agent coordinates multiple tools within approved limits prompt order these solutions from least to most workflow autonomy type drag order",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l15-b097",
+      "lessonKey": "ai-tool-shapes",
+      "blockType": "mcq",
+      "discriminator": "ai-tool-shapes:mcq:tools_harness",
+      "contentHash": "76ec625abd477dd2735e86e57cb6dab8db3fd522b02721f17dd4e8ce972c8dba",
+      "fingerprint": "concepts tools harness correct 1 discriminator ai tool shapes mcq tools harness explanation a repeatable process with stable inputs benefits from automation and an explicit review step options a one off image generator a workflow automation with defined inputs output template and review step an unrestricted agent with payment access a manual copy and paste process only prompt which tool shape best fits a recurring weekly report assembled from the same approved systems type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l15-b098",
+      "lessonKey": "ai-tool-shapes",
+      "blockType": "mcq",
+      "discriminator": "ai-tool-shapes:mcq:ai_productivity",
+      "contentHash": "98eea465efeb1e30a4d48471f85f04c2e107d6134211ebbc968ee9672c5a6247",
+      "fingerprint": "concepts ai productivity correct 0 discriminator ai tool shapes mcq ai productivity explanation chat is useful for interactive exploration and drafting where the user can supply context and evaluate the response options exploring a question or drafting a first pass outline with human review executing a supplier payment without approval replacing the system of record making a final legal interpretation prompt when is a chat assistant a good fit type mcq",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l15-b099",
+      "lessonKey": "ai-tool-shapes",
+      "blockType": "prose",
+      "discriminator": "ai-tool-shapes:prose:ai_systems",
+      "contentHash": "b7483947eac1f5f49b241d9290ef568f257dc1a74fe86bcf2440a63e2055280a",
+      "fingerprint": "concepts ai systems content a useful design question does this task need conversation embedded assistance deterministic automation or controlled tool coordination discriminator ai tool shapes prose ai systems type prose",
+      "sourceOrdinal": "6",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l15-b100",
+      "lessonKey": "ai-tool-shapes",
+      "blockType": "teach_back",
+      "discriminator": "ai-tool-shapes:teach_back:ai_systems",
+      "contentHash": "abaad79597bdff8fd417c263678718c936449f32333ea2c0c3eb382e19a36fd7",
+      "fingerprint": "concepts ai systems discriminator ai tool shapes teach back ai systems prompt in your own words explain ai systems beyond chatbots use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l16-b101",
+      "lessonKey": "ai-build-vs-buy",
+      "blockType": "prose",
+      "discriminator": "ai-build-vs-buy:prose:ai_systems",
+      "contentHash": "e767bb805bef9d4f040162c43d1f5f7ab1f6ad6e210f24c6cda90c51499759ef",
+      "fingerprint": "concepts ai systems content buy when a vendor product meets the need with acceptable security integration and total cost build when the workflow is distinctive enough to justify ongoing ownership of data pipelines evaluation monitoring and support discriminator ai build vs buy prose ai systems type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l16-b102",
+      "lessonKey": "ai-build-vs-buy",
+      "blockType": "drag_order",
+      "discriminator": "ai-build-vs-buy:drag_order:ai_systems",
+      "contentHash": "50ddfba6cc2cd927e735142073c6b563471e4b6e7ae248f719fa06a68321090d",
+      "fingerprint": "concepts ai systems correctorder 0 1 2 3 discriminator ai build vs buy drag order ai systems items define the business outcome and constraints evaluate existing products against the requirements estimate integration and ongoing operating costs choose the option with the best total value and accountability prompt order a build vs buy decision type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l16-b103",
+      "lessonKey": "ai-build-vs-buy",
+      "blockType": "mcq",
+      "discriminator": "ai-build-vs-buy:mcq:ai_systems",
+      "contentHash": "e969b04bb8679f3beec0bd3fbf4f06a4180807cf35a4096adfaeaf0f0f01e83f",
+      "fingerprint": "concepts ai systems correct 0 discriminator ai build vs buy mcq ai systems explanation a custom ai system requires continuing work after launch data quality monitoring security support and changes to models or policies options the ongoing cost of evaluation monitoring integration maintenance and support the color of the prototype the number of prompt examples alone the model name prompt which cost is often missed when a team decides to build type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l16-b104",
+      "lessonKey": "ai-build-vs-buy",
+      "blockType": "mcq",
+      "discriminator": "ai-build-vs-buy:mcq:guardrails",
+      "contentHash": "c31aaf6ea60511e7fe2e367da1c12fd0859362bc0f797e14c5880a40a1aae844",
+      "fingerprint": "concepts guardrails correct 1 discriminator ai build vs buy mcq guardrails explanation sensitive data requires a complete risk and governance review not just a feature comparison options only the product demo data handling access controls retention contractual terms integration and audit needs whether the interface has animations whether it is the newest product prompt what should be checked before buying an ai vendor for sensitive operations data type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l16-b105",
+      "lessonKey": "ai-build-vs-buy",
+      "blockType": "prose",
+      "discriminator": "ai-build-vs-buy:prose:model_selection",
+      "contentHash": "4c044db861789684df60794baa009b33ea0e7b740c3714d3df142a5e61314ef1",
+      "fingerprint": "concepts model selection content do not build because ai is exciting build only where it creates differentiated value and you can own the operational responsibilities discriminator ai build vs buy prose model selection type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l16-b106",
+      "lessonKey": "ai-build-vs-buy",
+      "blockType": "teach_back",
+      "discriminator": "ai-build-vs-buy:teach_back:ai_systems",
+      "contentHash": "7b89499c94f511020eff2e6a94f1b72c53e26226409d6d30c09d06c2a93acde6",
+      "fingerprint": "concepts ai systems discriminator ai build vs buy teach back ai systems prompt in your own words explain ai systems beyond chatbots use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l17-b107",
+      "lessonKey": "ai-safety-deploy",
+      "blockType": "prose",
+      "discriminator": "ai-safety-deploy:prose:guardrails",
+      "contentHash": "b8ce8de8e321c3899cb1e0a93da497a214d71e4c5b2b630f34226bc8ad033925",
+      "fingerprint": "concepts guardrails content safe deployment starts with a narrow use case defined owner authorized data and measurable acceptance criteria expand only after testing real failure modes and documenting how users escalate problems discriminator ai safety deploy prose guardrails type prose",
+      "sourceOrdinal": "1",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l17-b108",
+      "lessonKey": "ai-safety-deploy",
+      "blockType": "drag_order",
+      "discriminator": "ai-safety-deploy:drag_order:guardrails",
+      "contentHash": "f9f56d7573aedcd7f24d1c331041a81ce3f4ebd4c100b17c75f378ebd5f89e45",
+      "fingerprint": "concepts guardrails correctorder 0 1 2 3 discriminator ai safety deploy drag order guardrails items define scope risk owner and success metric test representative cases and known failure modes launch with permissions review gates and monitoring review incidents and improve or limit the system prompt order a safe ai deployment type drag order",
+      "sourceOrdinal": "2",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l17-b109",
+      "lessonKey": "ai-safety-deploy",
+      "blockType": "mcq",
+      "discriminator": "ai-safety-deploy:mcq:hallucinations",
+      "contentHash": "883a7277c8c9d16e6022fae364bf87fc705ce4cecdf238926e44fc7c02502e8b",
+      "fingerprint": "concepts hallucinations correct 1 discriminator ai safety deploy mcq hallucinations explanation grounding correction paths and incident review help contain and learn from incorrect outputs options keep the answer because it sounded professional show the governing source enable correction and route the issue for review hide the incident from the owner automatically change the policy prompt a deployed assistant gives a confident but incorrect inventory policy answer what should the system do type mcq",
+      "sourceOrdinal": "3",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l17-b110",
+      "lessonKey": "ai-safety-deploy",
+      "blockType": "mcq",
+      "discriminator": "ai-safety-deploy:mcq:guardrails",
+      "contentHash": "1fa78c756f52cb2644303f8436c0fffe94df93ec804ad15f82e6e48206460f58",
+      "fingerprint": "concepts guardrails correct 1 discriminator ai safety deploy mcq guardrails explanation operational metrics connect the deployment to quality risk and business value options total messages sent verified task success rate error rate escalation rate and time saved number of emojis in outputs length of the system prompt prompt which deployment metric is most meaningful type mcq",
+      "sourceOrdinal": "4",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l17-b111",
+      "lessonKey": "ai-safety-deploy",
+      "blockType": "prose",
+      "discriminator": "ai-safety-deploy:prose:ai_systems",
+      "contentHash": "84deda487ad3a7747d62ad77463537ddeb62d95691212b97fc19a9a5efe50e35",
+      "fingerprint": "concepts ai systems content treat deployment as a managed process monitor what the system does in practice preserve an audit trail and retain a human path for exceptions discriminator ai safety deploy prose ai systems type prose",
+      "sourceOrdinal": "5",
+      "retired": false
+    },
+    {
+      "stableId": "aiess-l17-b112",
+      "lessonKey": "ai-safety-deploy",
+      "blockType": "teach_back",
+      "discriminator": "ai-safety-deploy:teach_back:guardrails",
+      "contentHash": "a26f49fd4b97edc783a96fe3918dd500a80ab3a5a04ab625fe3b945db67bec09",
+      "fingerprint": "concepts guardrails discriminator ai safety deploy teach back guardrails prompt in your own words explain safety and guardrails use one practical example type teach back",
+      "sourceOrdinal": "generated-teach-back",
+      "retired": false
+    }
+  ]
+}

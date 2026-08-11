@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "convert:ai-essentials": "tsx scripts/convert-learnmachine-package.ts",
+    "test": "vitest run scripts/convert-learnmachine-package.test.ts"
+  },
   "devDependencies": {
     "tsx": "^4.23.1",
     "vitest": "^4.1.1"

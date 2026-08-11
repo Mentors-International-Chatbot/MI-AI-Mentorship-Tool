@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.2",
+  "contentVersion": "2.0.0",
+  "lessonKeys": [
+    "ai-prompting-iteration",
+    "ai-day-in-the-life",
+    "ai-reasoning-context-tools",
+    "ai-pattern-vs-truth",
+    "ai-model-landscape",
+    "ai-harness-control",
+    "ai-tool-shapes",
+    "ai-safety-deploy",
+    "ai-prospering-gameplan",
+    "ai-expert-vs-ml"
+  ],
+  "expectedLessonCount": 10,
+  "responseStyle": {
+    "maxSentences": 3,
+    "maxOutputTokens": 240,
+    "markdown": "none",
+    "maxQuestions": 1,
+    "expanded": { "maxSentences": 6, "maxOutputTokens": 480 }
+  },
+  "milestones": [],
+  "authoredInputsApproved": false,
+  "requiredAuthoredInputs": [
+    "the exact five v3 automation milestone definitions",
+    "the replacement diagnostic item",
+    "professor-approved content rewrites"
+  ]
+}

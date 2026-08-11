@@ -1,0 +1,28 @@
+{
+  "contentVersion": "1.1.0",
+  "samples": [
+    { "id": "entry-01", "intent": "lesson_entry", "lessonKey": "ai-day-in-the-life", "message": "Introduce this lesson." },
+    { "id": "entry-02", "intent": "lesson_entry", "lessonKey": "ai-prompting-iteration", "message": "Introduce this lesson." },
+    { "id": "entry-03", "intent": "lesson_entry", "lessonKey": "ai-pattern-vs-truth", "message": "Introduce this lesson." },
+    { "id": "entry-04", "intent": "lesson_entry", "lessonKey": "ai-tool-shapes", "message": "Introduce this lesson." },
+    { "id": "entry-05", "intent": "lesson_entry", "lessonKey": "ai-safety-deploy", "message": "Introduce this lesson." },
+
+    { "id": "question-01", "intent": "question", "lessonKey": "ai-prompting-iteration", "message": "Why is adding context better than just making the prompt longer?" },
+    { "id": "question-02", "intent": "question", "lessonKey": "ai-pattern-vs-truth", "message": "I don't understand how a fluent answer can still be wrong." },
+    { "id": "question-03", "intent": "question", "lessonKey": "ai-model-landscape", "message": "When would a smaller model be the better choice?" },
+    { "id": "question-expand-01", "intent": "expand", "parentIntent": "question", "lessonKey": "ai-prompting-iteration", "parentSampleId": "question-01" },
+    { "id": "question-expand-02", "intent": "expand", "parentIntent": "question", "lessonKey": "ai-pattern-vs-truth", "parentSampleId": "question-02" },
+
+    { "id": "teachback-01", "intent": "teach_back", "lessonKey": "ai-day-in-the-life", "message": "AI can draft and summarize routine work, while the person remains responsible for checking evidence and making the decision." },
+    { "id": "teachback-02", "intent": "teach_back", "lessonKey": "ai-reasoning-context-tools", "message": "Reasoning organizes steps, context supplies the facts and constraints, and tools let the system retrieve data or take a controlled action." },
+    { "id": "teachback-03", "intent": "teach_back", "lessonKey": "ai-safety-deploy", "message": "A safe deployment uses representative tests, permissions, human review, monitoring, and a clear response when the system fails." },
+    { "id": "teachback-expand-01", "intent": "expand", "parentIntent": "teach_back", "lessonKey": "ai-day-in-the-life", "parentSampleId": "teachback-01" },
+    { "id": "teachback-expand-02", "intent": "expand", "parentIntent": "teach_back", "lessonKey": "ai-safety-deploy", "parentSampleId": "teachback-03" },
+
+    { "id": "capstone-01", "intent": "capstone", "lessonKey": "capstone", "message": "My use case is a weekly supplier-delay brief for an operations manager, and success means saving an hour without missing any verified delays." },
+    { "id": "capstone-02", "intent": "capstone", "lessonKey": "capstone", "message": "My workflow retrieves the approved shipment report, drafts the brief, checks every date against the source, and requires manager approval before sending." },
+    { "id": "capstone-03", "intent": "capstone", "lessonKey": "capstone", "message": "My evaluation uses ten past reports, checks factual accuracy and omissions, and stops deployment if any invented shipment date appears." },
+    { "id": "capstone-expand-01", "intent": "expand", "parentIntent": "capstone", "lessonKey": "capstone", "parentSampleId": "capstone-01" },
+    { "id": "capstone-expand-02", "intent": "expand", "parentIntent": "capstone", "lessonKey": "capstone", "parentSampleId": "capstone-03" }
+  ]
+}

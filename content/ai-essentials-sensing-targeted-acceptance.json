@@ -1,0 +1,103 @@
+{
+  "measuredAt": "2026-08-10T20:51:47Z",
+  "runId": "targeted-5-6-9-12-15",
+  "organization": "ai-essentials-verification",
+  "database": {
+    "neonProjectId": "square-math-29113615",
+    "branchName": "ai-essentials-acceptance",
+    "branchId": "br-misty-dawn-adj1cbft",
+    "endpointId": "ep-holy-dawn-adh2khxj",
+    "verificationTenantLifecycle": "retained as an isolated synthetic acceptance fixture"
+  },
+  "lessonIndices": [5, 6, 9, 12, 15],
+  "lessonKeys": [
+    "ai-ceo-explain-models",
+    "ai-expert-vs-ml",
+    "ai-prompting-iteration",
+    "ai-model-landscape",
+    "ai-tool-shapes"
+  ],
+  "eligibleTeachBackTurns": 10,
+  "persistedPlayerUserMessages": 10,
+  "sentimentRows": 10,
+  "sentimentCoverage": 1,
+  "lessonSensingObservations": 32,
+  "turnsWithNonNullObservation": 10,
+  "nonNullObservationRate": 1,
+  "principalCoverage": {
+    "ai-ceo-explain-models": true,
+    "ai-expert-vs-ml": true,
+    "ai-prompting-iteration": true,
+    "ai-model-landscape": true,
+    "ai-tool-shapes": true
+  },
+  "distinctObservedDimensions": 9,
+  "dimensionCounts": {
+    "ai_impact": 0,
+    "ai_productivity": 0,
+    "ai_systems": 5,
+    "expert_systems": 2,
+    "guardrails": 2,
+    "hallucinations": 3,
+    "machine_learning": 4,
+    "model_selection": 6,
+    "prompting": 2,
+    "reasoning": 3,
+    "tools_harness": 5
+  },
+  "previouslyUnobservedDimensionCoverage": {
+    "ai_systems": true,
+    "expert_systems": true,
+    "model_selection": true,
+    "prompting": true
+  },
+  "observedDimensionsByLesson": {
+    "ai-ceo-explain-models": [
+      "machine_learning",
+      "model_selection",
+      "tools_harness"
+    ],
+    "ai-expert-vs-ml": [
+      "ai_systems",
+      "expert_systems",
+      "hallucinations",
+      "machine_learning",
+      "model_selection"
+    ],
+    "ai-prompting-iteration": [
+      "hallucinations",
+      "prompting",
+      "reasoning"
+    ],
+    "ai-model-landscape": [
+      "ai_systems",
+      "guardrails",
+      "hallucinations",
+      "model_selection",
+      "reasoning",
+      "tools_harness"
+    ],
+    "ai-tool-shapes": [
+      "ai_systems",
+      "guardrails",
+      "machine_learning",
+      "model_selection",
+      "tools_harness"
+    ]
+  },
+  "combinedWithInitialThreeLessonRun": {
+    "allElevenDimensionsObserved": true,
+    "note": "The initial lessons 1-3 report observed the other seven dimensions. This targeted run proves the four prior zero-count dimensions are reachable; the union covers all 11."
+  },
+  "numericChatProgress": {
+    "finalMessageIndex": 0,
+    "unchanged": true
+  },
+  "acceptance": {
+    "sentimentForEveryAnswer": true,
+    "nonNullObservationForEveryAnswer": true,
+    "everyTargetLessonPrincipalObserved": true,
+    "allPreviouslyUnobservedDimensionsObserved": true,
+    "numericChatProgressUnchanged": true
+  }
+}

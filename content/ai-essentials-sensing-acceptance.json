@@ -1,0 +1,65 @@
+{
+  "measuredAt": "2026-08-10T20:22:55.687Z",
+  "runId": "b644a99e-774f-45b4-98a8-599a9c26d12c",
+  "organization": "ai-essentials-verification",
+  "database": {
+    "neonProjectId": "square-math-29113615",
+    "branchName": "main",
+    "branchId": "br-winter-cloud-ad3fou3i",
+    "endpointId": "ep-bold-bar-adzjnfe0",
+    "verificationTenantLifecycle": "cleaned from main after acceptance; report retained as evidence"
+  },
+  "lessonKeys": [
+    "ai-day-in-the-life",
+    "ai-magic-examples",
+    "ai-revolution-vs-past"
+  ],
+  "eligibleTeachBackTurns": 6,
+  "persistedPlayerUserMessages": 6,
+  "sentimentRows": 6,
+  "sentimentCoverage": 1,
+  "lessonSensingObservations": 24,
+  "turnsWithNonNullObservation": 6,
+  "nonNullObservationRate": 1,
+  "comparableMiSensingProbe": {
+    "mode": "controlled-dimension-contract",
+    "eligibleTurns": 6,
+    "turnsWithNonNullObservation": 6,
+    "nonNullObservationRate": 1,
+    "playerToMiRateRatio": 1,
+    "note": "The active platform sentiment prompt db:1.0 has no dimensions contract, so the controlled probe supplies the canonical MI comprehension/confusion definitions explicitly. This is not the separate full MI narration regression test."
+  },
+  "principalCoverage": {
+    "ai-day-in-the-life": true,
+    "ai-magic-examples": true,
+    "ai-revolution-vs-past": true
+  },
+  "distinctObservedDimensions": 7,
+  "dimensionCounts": {
+    "ai_impact": 5,
+    "ai_productivity": 6,
+    "ai_systems": 0,
+    "expert_systems": 0,
+    "guardrails": 1,
+    "hallucinations": 3,
+    "machine_learning": 2,
+    "model_selection": 0,
+    "prompting": 0,
+    "reasoning": 6,
+    "tools_harness": 1
+  },
+  "numericChatProgress": {
+    "initialMessageIndex": 0,
+    "finalMessageIndex": 0,
+    "unchanged": true
+  },
+  "tutorResponses": 6,
+  "acceptance": {
+    "elevenDimensionsReported": true,
+    "sentimentForEveryAnswer": true,
+    "everyPrincipalObserved": true,
+    "atLeastThreeDimensionsObserved": true,
+    "signalRateAtLeastHalfOfMi": true,
+    "numericChatProgressUnchanged": true
+  }
+}
