@@ -10,3 +10,19 @@ apps/web/node_modules
 *.db
 *.db-journal
 Manual for Entrepreneurs - Mentors International.pdf
+
+# iCloud conflict copies. This repo lives under ~/Desktop, which macOS syncs to
+# iCloud Drive, and iCloud resolves a sync conflict by writing a second file
+# named "<name> 2.ext" beside the original. They are stale copies, never work.
+#
+# They are not merely untidy: a duplicate under .next/types declares the same
+# global types twice and breaks `tsc` with "Duplicate identifier", and a copy of
+# a source file is picked up by any tool that globs the tree.
+#
+# The durable fix is to move the repo out of ~/Desktop. Until then these are
+# ignored here, excluded from tsc/vitest, and asserted absent by
+# apps/web/src/lib/repo/__tests__/noConflictCopies.test.ts
+# The space before the digit is load-bearing: without it these patterns would
+# also swallow legitimate names like `layer2.ts` or `v2.json`.
+* [0-9].*
+* [0-9][0-9].*
