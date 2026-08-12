@@ -66,4 +66,9 @@ describe('parseMarkers', () => {
     const r = parseMarkers('Done! [MILESTONE:x] [LESSON_COMPLETE:1] Keep going.');
     expect(r.cleanText).not.toMatch(/[[\]]/);
   });
+
+  it('normalizes an echoed drafting sentinel', () => {
+    const r = parseMarkers('Done explaining. [END]');
+    expect(r.cleanText).toBe('Done explaining.');
+  });
 });

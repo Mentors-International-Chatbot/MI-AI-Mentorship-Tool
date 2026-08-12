@@ -15,10 +15,55 @@ const ORGANIZATION_SLUG = "ai-essentials-verification";
 const COLLECTION_KEY = "ai-essentials";
 
 type Sample = { id: string; intent: PlayerParentIntent | "expand"; parentIntent?: PlayerParentIntent; lessonKey: string; message?: string; parentSampleId?: string };
+type SampleOutput = Sample & {
+  blockId?: string;
+  output: string;
+  model: string | null;
+  promptHash: string | null;
+  finishReason: string | null;
+  generationStatus: "success" | "fallback";
+  attempts: number;
+  metrics: ReturnType<typeof deliveredTextMetrics>;
+  progressUnchanged: boolean | null;
+  acceptance: Record<string, boolean>;
+};
+type LessonIdentity = { title: string; otherTitles: string[] };
+type Checkpoint = {
+  status: "running" | "failed" | "complete";
+  runStartedAt: string;
+  generatedAt: string | null;
+  runId: string;
+  socioId: string;
+  externalId: string;
+  programVersionId: string;
+  contentVersion: string;
+  nextSampleIndex: number;
+  samples: SampleOutput[];
+  lastError: { sampleId: string; message: string; at: string } | null;
+  automatedAcceptance: { passed: boolean; failedSampleIds: string[] } | null;
+  professorReview: {
+    required: true;
+    completed: false;
+    rubric: string[];
+    passingRule: string;
+  };
+};
 
 function argument(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+function writeCheckpoint(outputPath: string, checkpoint: Checkpoint): void {
+  writeFileSync(outputPath, JSON.stringify(checkpoint, null, 2) + "\n");
+}
+
+function positiveIntegerArgument(name: string, fallback: number): number {
+  const raw = argument(name);
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`);
+  return value;
 }
 
 async function progressSnapshot(socioId: string) {
@@ -36,6 +81,8 @@ async function main() {
   const contentVersion = argument("--content-version") ?? "1.1.0";
   const inputPath = resolve(argument("--inputs") ?? "../../content/ai-essentials-response-acceptance-inputs.json");
   const outputPath = resolve(argument("--output") ?? "../../content/ai-essentials-response-acceptance.json");
+  const resume = process.argv.includes("--resume");
+  const maxSampleAttempts = positiveIntegerArgument("--max-sample-attempts", 3);
   const input = JSON.parse(readFileSync(inputPath, "utf8")) as { contentVersion: string; samples: Sample[] };
   if (input.contentVersion !== contentVersion || input.samples.length !== 20) throw new Error("Acceptance input must contain exactly 20 samples for the requested content version");
   const organization = await prisma.organization.findUniqueOrThrow({ where: { slug: ORGANIZATION_SLUG } });
@@ -47,18 +94,47 @@ async function main() {
     create: { programId: version.programId, programVersionId: version.id, slug: `response-acceptance-${contentVersion.replaceAll(".", "-")}`, name: `Response acceptance ${contentVersion}` },
     update: { programVersionId: version.id },
   });
-  const runId = randomUUID();
-  const externalId = `aiess-response-${runId}`;
-  const socio = await prisma.socio.create({ data: { channelType: "web", externalId, language: "en", name: "Synthetic Response Reviewer", status: "ACTIVE", curriculumCollectionKey: COLLECTION_KEY, metadata: { synthetic: true, acceptanceRun: "response", runId }, progress: { create: {} } } });
-  const participant = await prisma.participantProfile.create({ data: { organizationId: organization.id, socioId: socio.id, displayName: "Synthetic Response Reviewer", preferredLang: "en", metadata: { synthetic: true, acceptanceRun: "response", runId } } });
-  await prisma.enrollment.create({ data: { participantId: participant.id, cohortId: cohort.id, programVersionId: version.id, metadata: { synthetic: true, acceptanceRun: "response", runId } } });
+  let checkpoint: Checkpoint;
+  let socio;
+  if (resume) {
+    checkpoint = JSON.parse(readFileSync(outputPath, "utf8")) as Checkpoint;
+    if (checkpoint.contentVersion !== contentVersion || checkpoint.programVersionId !== version.id) throw new Error("Checkpoint does not match the requested released version");
+    if (checkpoint.status === "complete") throw new Error("Checkpoint is already complete; omit --resume to start a new run");
+    if (checkpoint.nextSampleIndex !== checkpoint.samples.length || checkpoint.nextSampleIndex > input.samples.length) throw new Error("Checkpoint sample index is inconsistent");
+    socio = await prisma.socio.findUniqueOrThrow({ where: { id: checkpoint.socioId } });
+    process.stdout.write(`Resuming ${checkpoint.runId} at sample ${checkpoint.nextSampleIndex + 1}/${input.samples.length}.\n`);
+  } else {
+    const runId = randomUUID();
+    const externalId = `aiess-response-${runId}`;
+    socio = await prisma.socio.create({ data: { channelType: "web", externalId, language: "en", name: "Synthetic Response Reviewer", status: "ACTIVE", curriculumCollectionKey: COLLECTION_KEY, metadata: { synthetic: true, acceptanceRun: "response", runId }, progress: { create: {} } } });
+    const participant = await prisma.participantProfile.create({ data: { organizationId: organization.id, socioId: socio.id, displayName: "Synthetic Response Reviewer", preferredLang: "en", metadata: { synthetic: true, acceptanceRun: "response", runId } } });
+    await prisma.enrollment.create({ data: { participantId: participant.id, cohortId: cohort.id, programVersionId: version.id, metadata: { synthetic: true, acceptanceRun: "response", runId } } });
+    checkpoint = {
+      status: "running", runStartedAt: new Date().toISOString(), generatedAt: null,
+      runId, socioId: socio.id, externalId, programVersionId: version.id, contentVersion,
+      nextSampleIndex: 0, samples: [], lastError: null, automatedAcceptance: null,
+      professorReview: { required: true, completed: false, rubric: ["conversational tone", "clarity", "usefulness", "concision"], passingRule: "At least 18/20 score 4+ on every dimension; no score may be 1 or 2." },
+    };
+    writeCheckpoint(outputPath, checkpoint);
+  }
+  const { externalId } = checkpoint;
   const access = await resolvePlayerAccess({ userId: socio.id, externalId, role: "socio", name: socio.name ?? "Synthetic learner", socioId: socio.id, channel: "web" }, "AIESS");
+  const lessonIdentityRows = await prisma.contentLesson.findMany({
+    where: { collection: { programVersions: { some: { id: version.id } } }, versions: { some: { version: contentVersion } } },
+    select: { slug: true, versions: { where: { version: contentVersion }, take: 1, select: { body: true } } },
+  });
+  const allLessonTitles = lessonIdentityRows.map((row) => lessonSchema.parse(row.versions[0]?.body).title);
+  const lessonIdentities = new Map<string, LessonIdentity>(lessonIdentityRows.map((row) => {
+    const title = lessonSchema.parse(row.versions[0]?.body).title;
+    return [row.slug, { title, otherTitles: allLessonTitles.filter((candidate) => candidate !== title) }];
+  }));
   const sent: string[] = [];
   const channel: DeliveryChannel = { getChannelType: () => "web", sendMessage: async (_recipient, text) => { sent.push(text); } };
   const contexts = new Map<string, { blockId?: string; intent: PlayerParentIntent }>();
-  const outputs: unknown[] = [];
+  for (const prior of checkpoint.samples) if (prior.intent !== "expand") contexts.set(prior.id, { blockId: prior.blockId, intent: prior.intent });
 
-  for (const sample of input.samples) {
+  for (let sampleIndex = checkpoint.nextSampleIndex; sampleIndex < input.samples.length; sampleIndex++) {
+    const sample = input.samples[sampleIndex];
     let blockId: string | undefined;
     if (sample.parentSampleId) blockId = contexts.get(sample.parentSampleId)?.blockId;
     if (!blockId && sample.lessonKey !== "capstone" && sample.intent !== "lesson_entry") {
@@ -67,22 +143,56 @@ async function main() {
       blockId = sample.intent === "teach_back" ? lesson.blocks.find((block) => block.blockType === "teach_back")?.id : lesson.blocks[0]?.id;
     }
     const parentIntent = sample.intent === "expand" ? sample.parentIntent : undefined;
-    const context = await preparePlayerContext(access, { lessonKey: sample.lessonKey, blockId, intent: sample.intent, parentIntent });
-    const before = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
-    const startedAt = new Date();
-    const result = await handleIncomingMessage({ externalId, channelType: "web", channel, language: "en", message: sample.message ?? "Explain more.", playerContext: context });
-    const after = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
+    let result: Awaited<ReturnType<typeof handleIncomingMessage>> | undefined;
+    let context: Awaited<ReturnType<typeof preparePlayerContext>> | undefined;
+    let startedAt = new Date();
+    let before: string | null = null;
+    let after: string | null = null;
+    let attempts = 0;
+    try {
+      for (attempts = 1; attempts <= maxSampleAttempts; attempts++) {
+        context = await preparePlayerContext(access, { lessonKey: sample.lessonKey, blockId, intent: sample.intent, parentIntent });
+        before = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
+        startedAt = new Date();
+        result = await handleIncomingMessage({ externalId, channelType: "web", channel, language: "en", message: sample.message ?? "Explain more.", playerContext: context });
+        after = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
+        const delivered = !result.isError && !result.suppressed && result.responseText.trim().length > 0;
+        if (delivered || attempts === maxSampleAttempts) break;
+        process.stdout.write(`Retrying ${sample.id} after fallback (${attempts}/${maxSampleAttempts}).\n`);
+      }
+    } catch (error) {
+      checkpoint.status = "failed";
+      checkpoint.lastError = { sampleId: sample.id, message: error instanceof Error ? error.message : String(error), at: new Date().toISOString() };
+      writeCheckpoint(outputPath, checkpoint);
+      throw error;
+    }
+    if (!result || !context) throw new Error(`No result produced for ${sample.id}`);
     const trace = await prisma.aiInvocation.findFirst({ where: { socioId: socio.id, createdAt: { gte: startedAt }, context: { path: ["programVersionId"], equals: version.id } }, orderBy: { createdAt: "desc" }, select: { model: true, promptHash: true, finishReason: true, success: true } });
     const metrics = deliveredTextMetrics(result.responseText);
     const maxSentences = sample.intent === "expand" ? 6 : 3;
-    const completeEnding = /[.!?]["')\]]?$/u.test(result.responseText.trim());
-    outputs.push({ ...sample, blockId, output: result.responseText, model: trace?.model ?? null, promptHash: trace?.promptHash ?? null, finishReason: trace?.finishReason ?? null, generationStatus: result.isError ? "fallback" : "success", metrics, progressUnchanged: sample.intent === "expand" ? before === after : null, acceptance: { sentenceLimit: metrics.sentences <= maxSentences, questionLimit: metrics.questionCount <= 1, noMarkdown: !metrics.markdown, completeEnding, noLengthFinish: trace?.finishReason !== "length", noExpansionProgress: sample.intent !== "expand" || before === after } });
+    const completeEnding = /[.!?](?:["')\]]|\p{Extended_Pictographic}|\uFE0F|\s)*$/u.test(result.responseText.trim());
+    const expansionGrounded = sample.intent !== "expand" || !/(?:do not|don't|cannot|can't) see (?:a )?prior|no prior .*reply|first message (?:in|of) (?:our|this) (?:chat|conversation)|prior .* (?:is )?missing/iu.test(result.responseText);
+    const lessonIdentity = lessonIdentities.get(sample.lessonKey);
+    const correctLessonIdentity = sample.intent !== "lesson_entry" || !lessonIdentity || (
+      result.responseText.toLocaleLowerCase().includes(lessonIdentity.title.toLocaleLowerCase())
+      && !lessonIdentity.otherTitles.some((title) => result.responseText.toLocaleLowerCase().includes(title.toLocaleLowerCase()))
+    );
+    const cleanLessonEntry = sample.intent !== "lesson_entry" || (!/^\s*(?:lesson|module)\s+\d+\s*:/iu.test(result.responseText) && !/\[(?:end|start|complete)[^\]]*\]/iu.test(result.responseText));
+    const successfulGeneration = !result.isError && !result.suppressed && result.responseText.trim().length > 0;
+    checkpoint.samples.push({ ...sample, blockId, output: result.responseText, model: trace?.model ?? null, promptHash: trace?.promptHash ?? null, finishReason: trace?.finishReason ?? null, generationStatus: successfulGeneration ? "success" : "fallback", attempts, metrics, progressUnchanged: sample.intent === "expand" ? before === after : null, acceptance: { sentenceLimit: metrics.sentences <= maxSentences, questionLimit: metrics.questionCount <= 1, noMarkdown: !metrics.markdown, completeEnding, noLengthFinish: trace?.finishReason !== "length", successfulGeneration, noExpansionProgress: sample.intent !== "expand" || before === after, expansionGrounded, correctLessonIdentity, cleanLessonEntry } });
     if (sample.intent !== "expand") contexts.set(sample.id, { blockId, intent: sample.intent });
+    checkpoint.nextSampleIndex = sampleIndex + 1;
+    checkpoint.status = "running";
+    checkpoint.lastError = null;
+    writeCheckpoint(outputPath, checkpoint);
+    process.stdout.write(`Checkpointed ${sample.id} (${checkpoint.nextSampleIndex}/${input.samples.length}).\n`);
   }
-  const failed = outputs.flatMap((output) => Object.values((output as { acceptance: Record<string, boolean> }).acceptance).every(Boolean) ? [] : [(output as { id: string }).id]);
-  const artifact = { generatedAt: new Date().toISOString(), runId, programVersionId: version.id, contentVersion, samples: outputs, automatedAcceptance: { passed: failed.length === 0, failedSampleIds: failed }, professorReview: { required: true, completed: false, rubric: ["conversational tone", "clarity", "usefulness", "concision"], passingRule: "At least 18/20 score 4+ on every dimension; no score may be 1 or 2." } };
-  writeFileSync(outputPath, JSON.stringify(artifact, null, 2) + "\n");
-  process.stdout.write(`Wrote ${outputs.length} response samples to ${outputPath}; automated gate ${failed.length ? `failed: ${failed.join(", ")}` : "passed"}.\n`);
+  const failed = checkpoint.samples.flatMap((output) => Object.values(output.acceptance).every(Boolean) ? [] : [output.id]);
+  checkpoint.status = "complete";
+  checkpoint.generatedAt = new Date().toISOString();
+  checkpoint.automatedAcceptance = { passed: failed.length === 0, failedSampleIds: failed };
+  writeCheckpoint(outputPath, checkpoint);
+  process.stdout.write(`Wrote ${checkpoint.samples.length} response samples to ${outputPath}; automated gate ${failed.length ? `failed: ${failed.join(", ")}` : "passed"}.\n`);
   if (failed.length) process.exitCode = 1;
 }
 

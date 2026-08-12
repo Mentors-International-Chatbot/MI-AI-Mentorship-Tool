@@ -13,6 +13,11 @@ const FINANCIAL_PATTERN = /\[FINANCIAL:revenue=(-?\d+(?:\.\d+)?),netProfit=(-?\d
 // Milestone keys are the package's own `key` regex: lowercase, digits, hyphens.
 // Kept narrow so a hallucinated free-text key cannot create a progress row.
 const MILESTONE_PATTERN = /\[MILESTONE:([a-z0-9][a-z0-9-]*)\]/g;
+// Providers sometimes echo drafting sentinels or malformed backend markers.
+// Keep this prefix-scoped so ordinary bracketed domain terms such as [SKU]
+// remain prose. Normalize chrome in the one existing marker boundary rather
+// than introducing a player-only sanitizer or truncating the response.
+const DRAFT_CHROME_PATTERN = /\[(?:(?:FLAG|LESSON|MILESTONE|ESCALATE|FINANCIAL|END|DRAFT|RESPONSE|ANSWER|FINAL|COMPLETE)[A-Z0-9_-]*)(?:[:|][^\]]+)?\]/g;
 
 export function parseMarkers(aiResponse: string): ParsedMarkers {
   const flags: ParsedMarkers['flags'] = [];
@@ -84,6 +89,7 @@ export function stripMarkers(text: string): string {
     .replace(ESCALATE_PATTERN, '')
     .replace(FINANCIAL_PATTERN, '')
     .replace(MILESTONE_PATTERN, '')
+    .replace(DRAFT_CHROME_PATTERN, '')
     .trim();
 }
 
@@ -103,5 +109,6 @@ export function maskMarkers(text: string): string {
     .replace(LESSON_COMPLETE_PATTERN, blank)
     .replace(ESCALATE_PATTERN, blank)
     .replace(FINANCIAL_PATTERN, blank)
-    .replace(MILESTONE_PATTERN, blank);
+    .replace(MILESTONE_PATTERN, blank)
+    .replace(DRAFT_CHROME_PATTERN, blank);
 }

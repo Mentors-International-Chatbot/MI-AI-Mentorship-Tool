@@ -94,6 +94,17 @@ describe('parseMarkers', () => {
     expect(result.cleanText).toBe('Hola');
   });
 
+  it('strips a provider drafting sentinel without treating it as progress', () => {
+    const result = parseMarkers('A complete learner-facing answer. [END] [DRAFT_DONE]');
+    expect(result.cleanText).toBe('A complete learner-facing answer.');
+    expect(result.lessonsCompleted).toEqual([]);
+    expect(result.milestones).toEqual([]);
+  });
+
+  it('preserves bracketed domain terminology', () => {
+    expect(parseMarkers('Confirm the [SKU] before ordering.').cleanText).toBe('Confirm the [SKU] before ordering.');
+  });
+
   it('handles markers with no surrounding text', () => {
     const input = '[FLAG:RED|urgente]';
     const result = parseMarkers(input);

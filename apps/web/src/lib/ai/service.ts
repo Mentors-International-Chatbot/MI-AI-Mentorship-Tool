@@ -35,7 +35,13 @@ import type { PromptVersionSink } from './prompts/loadPrompt';
 import { playerTutorGrounding, type ValidatedPlayerContext } from '@/lib/player/service';
 import { playerRuntimeRepo } from '@/lib/repo/playerRuntimeRepo';
 import { programVersionConfigSchema } from '@/lib/journey-package/program-version-config.schema';
-import { buildResponseStyleInstruction, resolvePlayerMaxTokens } from '@/lib/player/responseStyle';
+import type { ResponseStyle } from '@/lib/journey-package/journey-package.schema';
+import {
+    buildResponseStyleInstruction,
+    buildResponseStyleRepairInstruction,
+    responseStyleViolations,
+    resolvePlayerMaxTokens,
+} from '@/lib/player/responseStyle';
 import { assembleOrderedModelMessages } from '@/lib/ai/modelMessages';
 
 
@@ -119,6 +125,48 @@ async function invokeWithRetry(
     }
 
     throw lastError ?? new Error('AI invoke failed');
+}
+
+/**
+ * A prompt is a preference; the configured response style is a release
+ * contract. Styled player turns therefore get up to four model rewrites when
+ * the completed, sanitized draft violates that contract. No text is truncated
+ * and the same model/token cap is used for every attempt.
+ */
+export async function invokeStyledPlayerResponse(
+    chat: { invoke: (messages: (SystemMessage | HumanMessage | AIMessage)[]) => Promise<{ content: unknown; response_metadata?: unknown }> },
+    messages: (SystemMessage | HumanMessage | AIMessage)[],
+    style: ResponseStyle,
+    expanded: boolean,
+): Promise<{ content: unknown; response_metadata?: unknown }> {
+    let currentMessages = messages;
+    let response = await invokeWithRetry(chat, currentMessages);
+
+    for (let repair = 0; ; repair++) {
+        const raw = contentToText(response.content);
+        const delivered = sanitizeForDelivery(parseMarkers(raw).cleanText);
+        const violations = responseStyleViolations(delivered, style, expanded);
+        if (violations.length === 0) return response;
+        // Never deliver an unchecked final rewrite. The old bounded loop made
+        // four repairs but returned repair four even when it still violated
+        // the contract. Throwing here enters the existing player fallback
+        // path; the acceptance runner may retry the logical sample, while a
+        // real learner receives the normal recoverable error message.
+        if (repair === 4) {
+            throw new Error(`Player response style contract failed after 4 repairs: ${violations.join(', ')}`);
+        }
+        // Repair is copy-editing, not a second teaching turn. Re-sending the
+        // full multi-thousand-token course prompt made a tiny format correction
+        // as slow and failure-prone as regenerating the lesson. The draft
+        // already contains the grounded substance; this minimal context asks
+        // only for a faithful rewrite under the same output cap.
+        currentMessages = [
+            new SystemMessage("You are a precise copy editor. Preserve the draft's meaning and system markers; change only what the stated output contract requires."),
+            new HumanMessage(`${buildResponseStyleRepairInstruction(style, expanded, violations, repair >= 2)}\n\nDRAFT TO REWRITE:\n${raw}`),
+        ];
+        response = await invokeWithRetry(chat, currentMessages);
+    }
+    return response;
 }
 
 /** Structural, like invokeWithRetry's — keeps LangChain's client type out of here. */
@@ -477,7 +525,17 @@ export async function generateAIResponse(
     //    concurrently rather than back to back.
     const promptStart = performance.now();
     const dbPromptVersions: PromptVersionSink = {};
-    const [baseSystemPrompt, recentHistory, playerGrounding] = await Promise.all([
+    const modelHistoryPromise = expanded && playerTurn?.context.parentAssistantMessageId
+        ? playerRuntimeRepo.message.findFirst({
+            where: {
+                id: playerTurn.context.parentAssistantMessageId,
+                socioId: socio.id,
+                role: 'assistant',
+            },
+            select: { role: true, content: true },
+        }).then((message) => message ? [message] : [])
+        : repo.getMessages(socio.id, 10);
+    const [baseSystemPrompt, modelHistory, playerGrounding] = await Promise.all([
         buildSystemPrompt(
             socio,
             modeResult.routerResult,
@@ -489,18 +547,27 @@ export async function generateAIResponse(
             modeResult.reachedMilestoneKeys,
             modeResult.gateRecency,
         ),
-        repo.getMessages(socio.id, 10),
+        modelHistoryPromise,
         playerTurn ? playerTutorGrounding(playerTurn.context) : Promise.resolve(null),
     ]);
     const groundedSystemPrompt = playerGrounding
-        ? `${baseSystemPrompt}\n\nPLAYER COURSE CONTEXT (authoritative; do not reveal hidden quiz answers):\n${playerGrounding}`
+        ? `${baseSystemPrompt}\n\nPLAYER COURSE CONTEXT (authoritative; do not reveal hidden quiz answers):\n${playerGrounding}\n- This verified player context overrides conflicting legacy lesson numbers, titles, and progress text elsewhere in the prompt.\n- Discuss only this verified lesson or capstone in the reply.`
         : baseSystemPrompt;
     const responseInstruction = buildResponseStyleInstruction(responseStyle, expanded);
     const systemPrompt = responseInstruction ? `${groundedSystemPrompt}\n\n${responseInstruction}` : groundedSystemPrompt;
     timings.buildPrompt = performance.now() - promptStart;
     timings.fetchHistory = 0; // folded into buildPrompt above
 
-    const messages = assembleOrderedModelMessages(systemPrompt, recentHistory as Message[], incomingText).map((message) => {
+    // An expansion targets the exact assistant row validated by
+    // preparePlayerContext. Global recent history may contain a newer reply
+    // from another lesson or capstone turn, so the validated parent is the only
+    // conversational history the model sees. The direct id lookup also works
+    // when that parent has fallen outside the ordinary ten-message window.
+    const expansionTarget = expanded ? modelHistory[0]?.content : undefined;
+    const modelIncomingText = expansionTarget
+        ? `${incomingText}\n\nVALIDATED EXPANSION TARGET (quote supplied by the server):\n${expansionTarget}\n\nExpand that target only; do not claim it is missing.`
+        : incomingText;
+    const messages = assembleOrderedModelMessages(systemPrompt, modelHistory as Message[], modelIncomingText).map((message) => {
         if (message.role === 'system') return new SystemMessage(message.content);
         if (message.role === 'assistant') return new AIMessage(message.content);
         return new HumanMessage(message.content);
@@ -537,10 +604,22 @@ export async function generateAIResponse(
             } : undefined,
             // markFirstToken is what stamps ttftMs; only the streaming branch
             // ever calls it, so non-streaming rows keep a null TTFT.
-            invoke: async (markFirstToken): Promise<{ content: unknown }> =>
-                onToken
+            invoke: async (markFirstToken): Promise<{ content: unknown }> => {
+                if (responseStyle) {
+                    // Buffer configured player replies until the output
+                    // contract is validated. Streaming an invalid first draft
+                    // would make a later rewrite impossible to retract.
+                    const response = await invokeStyledPlayerResponse(chat, messages, responseStyle, expanded);
+                    if (onToken) {
+                        markFirstToken();
+                        onToken(sanitizeForDelivery(parseMarkers(contentToText(response.content)).cleanText));
+                    }
+                    return response;
+                }
+                return onToken
                     ? await streamWithRetry(chat, messages, onToken, markFirstToken)
-                    : await invokeWithRetry(chat, messages),
+                    : await invokeWithRetry(chat, messages);
+            },
         });
         const rawContent = contentToText(rawMessageContent);
         timings.llmInvoke = performance.now() - invokeStart;

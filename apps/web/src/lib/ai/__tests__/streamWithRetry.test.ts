@@ -22,7 +22,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { AIMessageChunk } from '@langchain/core/messages';
 import { sanitizeForDelivery } from '@/lib/ai/sanitizer';
 import { stripMarkers } from '@/lib/ai/prompts/markers';
-import { contentToText, streamWithRetry } from '@/lib/ai/service';
+import { contentToText, invokeStyledPlayerResponse, streamWithRetry } from '@/lib/ai/service';
 
 /** A chunk to yield, or an error to throw at that point in the stream. */
 type Step = string | AIMessageChunk | Error;
@@ -62,6 +62,22 @@ function harness() {
 }
 
 const NO_MESSAGES: [] = [];
+
+describe('invokeStyledPlayerResponse — the delivery contract', () => {
+  it('rejects an invalid fourth rewrite instead of delivering it unchecked', async () => {
+    const chat = { invoke: vi.fn().mockResolvedValue({ content: 'One? Two? [END]' }) };
+
+    await expect(invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false)).rejects.toThrow('Player response style contract failed after 4 repairs');
+
+    expect(chat.invoke).toHaveBeenCalledTimes(5);
+  });
+});
 
 describe('streamWithRetry — the happy path', () => {
   it('emits the same text the non-streaming path would have delivered', async () => {

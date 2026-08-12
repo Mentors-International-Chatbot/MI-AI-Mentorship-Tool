@@ -1,5 +1,7 @@
 #!/usr/bin/env npx tsx
 import "dotenv/config";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { prisma } from "../src/lib/db";
 import { programVersionConfigSchema } from "../src/lib/journey-package/program-version-config.schema";
 import { deliveredTextMetrics } from "../src/lib/player/telemetryMetrics";
@@ -106,7 +108,7 @@ async function main() {
   const multipleMarkers = [...evidenceGroups.values()].filter((rows) => rows.length > 1).map((rows) => ({ socioId: rows[0].socioId, milestoneKeys: rows.map((row) => row.milestoneKey), evidenceCharacters: rows[0].evidence?.length ?? 0 }));
   const config = programVersionConfigSchema.safeParse(version.config);
 
-  process.stdout.write(JSON.stringify({
+  const report = JSON.stringify({
     programVersion: { id: version.id, contentVersion: version.version, collectionKey: version.collection?.slug ?? null },
     range: { from: from?.toISOString() ?? null, to: to?.toISOString() ?? null },
     byIntentAndExpansionParent: Object.fromEntries([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, group]) => [key, summarize(group)])),
@@ -120,7 +122,15 @@ async function main() {
       evidenceShorterThanTwentyCharacters: shortEvidence.map((row) => ({ socioId: row.socioId, milestoneKey: row.milestoneKey, characters: row.evidence?.trim().length ?? 0 })),
       multipleMarkersFromSameEvidence: multipleMarkers,
     },
-  }, null, 2) + "\n");
+  }, null, 2) + "\n";
+  const output = argument("--output");
+  if (output) {
+    const outputPath = resolve(output);
+    writeFileSync(outputPath, report);
+    process.stdout.write(`Wrote telemetry report to ${outputPath}.\n`);
+  } else {
+    process.stdout.write(report);
+  }
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => prisma.$disconnect());

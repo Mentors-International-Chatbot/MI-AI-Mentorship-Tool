@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildResponseStyleInstruction, resolvePlayerMaxTokens } from "../responseStyle";
+import {
+  buildResponseStyleInstruction,
+  buildResponseStyleRepairInstruction,
+  responseStyleViolations,
+  resolvePlayerMaxTokens,
+} from "../responseStyle";
 
 const style = {
   maxSentences: 3,
@@ -30,5 +35,33 @@ describe("player response style prompt", () => {
     expect(resolvePlayerMaxTokens(style, false)).toBe(240);
     expect(resolvePlayerMaxTokens(style, true)).toBe(480);
     expect(resolvePlayerMaxTokens(undefined, false)).toBeUndefined();
+  });
+
+  it("detects complete delivered-text violations without rejecting trailing emoji", () => {
+    expect(responseStyleViolations("One. Two? 🤔", style, false)).toEqual([]);
+    expect(responseStyleViolations("One? Two? Three. Four", style, false)).toEqual([
+      "sentence_limit",
+      "question_limit",
+      "incomplete_ending",
+    ]);
+    expect(responseStyleViolations("A complete answer. [END]", style, false)).toEqual([
+      "control_marker",
+      "incomplete_ending",
+    ]);
+    expect(responseStyleViolations("Confirm the [SKU].", style, false)).toEqual([]);
+  });
+
+  it("builds a model rewrite request instead of truncating the draft", () => {
+    const repair = buildResponseStyleRepairInstruction(style, true, ["sentence_limit"]);
+    expect(repair).toContain("at most 6 complete sentences total");
+    expect(repair).toContain("no more than 1 question-mark character");
+    expect(repair).toContain("Remove lower-priority detail");
+    expect(repair).toContain("Return only the rewritten final reply");
+    expect(buildResponseStyleRepairInstruction(style, true, ["question_limit"], true)).toContain(
+      "Use zero question-mark characters",
+    );
+    expect(buildResponseStyleRepairInstruction(style, true, ["control_marker"])).toContain(
+      "Remove all other bracketed drafting markers such as [END]",
+    );
   });
 });

@@ -115,6 +115,11 @@ async function playerLessonEntryExists(socioId: string, lessonKey: string): Prom
                 { metadata: { path: ['surface'], equals: 'player' } },
                 { metadata: { path: ['intent'], equals: 'lesson_entry' } },
                 { metadata: { path: ['lessonKey'], equals: lessonKey } },
+                // A provider failure stores the standard recoverable fallback
+                // so the learner is never left with a blank surface. It must
+                // not permanently consume the one-shot lesson entry: reload
+                // or an acceptance retry may generate the real introduction.
+                { metadata: { path: ['generationStatus'], equals: 'success' } },
             ],
         },
         select: { id: true },
@@ -486,13 +491,13 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         ? [
             `PLAYER CONTEXT (server verified): lesson=${playerContext.lessonKey}; block=${playerContext.blockId ?? 'none'}; intent=${playerContext.intent}.`,
             playerContext.intent === 'expand'
-                ? `Expand the immediately preceding ${playerContext.parentIntent} reply. Add useful detail without advancing progress, emitting markers, or asking more than the configured question limit.`
+                ? `Expand only the validated prior ${playerContext.parentIntent} assistant reply supplied in conversation history. Add useful detail without advancing progress, emitting markers, or asking more than the configured question limit.`
                 : playerContext.intent === 'teach_back'
                 ? playerContext.teachBackTurn === 1
                     ? 'Evaluate the learner answer. Give concise affirmation or correction, then ask exactly one focused follow-up question.'
                     : 'This is the final teach-back turn. Give concise closing feedback and do not ask another question.'
                 : playerContext.intent === 'lesson_entry'
-                    ? 'Give one short framing message for this lesson.'
+                    ? 'Give one short framing message for this verified lesson in at most three sentences total. Name the exact verified lesson title naturally inside the first sentence; do not use a standalone title/header, do not call it Lesson 1, and do not emit bracketed status text such as [end of lesson].'
                     : playerContext.intent === 'capstone'
                         ? 'Coach the learner on the capstone. Ask one focused question and do not do the project for them.'
                         : 'Answer the learner question using the current lesson context without advancing lesson progress.',

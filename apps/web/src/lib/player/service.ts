@@ -30,6 +30,8 @@ export type ValidatedPlayerContext = {
   blockId?: string;
   intent: PlayerIntent;
   parentIntent?: PlayerParentIntent;
+  /** Exact server-validated assistant row targeted by an expansion. Never accepted from free text. */
+  parentAssistantMessageId?: string;
   collectionKey: string;
   programVersionId: string;
   contentVersion?: number;
@@ -165,15 +167,16 @@ export async function preparePlayerContext(
   input: { lessonKey: string; blockId?: string; intent: PlayerIntent; parentIntent?: PlayerParentIntent },
   ltiContextId?: string,
 ): Promise<ValidatedPlayerContext> {
+  let parentAssistantMessageId: string | undefined;
   if (input.intent === "expand") {
     if (!input.parentIntent) throw new PlayerError(400, "invalid_context", "Expansion requires a parent intent");
     const recent = await playerRuntimeRepo.message.findMany({
       where: { socioId: access.socioId, role: "assistant" },
       orderBy: { createdAt: "desc" },
       take: 50,
-      select: { metadata: true },
+      select: { id: true, metadata: true },
     });
-    const prior = recent.some((row) => matchesExpansionParent(row.metadata, {
+    const prior = recent.find((row) => matchesExpansionParent(row.metadata, {
       collectionKey: access.collectionKey,
       programVersionId: access.programVersionId,
       lessonKey: input.lessonKey,
@@ -181,15 +184,16 @@ export async function preparePlayerContext(
       parentIntent: input.parentIntent!,
     }));
     if (!prior) throw new PlayerError(409, "no_prior_reply", "There is no matching tutor reply to expand");
+    parentAssistantMessageId = prior.id;
   }
   if (input.intent === "capstone" || (input.intent === "expand" && input.parentIntent === "capstone")) {
-    return { surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, ltiContextId };
+    return { surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, parentAssistantMessageId, ltiContextId };
   }
   const rows = await lessonRows(access);
   const row = rows.find((item) => item.slug === input.lessonKey);
   if (!row?.versions[0]) throw new PlayerError(404, "lesson_not_found", "Lesson not found");
   const lesson = lessonSchema.parse(row.versions[0].body);
-  if (!input.blockId) return { surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, ltiContextId };
+  if (!input.blockId) return { surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, parentAssistantMessageId, ltiContextId };
   const block = lesson.blocks.find((item) => item.id === input.blockId);
   if (!block) throw new PlayerError(404, "block_not_found", "Block not found");
   if (input.intent === "teach_back" && block.blockType !== "teach_back") throw new PlayerError(400, "invalid_context", "The selected block is not a teach-back");
@@ -202,7 +206,7 @@ export async function preparePlayerContext(
   return {
     surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId,
     contentVersion: block.contentVersion, teachBackTurn: input.intent === "teach_back" ? (turnCount >= 1 ? 2 : 1) : undefined,
-    ltiContextId,
+    parentAssistantMessageId, ltiContextId,
   };
 }
 

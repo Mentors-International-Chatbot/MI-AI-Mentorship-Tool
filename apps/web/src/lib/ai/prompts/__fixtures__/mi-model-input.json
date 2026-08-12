@@ -1,23 +1,239 @@
 {
-  "layers": [
-    "You are the AI mentor for the Mentors International entrepreneurship program.",
-    "Participant: Ana\nBusiness: neighborhood bakery\nProgress: lesson 4, message 2.",
-    "Teach the current cash-flow concept in Spanish and ask one practical question.",
-    "Lesson content: Separate business cash from household cash before calculating profit."
+  "collectionKey": "mi-colombia-curriculum",
+  "scope": {
+    "organizationId": "org-mi-colombia-fixture",
+    "collectionKey": "mi-colombia-curriculum"
+  },
+  "courseMeta": {
+    "courseName": "Mentors International",
+    "description": "Formación práctica para fortalecer pequeños negocios.",
+    "language": "es",
+    "identity": {
+      "mentorName": "Martín",
+      "displayName": "Mentors International"
+    },
+    "mentorName": "Martín",
+    "displayName": "Mentors International",
+    "terminology": {
+      "participant": {
+        "en": "partner",
+        "es": "socio",
+        "pt": "sócio"
+      }
+    },
+    "learnerContext": {
+      "label": {
+        "en": "Business",
+        "es": "Negocio"
+      },
+      "intakeQuestion": {
+        "en": "What type of business do you have and where is it located?",
+        "es": "¿Qué tipo de negocio tienes y dónde está ubicado?"
+      },
+      "personalizationInstruction": {
+        "en": "Adapt examples to the partner's business and location.",
+        "es": "Adapta los ejemplos al negocio y la ubicación del socio."
+      },
+      "fields": []
+    },
+    "onboarding": {
+      "welcome": {
+        "en": "Welcome",
+        "es": "Bienvenido"
+      },
+      "steps": []
+    },
+    "scheduledCheckins": []
+  },
+  "courseBehavior": {
+    "tone": "Cálido, directo y respetuoso.",
+    "teachingStyle": "Un ejemplo concreto y una pregunta práctica a la vez.",
+    "languageInstruction": "Responde en español colombiano usando tú.",
+    "primaryLang": "es"
+  },
+  "lessonTitles": {
+    "1": "Registros financieros",
+    "2": "Entidades separadas",
+    "3": "Presupuesto del negocio",
+    "4": "Ahorro",
+    "5": "Punto de equilibrio"
+  },
+  "lessonCount": 28,
+  "activePrompts": {
+    "core": {
+      "id": "prompt-mi-core-fixture",
+      "version": "mi-core-2026.08",
+      "content": "Eres el mentor virtual de Mentors International. Enseña únicamente el currículo aprobado, con lenguaje sencillo y ejemplos del negocio del socio. No inventes datos ni des consejos legales o tributarios.",
+      "category": "core",
+      "active": true,
+      "authorId": "fixture-author",
+      "organizationId": "org-mi-colombia-fixture",
+      "collectionKey": "mi-colombia-curriculum",
+      "createdAt": "2026-08-01T12:00:00.000Z",
+      "updatedAt": "2026-08-01T12:00:00.000Z"
+    },
+    "lesson_delivery": {
+      "id": "prompt-mi-delivery-fixture",
+      "version": "mi-lesson-delivery-2026.08",
+      "content": "TAREA ACTUAL: Entrega el mensaje de la lección con fidelidad. Conecta el concepto con los números reales del negocio y termina con una sola pregunta práctica.",
+      "category": "lesson_delivery",
+      "active": true,
+      "authorId": "fixture-author",
+      "organizationId": "org-mi-colombia-fixture",
+      "collectionKey": "mi-colombia-curriculum",
+      "createdAt": "2026-08-01T12:00:00.000Z",
+      "updatedAt": "2026-08-01T12:00:00.000Z"
+    }
+  },
+  "socio": {
+    "id": "socio-mi-fixture",
+    "whatsappPhoneNumber": "+570000000000",
+    "channelType": "WHATSAPP",
+    "externalId": "mi-fixture-ana",
+    "language": "es",
+    "name": "Ana",
+    "businessName": "Panadería La Esquina",
+    "businessDescription": "Panadería de barrio con ventas en efectivo y por encargo",
+    "status": "ACTIVE",
+    "promptOverrides": {
+      "toneOverride": "simpler_language",
+      "conciseness": "brief",
+      "complexity": 0.35,
+      "warmth": 0.7,
+      "positivity": 0.6
+    },
+    "aiPaused": false,
+    "mentorId": "mentor-fixture",
+    "curriculumCollectionKey": "mi-colombia-curriculum",
+    "createdAt": "2026-07-01T15:00:00.000Z",
+    "updatedAt": "2026-08-10T15:00:00.000Z"
+  },
+  "socioContext": {
+    "id": "context-mi-fixture",
+    "socioId": "socio-mi-fixture",
+    "businessType": "panadería",
+    "products": "pan, tortas y desayunos",
+    "monthlyRevenue": "COP 4.800.000",
+    "monthlyExpenses": "COP 3.900.000",
+    "numEmployees": "2",
+    "location": "Medellín",
+    "challenges": "mezclar la caja del negocio con gastos de la casa",
+    "goals": "separar el dinero y ahorrar para un horno",
+    "familyContext": "trabaja con su hermana",
+    "customFacts": "las ventas suben los fines de semana",
+    "createdAt": "2026-07-02T15:00:00.000Z",
+    "updatedAt": "2026-08-10T15:00:00.000Z"
+  },
+  "progress": {
+    "currentLessonNumber": 4,
+    "completedLessons": [1, 2, 3],
+    "weeklyUnderstanding": 7,
+    "weeklyImplementation": 6,
+    "daysSinceLastInteraction": 2
+  },
+  "routerResult": {
+    "mode": "LESSON_DELIVERY",
+    "lesson": {
+      "lessonNumber": 4,
+      "lessonTitleEs": "Ahorro",
+      "lessonCategory": "finanzas",
+      "messageIndex": 2,
+      "totalMessages": 4,
+      "messageType": "ejemplo",
+      "messageContentEs": "Antes de usar el dinero que entra, separa primero la parte del ahorro del negocio.",
+      "keyConcepts": "Separar al menos el 10% de los ingresos y tratarlo como dinero no disponible.",
+      "exercise": "Calcular el 10% de las ventas de esta semana.",
+      "commitment": "Apartar el ahorro en un lugar separado antes del domingo."
+    }
+  },
+  "dimensionState": {
+    "comprehension": {
+      "dimensionKey": "comprehension",
+      "level": 6.5,
+      "trend": "improving",
+      "confidence": 0.86,
+      "evidence": "Calculó ingresos menos gastos correctamente.",
+      "updatedAt": "2026-08-10T15:01:00.000Z"
+    },
+    "confusion": {
+      "dimensionKey": "confusion",
+      "level": 3.0,
+      "trend": "improving",
+      "confidence": 0.8,
+      "evidence": "Distingue caja del negocio y de la casa.",
+      "updatedAt": "2026-08-10T15:01:00.000Z"
+    }
+  },
+  "activeFlags": [
+    {
+      "id": "flag-mi-fixture",
+      "socioId": "socio-mi-fixture",
+      "level": "YELLOW",
+      "reason": "fixture reason deliberately excluded from prompt",
+      "source": "sentiment_auto",
+      "resolved": false,
+      "resolvedBy": null,
+      "resolvedAt": null,
+      "messageId": "message-mi-fixture",
+      "createdAt": "2026-08-10T15:00:00.000Z",
+      "reasonCode": "cash_flow_stress",
+      "reasonParams": null,
+      "status": "OPEN",
+      "disposition": null,
+      "snoozedUntil": null,
+      "occurrenceCount": 1,
+      "lastOccurredAt": "2026-08-10T15:00:00.000Z"
+    }
   ],
+  "gateRecency": {
+    "lessonNumber": 3,
+    "outcome": "passed",
+    "justResolved": false
+  },
   "history": [
-    { "role": "user", "content": "Quiero entender mejor mi flujo de caja." },
-    { "role": "assistant", "content": "Empecemos separando las entradas y salidas del negocio." },
-    { "role": "system", "content": "This stored system row must be ignored." },
-    { "role": "mentor", "content": "Usa los números reales de esta semana." }
+    {
+      "role": "user",
+      "content": "Quiero entender mejor cómo separar el ahorro."
+    },
+    {
+      "role": "assistant",
+      "content": "Podemos calcularlo con las ventas reales de tu panadería."
+    },
+    {
+      "role": "system",
+      "content": "Esta fila de sistema almacenada no debe llegar al modelo."
+    },
+    {
+      "role": "mentor",
+      "content": "Usa los números de esta semana y un ejemplo sencillo."
+    }
   ],
-  "incomingText": "Vendí 800 y gasté 500, pero saqué 100 para la casa.",
-  "systemPrompt": "You are the AI mentor for the Mentors International entrepreneurship program.\n\nParticipant: Ana\nBusiness: neighborhood bakery\nProgress: lesson 4, message 2.\n\nTeach the current cash-flow concept in Spanish and ask one practical question.\n\nLesson content: Separate business cash from household cash before calculating profit.",
+  "incomingText": "Vendí 800000 y gasté 500000, pero saqué 100000 para la casa.",
+  "promptVersions": {
+    "core": "db:mi-core-2026.08",
+    "task": "db:mi-lesson-delivery-2026.08"
+  },
+  "systemPrompt": "IDENTIDAD — NOMBRE:\nTu nombre es Martín. Cuando te presentes o saludes, usa este nombre de forma natural.\n\nEres el mentor virtual de Mentors International. Enseña únicamente el currículo aprobado, con lenguaje sencillo y ejemplos del negocio del socio. No inventes datos ni des consejos legales o tributarios.\n\nESTILO DE ESTE CURSO:\n- Tono: Cálido, directo y respetuoso.\n- Estilo de enseñanza: Un ejemplo concreto y una pregunta práctica a la vez.\n- Lenguaje: Responde en español colombiano usando tú.\n\nAJUSTE DE TONO: Este socio necesita lenguaje más sencillo. Usa palabras de uso diario. Evita cualquier término que no usarías con un vecino en la tienda. Si explicas un concepto, usa una comparación de la vida real antes de dar la definición.\n\nAJUSTES DEL MENTOR:\n- Sé extra cálido y cercano. Usa más palabras de ánimo, celebra cada paso, y muestra empatía adicional.\n\nCONTEXTO DEL SOCIO:\n- Nombre: Ana\n- Negocio: Panadería de barrio con ventas en efectivo y por encargo\n- Tipo de negocio: Panadería La Esquina\n- Lección actual: 4 — \"Ahorro\"\n- Lecciones completadas: 1 (Registros financieros), 2 (Entidades separadas), 3 (Presupuesto del negocio)\n- Última comprensión: 7/10\n- Última implementación: 6/10\n- Días desde último contacto: 2\n- Banderas activas: 1 YELLOW (cash_flow_stress)\n- Evaluación de la lección 3: aprobada anteriormente\n\nDATOS DEL PARTICIPANTE (recopilados de conversaciones anteriores):\nTipo de negocio: panadería\nProductos/servicios: pan, tortas y desayunos\nIngresos mensuales: COP 4.800.000\nGastos mensuales: COP 3.900.000\nEmpleados: 2\nUbicación: Medellín\nDesafíos: mezclar la caja del negocio con gastos de la casa\nMetas: separar el dinero y ahorrar para un horno\nContexto familiar: trabaja con su hermana\nOtros datos: las ventas suben los fines de semana\n\nIMPORTANTE: Ya conoces estos datos. NO vuelvas a preguntar información que ya tienes. Úsala naturalmente en tus respuestas.\n\nUsa el nombre del socio naturalmente en la conversación. Adapta los ejemplos al negocio y la ubicación del socio.\n\nTAREA ACTUAL: Entrega el mensaje de la lección con fidelidad. Conecta el concepto con los números reales del negocio y termina con una sola pregunta práctica.\n\nCONTEXTO DE LA LECCIÓN:\n- Lección 4: \"Ahorro\"\n- Mensaje 2 de 4 en esta lección\n- Tipo de mensaje: ejemplo\n- Negocio del socio (para ejemplos): Panadería de barrio con ventas en efectivo y por encargo\n\nESTADO DEL ESTUDIANTE (medido automáticamente):\n- Comprensión: 6.5/10 (↑ mejorando)\n- Confusión: 3.0/10 (↓ disminuyendo)\n\nCONTENIDO DE LA LECCIÓN 4: \"Ahorro\"\nCategoría: finanzas\n\nCONCEPTOS CLAVE DE ESTA LECCIÓN:\nSeparar al menos el 10% de los ingresos y tratarlo como dinero no disponible.\n\nMENSAJE A ENTREGAR (Mensaje 2 de 4):\nTipo: ejemplo\nContenido base:\n\"Antes de usar el dinero que entra, separa primero la parte del ahorro del negocio.\"\n\nEJERCICIO DE LA LECCIÓN:\nCalcular el 10% de las ventas de esta semana.\n\nCOMPROMISO ESPERADO:\nApartar el ahorro en un lugar separado antes del domingo.\n\nNOTA: Adapta los ejemplos al negocio y la ubicación del socio. Los conceptos clave y la fórmula/estructura deben permanecer exactos.",
   "messages": [
-    { "role": "system", "content": "You are the AI mentor for the Mentors International entrepreneurship program.\n\nParticipant: Ana\nBusiness: neighborhood bakery\nProgress: lesson 4, message 2.\n\nTeach the current cash-flow concept in Spanish and ask one practical question.\n\nLesson content: Separate business cash from household cash before calculating profit." },
-    { "role": "user", "content": "Quiero entender mejor mi flujo de caja." },
-    { "role": "assistant", "content": "Empecemos separando las entradas y salidas del negocio." },
-    { "role": "assistant", "content": "Usa los números reales de esta semana." },
-    { "role": "user", "content": "Vendí 800 y gasté 500, pero saqué 100 para la casa." }
+    {
+      "role": "system",
+      "content": { "fixtureRef": "systemPrompt" }
+    },
+    {
+      "role": "user",
+      "content": "Quiero entender mejor cómo separar el ahorro."
+    },
+    {
+      "role": "assistant",
+      "content": "Podemos calcularlo con las ventas reales de tu panadería."
+    },
+    {
+      "role": "assistant",
+      "content": "Usa los números de esta semana y un ejemplo sencillo."
+    },
+    {
+      "role": "user",
+      "content": "Vendí 800000 y gasté 500000, pero saqué 100000 para la casa."
+    }
   ]
 }
