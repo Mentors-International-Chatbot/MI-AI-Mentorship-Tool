@@ -1,17 +1,22 @@
 {
-  "contentVersion": "1.1.0",
+  "contentVersion": "1.1.1",
   "samples": [
-    { "id": "entry-01", "intent": "lesson_entry", "lessonKey": "ai-day-in-the-life", "message": "Introduce this lesson." },
-    { "id": "entry-02", "intent": "lesson_entry", "lessonKey": "ai-prompting-iteration", "message": "Introduce this lesson." },
-    { "id": "entry-03", "intent": "lesson_entry", "lessonKey": "ai-pattern-vs-truth", "message": "Introduce this lesson." },
-    { "id": "entry-04", "intent": "lesson_entry", "lessonKey": "ai-tool-shapes", "message": "Introduce this lesson." },
-    { "id": "entry-05", "intent": "lesson_entry", "lessonKey": "ai-safety-deploy", "message": "Introduce this lesson." },
+    { "id": "entry-01", "intent": "lesson_entry", "lessonKey": "ai-day-in-the-life", "message": "Introduce this lesson.", "identityAnchors": ["GSCM", "supply chain", "workflow amplifier"] },
+    { "id": "entry-02", "intent": "lesson_entry", "lessonKey": "ai-prompting-iteration", "message": "Introduce this lesson.", "identityAnchors": ["prompt", "iteration", "refine"] },
+    { "id": "entry-03", "intent": "lesson_entry", "lessonKey": "ai-pattern-vs-truth", "message": "Introduce this lesson.", "identityAnchors": ["pattern", "truth", "fluent", "wrong"] },
+    { "id": "entry-04", "intent": "lesson_entry", "lessonKey": "ai-tool-shapes", "message": "Introduce this lesson.", "identityAnchors": ["tool", "chatbot", "shape"] },
+    { "id": "entry-05", "intent": "lesson_entry", "lessonKey": "ai-safety-deploy", "message": "Introduce this lesson.", "identityAnchors": ["safe", "safely", "deploy", "guardrail"] },
 
     { "id": "question-01", "intent": "question", "lessonKey": "ai-prompting-iteration", "message": "Why is adding context better than just making the prompt longer?" },
     { "id": "question-expand-01", "intent": "expand", "parentIntent": "question", "lessonKey": "ai-prompting-iteration", "parentSampleId": "question-01" },
     { "id": "question-02", "intent": "question", "lessonKey": "ai-pattern-vs-truth", "message": "I don't understand how a fluent answer can still be wrong." },
     { "id": "question-expand-02", "intent": "expand", "parentIntent": "question", "lessonKey": "ai-pattern-vs-truth", "parentSampleId": "question-02" },
     { "id": "question-03", "intent": "question", "lessonKey": "ai-model-landscape", "message": "When would a smaller model be the better choice?" },
+    { "id": "question-04", "intent": "question", "lessonKey": "ai-pattern-vs-truth", "message": "wait, I'm lost" },
+    { "id": "question-05", "intent": "question", "lessonKey": "ai-day-in-the-life", "message": "is this going to take AI jobs too" },
+    { "id": "question-06", "intent": "question", "lessonKey": "ai-safety-deploy", "message": "this seems obvious, why is it a whole lesson" },
+    { "id": "question-07", "intent": "question", "lessonKey": "ai-prompting-iteration", "message": "can you just write the prompt for me" },
+    { "id": "question-08", "intent": "question", "lessonKey": "ai-prompting-iteration", "message": "I tried it and it just gave me garbage" },
 
     { "id": "teachback-01", "intent": "teach_back", "lessonKey": "ai-day-in-the-life", "message": "AI can draft and summarize routine work, while the person remains responsible for checking evidence and making the decision." },
     { "id": "teachback-expand-01", "intent": "expand", "parentIntent": "teach_back", "lessonKey": "ai-day-in-the-life", "parentSampleId": "teachback-01" },

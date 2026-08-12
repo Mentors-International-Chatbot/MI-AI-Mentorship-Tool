@@ -3,11 +3,11 @@
   "metadata": {
     "packageId": "ai-essentials",
     "title": "AI Essentials",
-    "description": "AI literacy for GSCM undergraduates—how models work, how to use them, and how to choose tools.",
+    "description": "AI literacy for GSCM undergraduates: how models work, how to use them, and how to choose tools.",
     "languages": [
       "en"
     ],
-    "version": "1.1.0",
+    "version": "1.1.1",
     "author": {
       "name": "Learn Machine"
     },
@@ -538,10 +538,10 @@
             "concepts": [
               "hallucinations"
             ],
-            "contentVersion": 1,
+            "contentVersion": 2,
             "blockType": "teach",
             "role": "explanation",
-            "content": "The useful question is not “Is AI magic?” It is “What evidence would make this output trustworthy enough for this decision?”",
+            "content": "The useful question is not \"Is AI magic?\" It is \"What evidence would make this output trustworthy enough for this decision?\"",
             "presentation": "rendered"
           }
         ]
@@ -863,10 +863,10 @@
             "concepts": [
               "machine_learning"
             ],
-            "contentVersion": 1,
+            "contentVersion": 2,
             "blockType": "teach",
             "role": "explanation",
-            "content": "A model is a trained system that maps inputs to likely outputs. Explain it to a CEO as a capability with boundaries: “It can summarize approved documents and draft options, but it needs source access and human review for decisions.”",
+            "content": "A model is a trained system that maps inputs to likely outputs. Explain it to a CEO as a capability with boundaries: \"It can summarize approved documents and draft options, but it needs source access and human review for decisions.\"",
             "presentation": "rendered"
           },
           {
@@ -1710,7 +1710,7 @@
             "concepts": [
               "guardrails"
             ],
-            "contentVersion": 1,
+            "contentVersion": 2,
             "blockType": "quiz_checkpoint",
             "questions": [
               {
@@ -1718,7 +1718,7 @@
                 "prompt": "Which is a guardrail in an AI workflow?",
                 "format": "multiple_choice",
                 "options": [
-                  "A vague instruction to “be careful”",
+                  "A vague instruction to \"be careful\"",
                   "Restricting the model to read-only access and requiring approval before sending a supplier message",
                   "Giving it more unrelated documents",
                   "Removing audit logs"

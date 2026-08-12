@@ -1,4 +1,23 @@
 {
-  "blocks": {},
+  "blocks": {
+    "aiess-l02-b011": {
+      "content": "The useful question is not \"Is AI magic?\" It is \"What evidence would make this output trustworthy enough for this decision?\"",
+      "contentVersion": 2
+    },
+    "aiess-l05-b028": {
+      "content": "A model is a trained system that maps inputs to likely outputs. Explain it to a CEO as a capability with boundaries: \"It can summarize approved documents and draft options, but it needs source access and human review for decisions.\"",
+      "contentVersion": 2
+    },
+    "aiess-l11-b068": {
+      "options": [
+        "A vague instruction to \"be careful\"",
+        "Restricting the model to read-only access and requiring approval before sending a supplier message",
+        "Giving it more unrelated documents",
+        "Removing audit logs"
+      ],
+      "correct": 1,
+      "contentVersion": 2
+    }
+  },
   "teachBacks": {}
 }

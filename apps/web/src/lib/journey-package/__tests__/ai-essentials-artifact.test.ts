@@ -17,7 +17,7 @@ describe("generated AI Essentials cartridge", () => {
 
   it("has the fixed 17-lesson order and exact source/generated counts", () => {
     expect(pkg.schemaVersion).toBe("1.2");
-    expect(pkg.metadata.version).toBe("1.1.0");
+    expect(pkg.metadata.version).toBe("1.1.1");
     expect(pkg.curriculum.lessons.map((lesson) => lesson.key)).toEqual(expectedOrder);
     const counts = pkg.curriculum.lessons.flatMap((lesson) => lesson.blocks).reduce<Record<string, number>>((acc, block) => ({ ...acc, [block.blockType]: (acc[block.blockType] ?? 0) + 1 }), {});
     expect(counts).toEqual({ teach: 40, teach_back: 17, drag_order: 17, quiz_checkpoint: 38 });

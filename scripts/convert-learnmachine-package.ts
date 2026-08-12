@@ -308,7 +308,7 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
     schemaVersion: manifest.schemaVersion,
     metadata: {
       packageId: "ai-essentials", title: "AI Essentials",
-      description: "AI literacy for GSCM undergraduates—how models work, how to use them, and how to choose tools.",
+      description: "AI literacy for GSCM undergraduates: how models work, how to use them, and how to choose tools.",
       languages: ["en"], version: manifest.contentVersion, author: { name: "Learn Machine" },
       identity: { mentorName: "AI Mentor", displayName: "AI Essentials" },
       terminology: { participant: { en: "learner" } },

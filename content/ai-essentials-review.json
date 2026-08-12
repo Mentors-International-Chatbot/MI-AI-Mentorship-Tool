@@ -1,5 +1,108 @@
 {
-  "contentVersion": "1.1.0",
-  "contentChanges": [],
+  "contentVersion": "1.1.1",
+  "contentChanges": [
+    {
+      "lessonKey": "ai-magic-examples",
+      "stableId": "aiess-l02-b011",
+      "contentVersion": 2,
+      "oldContent": {
+        "type": "prose",
+        "discriminator": "ai-magic-examples:prose:hallucinations",
+        "concepts": [
+          "hallucinations"
+        ],
+        "content": "The useful question is not “Is AI magic?” It is “What evidence would make this output trustworthy enough for this decision?”"
+      },
+      "newContent": {
+        "id": "aiess-l02-b011",
+        "order": 6,
+        "concepts": [
+          "hallucinations"
+        ],
+        "contentVersion": 2,
+        "blockType": "teach",
+        "role": "explanation",
+        "content": "The useful question is not \"Is AI magic?\" It is \"What evidence would make this output trustworthy enough for this decision?\"",
+        "presentation": "rendered"
+      },
+      "oldHash": "4158c14b334a18df2e9689a59722347e0d9e29689e3978d461acf7e44f01ff83",
+      "newHash": "7387a8792fb37d29d153d19a732fa333bf03e66575a46b5023bf19179690164d"
+    },
+    {
+      "lessonKey": "ai-ceo-explain-models",
+      "stableId": "aiess-l05-b028",
+      "contentVersion": 2,
+      "oldContent": {
+        "type": "prose",
+        "discriminator": "ai-ceo-explain-models:prose:machine_learning",
+        "concepts": [
+          "machine_learning"
+        ],
+        "content": "A model is a trained system that maps inputs to likely outputs. Explain it to a CEO as a capability with boundaries: “It can summarize approved documents and draft options, but it needs source access and human review for decisions.”"
+      },
+      "newContent": {
+        "id": "aiess-l05-b028",
+        "order": 1,
+        "concepts": [
+          "machine_learning"
+        ],
+        "contentVersion": 2,
+        "blockType": "teach",
+        "role": "explanation",
+        "content": "A model is a trained system that maps inputs to likely outputs. Explain it to a CEO as a capability with boundaries: \"It can summarize approved documents and draft options, but it needs source access and human review for decisions.\"",
+        "presentation": "rendered"
+      },
+      "oldHash": "c76adebdc7e9f986f3cefbcc4a14480ceebf3db0e9b386f5f2f16bc9cb116c10",
+      "newHash": "4d0ce7106233ec95f78d8188d50f50456ee804e06d684301e6a5baef3bdd0072"
+    },
+    {
+      "lessonKey": "ai-harness-control",
+      "stableId": "aiess-l11-b068",
+      "contentVersion": 2,
+      "oldContent": {
+        "type": "mcq",
+        "discriminator": "ai-harness-control:mcq:guardrails",
+        "concepts": [
+          "guardrails"
+        ],
+        "prompt": "Which is a guardrail in an AI workflow?",
+        "options": [
+          "A vague instruction to “be careful”",
+          "Restricting the model to read-only access and requiring approval before sending a supplier message",
+          "Giving it more unrelated documents",
+          "Removing audit logs"
+        ],
+        "correct": 1,
+        "explanation": "Permissions and approval gates are concrete controls that limit what the system can do and make actions reviewable."
+      },
+      "newContent": {
+        "id": "aiess-l11-b068",
+        "order": 4,
+        "concepts": [
+          "guardrails"
+        ],
+        "contentVersion": 2,
+        "blockType": "quiz_checkpoint",
+        "questions": [
+          {
+            "id": "aiess-l11-b068-q1",
+            "prompt": "Which is a guardrail in an AI workflow?",
+            "format": "multiple_choice",
+            "options": [
+              "A vague instruction to \"be careful\"",
+              "Restricting the model to read-only access and requiring approval before sending a supplier message",
+              "Giving it more unrelated documents",
+              "Removing audit logs"
+            ],
+            "answerKey": "Restricting the model to read-only access and requiring approval before sending a supplier message",
+            "explanation": "Permissions and approval gates are concrete controls that limit what the system can do and make actions reviewable.",
+            "dimensionKey": "guardrails"
+          }
+        ]
+      },
+      "oldHash": "183e171293f6a5e52c368d0dc5cbc2a24e4ab8e258d4aec89227c8e06f700bd3",
+      "newHash": "9221bf6fd60f7b1a09e9baf289553382a04e40bf7d962b735980da236071580f"
+    }
+  ],
   "identityDrift": []
 }
