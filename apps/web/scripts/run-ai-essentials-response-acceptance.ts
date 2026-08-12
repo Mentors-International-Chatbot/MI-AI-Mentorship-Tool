@@ -9,12 +9,13 @@ import { handleIncomingMessage } from "../src/lib/messaging/handler";
 import { lessonSchema } from "../src/lib/journey-package/journey-package.schema";
 import { preparePlayerContext, resolvePlayerAccess, type PlayerParentIntent } from "../src/lib/player/service";
 import { deliveredTextMetrics } from "../src/lib/player/telemetryMetrics";
+import { hasTutorSelfIntroduction, repeatsParentOpening } from "../src/lib/player/responseStyle";
 
 const EXPECTED_BRANCH_ID = "br-misty-dawn-adj1cbft";
 const ORGANIZATION_SLUG = "ai-essentials-verification";
 const COLLECTION_KEY = "ai-essentials";
 
-type Sample = { id: string; intent: PlayerParentIntent | "expand"; parentIntent?: PlayerParentIntent; lessonKey: string; message?: string; parentSampleId?: string };
+type Sample = { id: string; intent: PlayerParentIntent | "expand"; parentIntent?: PlayerParentIntent; lessonKey: string; message?: string; parentSampleId?: string; identityAnchors?: string[] };
 type SampleOutput = Sample & {
   blockId?: string;
   output: string;
@@ -66,6 +67,10 @@ function positiveIntegerArgument(name: string, fallback: number): number {
   return value;
 }
 
+function expansionAddsNewOpening(parent: string | undefined, expanded: string): boolean {
+  return Boolean(parent) && !repeatsParentOpening(parent, expanded);
+}
+
 async function progressSnapshot(socioId: string) {
   const [blocks, lessons, milestones] = await Promise.all([
     prisma.blockProgress.findMany({ where: { socioId }, orderBy: { id: "asc" } }),
@@ -84,7 +89,7 @@ async function main() {
   const resume = process.argv.includes("--resume");
   const maxSampleAttempts = positiveIntegerArgument("--max-sample-attempts", 3);
   const input = JSON.parse(readFileSync(inputPath, "utf8")) as { contentVersion: string; samples: Sample[] };
-  if (input.contentVersion !== contentVersion || input.samples.length !== 20) throw new Error("Acceptance input must contain exactly 20 samples for the requested content version");
+  if (input.contentVersion !== contentVersion || input.samples.length !== 25) throw new Error("Acceptance input must contain exactly 25 samples for the requested content version");
   const organization = await prisma.organization.findUniqueOrThrow({ where: { slug: ORGANIZATION_SLUG } });
   const settings = organization.settings as Record<string, unknown> | null;
   if (settings?.syntheticDataOnly !== true) throw new Error("Acceptance organization must be marked syntheticDataOnly");
@@ -113,7 +118,7 @@ async function main() {
       status: "running", runStartedAt: new Date().toISOString(), generatedAt: null,
       runId, socioId: socio.id, externalId, programVersionId: version.id, contentVersion,
       nextSampleIndex: 0, samples: [], lastError: null, automatedAcceptance: null,
-      professorReview: { required: true, completed: false, rubric: ["conversational tone", "clarity", "usefulness", "concision"], passingRule: "At least 18/20 score 4+ on every dimension; no score may be 1 or 2." },
+      professorReview: { required: true, completed: false, rubric: ["conversational tone", "clarity", "usefulness", "concision"], passingRule: "At least 23/25 score 4+ on every dimension; no score may be 1 or 2." },
     };
     writeCheckpoint(outputPath, checkpoint);
   }
@@ -172,14 +177,18 @@ async function main() {
     const maxSentences = sample.intent === "expand" ? 6 : 3;
     const completeEnding = /[.!?](?:["')\]]|\p{Extended_Pictographic}|\uFE0F|\s)*$/u.test(result.responseText.trim());
     const expansionGrounded = sample.intent !== "expand" || !/(?:do not|don't|cannot|can't) see (?:a )?prior|no prior .*reply|first message (?:in|of) (?:our|this) (?:chat|conversation)|prior .* (?:is )?missing/iu.test(result.responseText);
+    const expansionNewOpening = sample.intent !== "expand" || expansionAddsNewOpening(checkpoint.samples.find((item) => item.id === sample.parentSampleId)?.output, result.responseText);
     const lessonIdentity = lessonIdentities.get(sample.lessonKey);
+    const normalizedOutput = result.responseText.toLocaleLowerCase();
     const correctLessonIdentity = sample.intent !== "lesson_entry" || !lessonIdentity || (
-      result.responseText.toLocaleLowerCase().includes(lessonIdentity.title.toLocaleLowerCase())
-      && !lessonIdentity.otherTitles.some((title) => result.responseText.toLocaleLowerCase().includes(title.toLocaleLowerCase()))
+      (sample.identityAnchors?.some((anchor) => normalizedOutput.includes(anchor.toLocaleLowerCase())) ?? normalizedOutput.includes(lessonIdentity.title.toLocaleLowerCase()))
+      && !lessonIdentity.otherTitles.some((title) => normalizedOutput.includes(title.toLocaleLowerCase()))
     );
     const cleanLessonEntry = sample.intent !== "lesson_entry" || (!/^\s*(?:lesson|module)\s+\d+\s*:/iu.test(result.responseText) && !/\[(?:end|start|complete)[^\]]*\]/iu.test(result.responseText));
     const successfulGeneration = !result.isError && !result.suppressed && result.responseText.trim().length > 0;
-    checkpoint.samples.push({ ...sample, blockId, output: result.responseText, model: trace?.model ?? null, promptHash: trace?.promptHash ?? null, finishReason: trace?.finishReason ?? null, generationStatus: successfulGeneration ? "success" : "fallback", attempts, metrics, progressUnchanged: sample.intent === "expand" ? before === after : null, acceptance: { sentenceLimit: metrics.sentences <= maxSentences, questionLimit: metrics.questionCount <= 1, noMarkdown: !metrics.markdown, completeEnding, noLengthFinish: trace?.finishReason !== "length", successfulGeneration, noExpansionProgress: sample.intent !== "expand" || before === after, expansionGrounded, correctLessonIdentity, cleanLessonEntry } });
+    const characterRange = sample.intent === "expand" ? { min: 450, max: 700 } : { min: 200, max: 420 };
+    const noSelfReference = !hasTutorSelfIntroduction(result.responseText, "AI Mentor") && !hasTutorSelfIntroduction(result.responseText, "Tutor");
+    checkpoint.samples.push({ ...sample, blockId, output: result.responseText, model: trace?.model ?? null, promptHash: trace?.promptHash ?? null, finishReason: trace?.finishReason ?? null, generationStatus: successfulGeneration ? "success" : "fallback", attempts, metrics, progressUnchanged: sample.intent === "expand" ? before === after : null, acceptance: { sentenceLimit: metrics.sentences <= maxSentences, sentenceWordLimit: metrics.maxSentenceWords <= 35, characterRange: metrics.characters >= characterRange.min && metrics.characters <= characterRange.max, questionLimit: metrics.questionCount <= 1, questionPosition: metrics.questionInFinalSentence, asciiPunctuation: metrics.asciiPunctuation, singleParagraph: metrics.singleParagraph, noSelfReference, noMarkdown: !metrics.markdown, completeEnding, noLengthFinish: trace?.finishReason !== "length", successfulGeneration, noExpansionProgress: sample.intent !== "expand" || before === after, expansionGrounded, expansionNewOpening, correctLessonIdentity, cleanLessonEntry } });
     if (sample.intent !== "expand") contexts.set(sample.id, { blockId, intent: sample.intent });
     checkpoint.nextSampleIndex = sampleIndex + 1;
     checkpoint.status = "running";

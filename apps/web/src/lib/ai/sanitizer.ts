@@ -83,9 +83,22 @@ function sanitizeLists(text: string): string {
   return out.join('\n');
 }
 
-function stripEmDashes(text: string): string {
-  // Em dash tends to render poorly on WhatsApp.
-  return text.replace(/—/g, '-');
+function normalizePlainText(text: string): string {
+  return text
+    // Normalize punctuation that renders inconsistently across player,
+    // WhatsApp, and Canvas. A spaced replacement avoids the old "solid-you"
+    // corruption caused by replacing an em dash with a bare hyphen.
+    .replace(/[\u2014\u2013]/g, ', ')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    // Learner-visible tutor replies are one flowing paragraph. This also
+    // removes literal escaped newline sequences occasionally echoed by models.
+    .replace(/\\[rn]/g, ' ')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1');
 }
 
 export function sanitizeForDelivery(text: string): string {
@@ -107,12 +120,7 @@ export function sanitizeForDelivery(text: string): string {
   out = out.replace(STRONG_RE, '$2');
   out = out.replace(ITALIC_RE, (_m, pre: string, _marker: string, content: string) => `${pre}${content}`);
 
-  // Replace em dashes.
-  out = stripEmDashes(out);
-
-  // Collapse multiple blank lines into at most 2 newlines.
-  out = out.replace(/\n{3,}/g, '\n\n');
+  out = normalizePlainText(out);
 
   return out.trim();
 }
-

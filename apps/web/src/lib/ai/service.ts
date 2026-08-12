@@ -138,6 +138,8 @@ export async function invokeStyledPlayerResponse(
     messages: (SystemMessage | HumanMessage | AIMessage)[],
     style: ResponseStyle,
     expanded: boolean,
+    personaName?: string,
+    parentReply?: string,
 ): Promise<{ content: unknown; response_metadata?: unknown }> {
     let currentMessages = messages;
     let response = await invokeWithRetry(chat, currentMessages);
@@ -145,7 +147,7 @@ export async function invokeStyledPlayerResponse(
     for (let repair = 0; ; repair++) {
         const raw = contentToText(response.content);
         const delivered = sanitizeForDelivery(parseMarkers(raw).cleanText);
-        const violations = responseStyleViolations(delivered, style, expanded);
+        const violations = responseStyleViolations(delivered, style, expanded, personaName, parentReply);
         if (violations.length === 0) return response;
         // Never deliver an unchecked final rewrite. The old bounded loop made
         // four repairs but returned repair four even when it still violated
@@ -162,7 +164,7 @@ export async function invokeStyledPlayerResponse(
         // only for a faithful rewrite under the same output cap.
         currentMessages = [
             new SystemMessage("You are a precise copy editor. Preserve the draft's meaning and system markers; change only what the stated output contract requires."),
-            new HumanMessage(`${buildResponseStyleRepairInstruction(style, expanded, violations, repair >= 2)}\n\nDRAFT TO REWRITE:\n${raw}`),
+            new HumanMessage(`${buildResponseStyleRepairInstruction(style, expanded, violations, repair >= 2, delivered.length, parentReply)}\n\nDRAFT TO REWRITE:\n${raw}`),
         ];
         response = await invokeWithRetry(chat, currentMessages);
     }
@@ -387,10 +389,15 @@ export async function generateAIResponse(
     // extraction, summaries, and gated assessments keep their existing limits.
     const playerConfig = playerTurn ? await playerRuntimeRepo.programVersion.findFirst({
         where: { id: playerTurn.context.programVersionId, status: { in: ['published', 'archived'] }, collection: { slug: collectionKey } },
-        select: { config: true, program: { select: { organizationId: true } } },
+        select: { config: true, metadata: true, program: { select: { organizationId: true } } },
     }) : null;
     const parsedPlayerConfig = playerConfig ? programVersionConfigSchema.safeParse(playerConfig.config) : null;
     const responseStyle = parsedPlayerConfig?.success ? parsedPlayerConfig.data.responseStyle : undefined;
+    const playerMetadata = playerConfig?.metadata && typeof playerConfig.metadata === 'object' && !Array.isArray(playerConfig.metadata)
+        ? playerConfig.metadata as Record<string, unknown> : {};
+    const playerIdentity = playerMetadata.identity && typeof playerMetadata.identity === 'object' && !Array.isArray(playerMetadata.identity)
+        ? playerMetadata.identity as Record<string, unknown> : {};
+    const playerPersonaName = typeof playerIdentity.mentorName === 'string' ? playerIdentity.mentorName : undefined;
     const expanded = playerTurn?.context.intent === 'expand';
     const maxTokens = resolvePlayerMaxTokens(responseStyle, expanded);
     const chat = createOpenRouterChat({ temperature: 0.7, ...(maxTokens ? { maxTokens } : {}) });
@@ -609,7 +616,7 @@ export async function generateAIResponse(
                     // Buffer configured player replies until the output
                     // contract is validated. Streaming an invalid first draft
                     // would make a later rewrite impossible to retract.
-                    const response = await invokeStyledPlayerResponse(chat, messages, responseStyle, expanded);
+                    const response = await invokeStyledPlayerResponse(chat, messages, responseStyle, expanded, playerPersonaName, expansionTarget);
                     if (onToken) {
                         markFirstToken();
                         onToken(sanitizeForDelivery(parseMarkers(contentToText(response.content)).cleanText));

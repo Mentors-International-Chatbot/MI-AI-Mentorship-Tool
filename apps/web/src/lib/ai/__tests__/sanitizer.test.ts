@@ -8,8 +8,8 @@ describe('sanitizeForDelivery', () => {
     expect(sanitizeForDelivery('_hola_')).toBe('hola');
   });
 
-  it('replaces em dash', () => {
-    expect(sanitizeForDelivery('A — B')).toBe('A - B');
+  it('normalizes smart punctuation and spacing to plain ASCII', () => {
+    expect(sanitizeForDelivery('A—B – “quoted”… it\u00a0works')).toBe('A, B, "quoted"... it works');
   });
 
   it('strips headers', () => {
@@ -35,9 +35,13 @@ describe('sanitizeForDelivery', () => {
     expect(sanitizeForDelivery(input)).toBe('const x = 1;');
   });
 
-  it('collapses extra newlines', () => {
-    const input = 'a\n\n\nb';
-    expect(sanitizeForDelivery(input)).toBe('a\n\nb');
+  it('normalizes real and literal newline sequences into one paragraph', () => {
+    expect(sanitizeForDelivery('a\n\n\nb')).toBe('a b');
+    expect(sanitizeForDelivery('a\\n\\nb')).toBe('a b');
+  });
+
+  it('keeps ordinary straight quotation marks', () => {
+    expect(sanitizeForDelivery('Sort as "urgent" or "routine".')).toBe('Sort as "urgent" or "routine".');
   });
 
   it('preserves system markers that look like brackets', () => {
@@ -47,4 +51,3 @@ describe('sanitizeForDelivery', () => {
     );
   });
 });
-
