@@ -5,22 +5,22 @@
     "collectionKey": "ai-essentials"
   },
   "range": {
-    "from": "2026-08-13T14:39:21.583Z",
-    "to": null
+    "from": "2026-08-13T20:41:53.629Z",
+    "to": "2026-08-13T20:44:16.000Z"
   },
   "byIntentAndExpansionParent": {
-    "lesson_entry": {
-      "invocationCount": 5,
-      "deliveredMessageCount": 5,
+    "capstone": {
+      "invocationCount": 4,
+      "deliveredMessageCount": 3,
       "rawResponseLength": {
-        "p50": 353,
-        "p90": 363,
-        "p95": 363
+        "p50": 301,
+        "p90": 356,
+        "p95": 356
       },
       "deliveredCharacters": {
-        "p50": 78,
-        "p90": 363,
-        "p95": 363
+        "p50": 301,
+        "p90": 356,
+        "p95": 356
       },
       "deliveredSentences": {
         "p50": 3,
@@ -28,7 +28,7 @@
         "p95": 3
       },
       "deliveredQuestions": {
-        "total": 5,
+        "total": 2,
         "p50": 1,
         "p90": 1,
         "p95": 1
@@ -40,15 +40,301 @@
       "providerLengthFinish": {
         "count": 0,
         "rate": 0,
-        "unknown": 3
+        "unknown": 1
       },
       "invocationFailure": {
-        "count": 3,
-        "rate": 0.6
+        "count": 1,
+        "rate": 0.25
+      },
+      "traceTimeout": {
+        "count": 0,
+        "rate": 0
       },
       "persistedFallback": {
-        "count": 3,
-        "rate": 0.6,
+        "count": 0,
+        "rate": 0,
+        "unknown": 0
+      }
+    },
+    "expand:capstone": {
+      "invocationCount": 2,
+      "deliveredMessageCount": 2,
+      "rawResponseLength": {
+        "p50": 552,
+        "p90": 590,
+        "p95": 590
+      },
+      "deliveredCharacters": {
+        "p50": 552,
+        "p90": 591,
+        "p95": 591
+      },
+      "deliveredSentences": {
+        "p50": 5,
+        "p90": 6,
+        "p95": 6
+      },
+      "deliveredQuestions": {
+        "total": 0,
+        "p50": 0,
+        "p90": 0,
+        "p95": 0
+      },
+      "markdownIncidence": {
+        "count": 0,
+        "rate": 0
+      },
+      "providerLengthFinish": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 0
+      },
+      "invocationFailure": {
+        "count": 0,
+        "rate": 0
+      },
+      "traceTimeout": {
+        "count": 0,
+        "rate": 0
+      },
+      "persistedFallback": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 0
+      }
+    },
+    "expand:question": {
+      "invocationCount": 2,
+      "deliveredMessageCount": 2,
+      "rawResponseLength": {
+        "p50": 461,
+        "p90": 462,
+        "p95": 462
+      },
+      "deliveredCharacters": {
+        "p50": 461,
+        "p90": 464,
+        "p95": 464
+      },
+      "deliveredSentences": {
+        "p50": 4,
+        "p90": 5,
+        "p95": 5
+      },
+      "deliveredQuestions": {
+        "total": 1,
+        "p50": 0,
+        "p90": 1,
+        "p95": 1
+      },
+      "markdownIncidence": {
+        "count": 0,
+        "rate": 0
+      },
+      "providerLengthFinish": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 0
+      },
+      "invocationFailure": {
+        "count": 0,
+        "rate": 0
+      },
+      "traceTimeout": {
+        "count": 0,
+        "rate": 0
+      },
+      "persistedFallback": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 0
+      }
+    },
+    "expand:teach_back": {
+      "invocationCount": 3,
+      "deliveredMessageCount": 2,
+      "rawResponseLength": {
+        "p50": 458,
+        "p90": 742,
+        "p95": 742
+      },
+      "deliveredCharacters": {
+        "p50": 458,
+        "p90": 548,
+        "p95": 548
+      },
+      "deliveredSentences": {
+        "p50": 5,
+        "p90": 5,
+        "p95": 5
+      },
+      "deliveredQuestions": {
+        "total": 1,
+        "p50": 0,
+        "p90": 1,
+        "p95": 1
+      },
+      "markdownIncidence": {
+        "count": 0,
+        "rate": 0
+      },
+      "providerLengthFinish": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 1
+      },
+      "invocationFailure": {
+        "count": 1,
+        "rate": 0.3333333333333333
+      },
+      "traceTimeout": {
+        "count": 0,
+        "rate": 0
+      },
+      "persistedFallback": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 0
+      }
+    },
+    "lesson_entry": {
+      "invocationCount": 6,
+      "deliveredMessageCount": 5,
+      "rawResponseLength": {
+        "p50": 333,
+        "p90": 351,
+        "p95": 351
+      },
+      "deliveredCharacters": {
+        "p50": 333,
+        "p90": 352,
+        "p95": 352
+      },
+      "deliveredSentences": {
+        "p50": 3,
+        "p90": 3,
+        "p95": 3
+      },
+      "deliveredQuestions": {
+        "total": 4,
+        "p50": 1,
+        "p90": 1,
+        "p95": 1
+      },
+      "markdownIncidence": {
+        "count": 0,
+        "rate": 0
+      },
+      "providerLengthFinish": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 1
+      },
+      "invocationFailure": {
+        "count": 1,
+        "rate": 0.16666666666666666
+      },
+      "traceTimeout": {
+        "count": 0,
+        "rate": 0
+      },
+      "persistedFallback": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 0
+      }
+    },
+    "question": {
+      "invocationCount": 9,
+      "deliveredMessageCount": 8,
+      "rawResponseLength": {
+        "p50": 269,
+        "p90": 322,
+        "p95": 322
+      },
+      "deliveredCharacters": {
+        "p50": 269,
+        "p90": 322,
+        "p95": 322
+      },
+      "deliveredSentences": {
+        "p50": 3,
+        "p90": 3,
+        "p95": 3
+      },
+      "deliveredQuestions": {
+        "total": 6,
+        "p50": 1,
+        "p90": 1,
+        "p95": 1
+      },
+      "markdownIncidence": {
+        "count": 0,
+        "rate": 0
+      },
+      "providerLengthFinish": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 1
+      },
+      "invocationFailure": {
+        "count": 1,
+        "rate": 0.1111111111111111
+      },
+      "traceTimeout": {
+        "count": 0,
+        "rate": 0
+      },
+      "persistedFallback": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 0
+      }
+    },
+    "teach_back": {
+      "invocationCount": 4,
+      "deliveredMessageCount": 3,
+      "rawResponseLength": {
+        "p50": 240,
+        "p90": 339,
+        "p95": 339
+      },
+      "deliveredCharacters": {
+        "p50": 240,
+        "p90": 254,
+        "p95": 254
+      },
+      "deliveredSentences": {
+        "p50": 3,
+        "p90": 3,
+        "p95": 3
+      },
+      "deliveredQuestions": {
+        "total": 3,
+        "p50": 1,
+        "p90": 1,
+        "p95": 1
+      },
+      "markdownIncidence": {
+        "count": 0,
+        "rate": 0
+      },
+      "providerLengthFinish": {
+        "count": 0,
+        "rate": 0,
+        "unknown": 1
+      },
+      "invocationFailure": {
+        "count": 1,
+        "rate": 0.25
+      },
+      "traceTimeout": {
+        "count": 0,
+        "rate": 0
+      },
+      "persistedFallback": {
+        "count": 0,
+        "rate": 0,
         "unknown": 0
       }
     }

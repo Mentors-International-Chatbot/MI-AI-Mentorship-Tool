@@ -1,10 +1,10 @@
 {
   "status": "complete",
-  "runStartedAt": "2026-08-13T20:41:53.629Z",
-  "generatedAt": "2026-08-13T20:44:15.480Z",
-  "runId": "fa52d416-2811-40cd-9a6c-168935855ce2",
-  "socioId": "80b68159-406e-4ea9-8977-0b6db26c2367",
-  "externalId": "aiess-response-fa52d416-2811-40cd-9a6c-168935855ce2",
+  "runStartedAt": "2026-08-13T20:21:54.216Z",
+  "generatedAt": "2026-08-13T20:23:42.910Z",
+  "runId": "4ddb4d6a-a0b3-48e0-9816-f358c646437b",
+  "socioId": "7ee7a887-e699-4cbc-8c4b-f79031ddc5aa",
+  "externalId": "aiess-response-4ddb4d6a-a0b3-48e0-9816-f358c646437b",
   "programVersionId": "5534d8d8-ee1f-4125-a5da-b49323c7cecb",
   "contentVersion": "1.1.1",
   "nextSampleIndex": 25,
@@ -26,7 +26,7 @@
         "mechanical",
         "organize"
       ],
-      "output": "You're about to explore how AI amplifies your workflow in supply chain work, summarizing supplier updates, drafting memos, turning meeting notes into action items. The catch is that you keep ownership of the facts, trade-offs, and final decisions. What's one task in your day where you'd want AI to handle the routine work so you can focus on judgment?",
+      "output": "You're about to explore how AI amplifies your workflow in supply chain work, summarizing supplier updates, drafting memos, turning meeting notes into action items, while you keep ownership of the facts and decisions. The catch is understanding where AI genuinely saves time versus where it creates busywork, a tension called the Jevons paradox. What's one task in your current role where you'd want AI to handle the grunt work?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "9534e489f910efcd4407d97bdc86a056ba5168cd082ff40e2d2661e5799e2660",
       "finishReason": "stop",
@@ -35,30 +35,33 @@
       "sampleAttempts": 1,
       "deliveryPath": "first_draft",
       "repairDrafts": 0,
-      "firstDraftViolations": [],
+      "firstDraftViolations": [
+        "comma_chained_enumeration",
+        "character_range"
+      ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 352,
+        "characters": 427,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          24,
-          14,
-          21
+          33,
+          20,
+          16
         ],
-        "maxSentenceWords": 24,
+        "maxSentenceWords": 33,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
-        "commaChainedEnumeration": false
+        "commaChainedEnumeration": true
       },
       "progressUnchanged": null,
       "acceptance": {
         "sentenceLimit": true,
         "sentenceWordLimit": true,
-        "commaChainedEnumeration": true,
-        "characterRange": true,
+        "commaChainedEnumeration": false,
+        "characterRange": false,
         "questionLimit": true,
         "questionPosition": true,
         "singleFocusQuestion": true,
@@ -94,40 +97,40 @@
         "constraints",
         "one thing at a time"
       ],
-      "output": "Prompting works best as iteration: start with a small real example and check the result. Then adjust one variable at a time to keep from guessing and spot what moves the needle. What specific output are you trying to improve?",
+      "output": "You're about to learn how to build better prompts by treating them like work briefs with role, task, context, constraints, and output format. The real skill isn't writing one perfect prompt, it's inspecting what you got, then changing one thing at a time to improve it. What's a prompt challenge you're facing right now?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "d8281bafdcc1089253d69486ad80bf8a81c61e3b299b32d3b3788b717df55a1c",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 4,
-      "sampleAttempts": 2,
-      "deliveryPath": "sample_retry_repair",
-      "repairDrafts": 2,
+      "attempts": 1,
+      "sampleAttempts": 1,
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
       "firstDraftViolations": [
         "comma_chained_enumeration"
       ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 225,
+        "characters": 320,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          15,
-          17,
+          23,
+          23,
           8
         ],
-        "maxSentenceWords": 17,
+        "maxSentenceWords": 23,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
-        "commaChainedEnumeration": false
+        "commaChainedEnumeration": true
       },
       "progressUnchanged": null,
       "acceptance": {
         "sentenceLimit": true,
         "sentenceWordLimit": true,
-        "commaChainedEnumeration": true,
+        "commaChainedEnumeration": false,
         "characterRange": true,
         "questionLimit": true,
         "questionPosition": true,
@@ -157,19 +160,17 @@
       "identityAnchors": [
         "pattern",
         "truth",
-        "true",
         "fluent",
         "wrong",
         "false",
         "hallucination",
-        "likely next words",
+        "statistically likely",
         "verified facts",
         "plausible-sounding",
         "fabricated",
-        "accuracy",
-        "evidence"
+        "accuracy"
       ],
-      "output": "When you ask an AI model a question, it predicts the most likely next words, not a guarantee of fact. That prediction can sound confident even when the evidence is missing, outdated, or contradictory. Understanding this gap between pattern-matching and truth is how you use AI safely.",
+      "output": "When you ask an AI tool a question, it predicts the most likely next words, not a guarantee of fact. That prediction can sound confident even when the evidence is missing, outdated, or contradictory. Understanding this gap between pattern-matching and truth helps you use AI safely and catch when it fills blanks instead of admitting uncertainty.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "355c6a954e6f86165eb2546b6e245ebf7ed84cb37fa70f9b3b65c421e5610335",
       "finishReason": "stop",
@@ -181,16 +182,16 @@
       "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 284,
+        "characters": 346,
         "sentences": 3,
         "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
           20,
           14,
-          13
+          22
         ],
-        "maxSentenceWords": 20,
+        "maxSentenceWords": 22,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -235,7 +236,7 @@
         "workflow automation",
         "shape"
       ],
-      "output": "AI systems come in different shapes, chat assistants, embedded copilots, search tools, workflow automations, and agents, and picking the right one matters more than chasing the fanciest interface. When you match the tool's form to your actual job, you avoid wasting time on flashy features that don't fit. What kind of work are you trying to speed up?",
+      "output": "AI systems come in different shapes, chat assistants, embedded copilots, search tools, workflow automations, and agents, and picking the right one matters more than chasing the fanciest interface. When you match the tool's form to your actual job, you avoid wasting time on flashy features that don't help. What kind of work are you trying to speed up?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "a3b27165fc7500c4710e723e857d6b9d9a93262c7296ed46ca94440c307281cc",
       "finishReason": "stop",
@@ -247,7 +248,7 @@
       "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 351,
+        "characters": 352,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
@@ -299,7 +300,7 @@
         "deploy",
         "guardrail"
       ],
-      "output": "You're about to deploy an AI system and need to know how to start safely instead of risking failures in production. Safe deployment means choosing one narrow use case, assigning a clear owner, using only authorized data, and setting measurable success targets before you expand. What specific use case are you planning to test first?",
+      "output": "You're about to deploy an AI system and need to know where to start safely. The first step is choosing a narrow use case with a clear owner, authorized data, and success measures you can actually test. Once you've run it through real failure scenarios and set up how users report problems, you can think about expanding it.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "1cc9dd68c617b02a28cdc43e83b7aa791e8aacd875845b9c0f89a55387a8c530",
       "finishReason": "stop",
@@ -311,16 +312,16 @@
       "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 333,
+        "characters": 323,
         "sentences": 3,
-        "questionCount": 1,
+        "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          21,
-          24,
-          10
+          15,
+          22,
+          21
         ],
-        "maxSentenceWords": 24,
+        "maxSentenceWords": 22,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -358,7 +359,7 @@
       "lessonKey": "ai-prompting-iteration",
       "message": "Why is adding context better than just making the prompt longer?",
       "blockId": "aiess-l09-b054",
-      "output": "Adding context targets what the model actually needs to do well, while length alone often adds noise. A focused example or constraint usually steers output better than extra words. Which part of your prompt feels most unclear to the model right now?",
+      "output": "Context focuses the AI on what matters for your specific task, while length alone adds noise. A 200-word prompt full of irrelevant details often performs worse than a 100-word prompt with the right background, constraints, and output format. Better prompts work by being precise, not by being bigger.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "b1d0b8d253cc0be6b9d93af7ac926fb4f8f1b6f3f64d76daf5dcc862e3078d00",
       "finishReason": "stop",
@@ -370,16 +371,16 @@
       "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 249,
+        "characters": 300,
         "sentences": 3,
-        "questionCount": 1,
+        "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          17,
-          12,
-          13
+          16,
+          22,
+          10
         ],
-        "maxSentenceWords": 17,
+        "maxSentenceWords": 22,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -418,7 +419,7 @@
       "lessonKey": "ai-prompting-iteration",
       "parentSampleId": "question-01",
       "blockId": "aiess-l09-b054",
-      "output": "When you add specific constraints, like \"respond in under 50 words\" or \"assume the user has no coding background\", an AI model focuses its effort instead of padding with generic detail. Vague prompts often trigger hallucinations because the model guesses what you mean. Iteration works by testing whether each constraint actually improved the output, then keeping what worked. The lesson here applies beyond AI: clearer boundaries usually beat longer instructions.",
+      "output": "When you write a prompt to an AI, every word should earn its place. A prompt stuffed with background, examples, or tangents forces the model to sift through noise before finding your actual goal. That wastes tokens and often confuses the output. Instead, strip away anything the model doesn't need to answer your question well. State what you want, give only the context that matters, and let the model work. Precision beats length every time.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "1b7a26a8b46379b3af4173530bcce1dc0540a172c25cc4c860b9c81fea1ee896",
       "finishReason": "stop",
@@ -427,20 +428,24 @@
       "sampleAttempts": 1,
       "deliveryPath": "first_draft",
       "repairDrafts": 0,
-      "firstDraftViolations": [],
+      "firstDraftViolations": [
+        "character_range"
+      ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 464,
-        "sentences": 4,
+        "characters": 443,
+        "sentences": 6,
         "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          31,
-          12,
+          14,
+          20,
+          8,
+          13,
           15,
-          12
+          5
         ],
-        "maxSentenceWords": 31,
+        "maxSentenceWords": 20,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -451,7 +456,7 @@
         "sentenceLimit": true,
         "sentenceWordLimit": true,
         "commaChainedEnumeration": true,
-        "characterRange": true,
+        "characterRange": false,
         "questionLimit": true,
         "questionPosition": true,
         "singleFocusQuestion": true,
@@ -478,7 +483,7 @@
       "lessonKey": "ai-pattern-vs-truth",
       "message": "I don't understand how a fluent answer can still be wrong.",
       "blockId": "aiess-l07-b042",
-      "output": "An AI model learns patterns from training data, so it can generate grammatically perfect sentences that sound authoritative even when the facts are false or outdated. Fluency means the words flow naturally, not that the content is accurate. What specific example would help clarify this gap?",
+      "output": "An AI learns patterns from training data, so it generates text that sounds natural and confident even when facts are missing or outdated. Fluency means the words flow well, not that the content is accurate. What part feels unclear, how the training works, or why confidence doesn't equal correctness?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "3f00d6acae63bb40d32dfd180bab6fe2c3789648f08bd835446e0854ef287660",
       "finishReason": "stop",
@@ -487,19 +492,21 @@
       "sampleAttempts": 1,
       "deliveryPath": "first_draft",
       "repairDrafts": 0,
-      "firstDraftViolations": [],
+      "firstDraftViolations": [
+        "question_focus"
+      ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 291,
+        "characters": 300,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          26,
+          23,
           12,
-          8
+          14
         ],
-        "maxSentenceWords": 26,
+        "maxSentenceWords": 23,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -513,7 +520,7 @@
         "characterRange": true,
         "questionLimit": true,
         "questionPosition": true,
-        "singleFocusQuestion": true,
+        "singleFocusQuestion": false,
         "asciiPunctuation": true,
         "singleParagraph": true,
         "noSelfReference": true,
@@ -538,32 +545,31 @@
       "lessonKey": "ai-pattern-vs-truth",
       "parentSampleId": "question-02",
       "blockId": "aiess-l07-b042",
-      "output": "A model trained on medical articles might fluently describe a treatment disproven five years ago, because learned patterns match real medical writing. The sentences read like expert advice, and your brain trusts fluency as a signal of truth. The model has no way to check whether facts changed after training ended. Guardrails and human review catch what smooth language can hide. What specific domain concerns you most about outdated information in AI outputs?",
+      "output": "Training data teaches an AI statistical patterns, which words follow which words, not whether those words are true. When an AI encounters a gap in its training or a question about something newer than its data, it fills the space with plausible-sounding text rather than saying \"I don't know.\" This is called a hallucination. Confidence comes from how well the pattern matches training examples, not from verification against reality. A guardrail is a safety rule built in to catch or flag likely errors, but no guardrail catches everything. Understanding this gap between fluency and accuracy is the core reason AI outputs need human review.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "7589c4b97c9196f84371c5e5242afabf9e8a0c1a4795c31712100e15776904f2",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 2,
+      "attempts": 1,
       "sampleAttempts": 1,
-      "deliveryPath": "repair",
-      "repairDrafts": 1,
-      "firstDraftViolations": [
-        "character_range"
-      ],
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
+      "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 461,
-        "sentences": 5,
-        "questionCount": 1,
+        "characters": 642,
+        "sentences": 6,
+        "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          22,
-          16,
-          13,
-          10,
-          12
+          18,
+          31,
+          5,
+          15,
+          19,
+          16
         ],
-        "maxSentenceWords": 22,
+        "maxSentenceWords": 31,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -601,7 +607,7 @@
       "lessonKey": "ai-model-landscape",
       "message": "When would a smaller model be the better choice?",
       "blockId": "aiess-l12-b072",
-      "output": "Smaller models work better when you need fast responses, have limited computing power, or operate on edge devices like phones. They also cost less to run and can handle straightforward tasks like classification or simple text generation. What specific task or constraint are you considering?",
+      "output": "A smaller model works better when you need faster responses, lower costs, or have limited computing power, like running AI on a phone or edge device. Smaller models also use less energy and are easier to customize for specific tasks. What's your main constraint: speed, budget, or available hardware?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "27267377873149767dfe3f322e379f87a886ae07dd96cc14d2ba1322e96b3093",
       "finishReason": "stop",
@@ -610,29 +616,31 @@
       "sampleAttempts": 1,
       "deliveryPath": "first_draft",
       "repairDrafts": 0,
-      "firstDraftViolations": [],
+      "firstDraftViolations": [
+        "comma_chained_enumeration"
+      ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 291,
+        "characters": 300,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          20,
-          17,
-          8
+          26,
+          14,
+          9
         ],
-        "maxSentenceWords": 20,
+        "maxSentenceWords": 26,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
-        "commaChainedEnumeration": false
+        "commaChainedEnumeration": true
       },
       "progressUnchanged": null,
       "acceptance": {
         "sentenceLimit": true,
         "sentenceWordLimit": true,
-        "commaChainedEnumeration": true,
+        "commaChainedEnumeration": false,
         "characterRange": true,
         "questionLimit": true,
         "questionPosition": true,
@@ -660,31 +668,30 @@
       "lessonKey": "ai-pattern-vs-truth",
       "message": "wait, I'm lost",
       "blockId": "aiess-l07-b042",
-      "output": "An AI predicts words based on learned patterns, not by checking facts against reality. This means it can sound fluent and confident while being completely wrong. Understanding this gap between fluency and accuracy is essential to using AI tools responsibly.",
+      "output": "A fluent answer sounds smooth and confident, but that's just because the words fit together well, not because the facts are true. An AI predicts likely next words based on patterns it learned, so it can sound certain while being completely wrong. Does the difference between \"words flowing smoothly\" and \"information being accurate\" make sense now?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "3f00d6acae63bb40d32dfd180bab6fe2c3789648f08bd835446e0854ef287660",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 2,
+      "attempts": 1,
       "sampleAttempts": 1,
-      "deliveryPath": "repair",
-      "repairDrafts": 1,
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
       "firstDraftViolations": [
-        "question_focus",
         "question_not_open"
       ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 257,
+        "characters": 348,
         "sentences": 3,
-        "questionCount": 0,
+        "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          14,
-          12,
+          22,
+          20,
           14
         ],
-        "maxSentenceWords": 14,
+        "maxSentenceWords": 22,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -722,31 +729,28 @@
       "lessonKey": "ai-day-in-the-life",
       "message": "is this going to take AI jobs too",
       "blockId": "aiess-l01-b001",
-      "output": "AI tools often make tasks faster, which paradoxically leads people to do more work rather than less. In supply chains, AI handles routine summaries while creating demand for judgment roles like negotiation and risk strategy. What decisions in your work require your input that AI couldn't make alone?",
+      "output": "AI tools do automate some tasks, but the lesson focuses on how you use them to amplify your own work, keeping you in control of decisions and facts. The real tension, called Jevons paradox, is that efficiency often creates new work rather than eliminating it. What specific task in your supply chain role would you want AI to handle first?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "ee0c31be8942a652454e40e76fbc32b1f70bdcebd1ff59dde3ed24e964efec01",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 2,
+      "attempts": 1,
       "sampleAttempts": 1,
-      "deliveryPath": "repair",
-      "repairDrafts": 1,
-      "firstDraftViolations": [
-        "sentence_word_limit",
-        "character_range"
-      ],
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
+      "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 300,
+        "characters": 339,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
+          28,
           17,
-          18,
-          13
+          15
         ],
-        "maxSentenceWords": 18,
+        "maxSentenceWords": 28,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -784,7 +788,7 @@
       "lessonKey": "ai-safety-deploy",
       "message": "this seems obvious, why is it a whole lesson",
       "blockId": "aiess-l17-b107",
-      "output": "Safe deployment looks obvious until a system hallucinates data, uses unauthorized training sets, or expands beyond its tested scope, then failures cascade fast. The lesson covers what breaks in practice, not just theory. What part feels most familiar to you already?",
+      "output": "Deployment safety isn't obvious in practice because teams often skip testing against real failure modes, skip assigning clear ownership, or deploy to broader use cases before guardrails work. The lesson exists because these shortcuts cause real harms that could have been caught early. What specific part feels straightforward to you?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "8c46614cf64f8f9f80da531d073547b87223825d2c557c0f9b49c169637a73a7",
       "finishReason": "stop",
@@ -796,16 +800,16 @@
       "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 266,
+        "characters": 334,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          23,
-          10,
-          8
+          28,
+          15,
+          7
         ],
-        "maxSentenceWords": 23,
+        "maxSentenceWords": 28,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -844,30 +848,28 @@
       "message": "can you just write the prompt for me",
       "requiresPromptStartingPoint": true,
       "blockId": "aiess-l09-b054",
-      "output": "You're building a prompt for a specific role and context with measurable success criteria. Replace these placeholders: [ROLE] is who the AI becomes; [CONTEXT] describes the situation; [OUTPUT] names what you need; [SUCCESS] defines how to judge it; [CONSTRAINT] limits the response. What task do you want the AI to handle?",
+      "output": "I need to know what task you're trying to solve. Give me the goal, who should do it, what information it needs, and what success looks like, then I'll draft a starting prompt you can test and refine.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "b1d0b8d253cc0be6b9d93af7ac926fb4f8f1b6f3f64d76daf5dcc862e3078d00",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 4,
-      "sampleAttempts": 2,
-      "deliveryPath": "sample_retry_repair",
-      "repairDrafts": 2,
+      "attempts": 1,
+      "sampleAttempts": 1,
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
       "firstDraftViolations": [
-        "comma_chained_enumeration",
         "prompt_starting_point",
         "character_range"
       ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 322,
-        "sentences": 3,
-        "questionCount": 1,
+        "characters": 199,
+        "sentences": 2,
+        "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          14,
-          28,
-          9
+          10,
+          28
         ],
         "maxSentenceWords": 28,
         "questionInFinalSentence": true,
@@ -880,7 +882,7 @@
         "sentenceLimit": true,
         "sentenceWordLimit": true,
         "commaChainedEnumeration": true,
-        "characterRange": true,
+        "characterRange": false,
         "questionLimit": true,
         "questionPosition": true,
         "singleFocusQuestion": true,
@@ -898,7 +900,7 @@
         "correctLessonIdentity": null,
         "cleanLessonEntry": null,
         "noStockTeachbackPraise": null,
-        "promptStartingPoint": true
+        "promptStartingPoint": false
       }
     },
     {
@@ -907,7 +909,7 @@
       "lessonKey": "ai-prompting-iteration",
       "message": "I tried it and it just gave me garbage",
       "blockId": "aiess-l09-b054",
-      "output": "Show me what you sent the AI and what it returned. That's the fastest way to spot whether the issue is unclear role, missing context, vague success criteria, or a constraint that backfired. Once I see the input and output, I can tell you which variable to adjust first.",
+      "output": "Tell me what you asked the AI to do and show me what it returned, the exact prompt you used and the output you got. That way I can spot whether the problem is vague instructions, missing context, or a constraint that's fighting itself.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "b1d0b8d253cc0be6b9d93af7ac926fb4f8f1b6f3f64d76daf5dcc862e3078d00",
       "finishReason": "stop",
@@ -919,16 +921,15 @@
       "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 269,
-        "sentences": 3,
+        "characters": 235,
+        "sentences": 2,
         "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          11,
-          22,
-          16
+          25,
+          19
         ],
-        "maxSentenceWords": 22,
+        "maxSentenceWords": 25,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -966,7 +967,7 @@
       "lessonKey": "ai-day-in-the-life",
       "message": "AI can draft and summarize routine work, while the person remains responsible for checking evidence and making the decision.",
       "blockId": "aiess-l01-b006",
-      "output": "AI handling routine drafting while you verify facts and decide is exactly right. That separation keeps you in control and catches errors AI might miss. In your supply chain work, what's one decision where that human check would matter most?",
+      "output": "AI drafting and summarizing routine work while you verify facts and decide, that's the core idea. You've named the division of labor clearly. Now, in your supply chain role, where does the Jevons paradox show up: does handling more summaries or drafts end up creating extra review work that eats the time you saved?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "24ea123f84a7694159fd5d22c91e3bbb588e24a7482ede95f7e4e6f9b212140f",
       "finishReason": "stop",
@@ -975,19 +976,21 @@
       "sampleAttempts": 1,
       "deliveryPath": "first_draft",
       "repairDrafts": 0,
-      "firstDraftViolations": [],
+      "firstDraftViolations": [
+        "stock_praise"
+      ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 240,
+        "characters": 315,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          13,
-          12,
-          15
+          16,
+          7,
+          31
         ],
-        "maxSentenceWords": 15,
+        "maxSentenceWords": 31,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -1015,7 +1018,7 @@
         "expansionNewOpening": null,
         "correctLessonIdentity": null,
         "cleanLessonEntry": null,
-        "noStockTeachbackPraise": true,
+        "noStockTeachbackPraise": false,
         "promptStartingPoint": null
       }
     },
@@ -1026,43 +1029,42 @@
       "lessonKey": "ai-day-in-the-life",
       "parentSampleId": "teachback-01",
       "blockId": "aiess-l01-b006",
-      "output": "AI drafting routine tasks frees you to focus on judgment calls that need your expertise. For example, if AI generates a supplier contract, you catch terms that don't match your risk tolerance or market conditions. The Jevons paradox applies here too: as AI handles more routine work, you may find yourself handling more complex decisions rather than working less. Your human judgment on what matters most, cost, reliability, ethics, stays irreplaceable. Where in your supply chain decisions do you most need to override or reshape what AI suggests?",
+      "output": "The Jevons paradox happens when efficiency gains trigger new demand that consumes the savings. In your supply chain case, AI might draft ten summaries daily instead of two manual ones. You save hours initially, but then stakeholders request more frequent reports, deeper analysis, or real-time dashboards because the tool makes it feasible. Suddenly you're reviewing fifty summaries weekly instead of ten, and the time advantage vanishes. The real win comes from redirecting that freed capacity toward strategy work that AI cannot do, rather than just producing more of the same task.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "6187775599c164762e7a2ebee1e4e9a4c602c5f3f9058595fb693b7c2467f4a2",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 3,
-      "sampleAttempts": 2,
-      "deliveryPath": "sample_retry_first_draft",
-      "repairDrafts": 1,
+      "attempts": 1,
+      "sampleAttempts": 1,
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
       "firstDraftViolations": [
-        "comma_chained_enumeration",
-        "character_range"
+        "comma_chained_enumeration"
       ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 548,
+        "characters": 584,
         "sentences": 5,
-        "questionCount": 1,
+        "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          15,
-          20,
-          24,
-          12,
-          17
+          14,
+          16,
+          22,
+          14,
+          25
         ],
-        "maxSentenceWords": 24,
+        "maxSentenceWords": 25,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
-        "commaChainedEnumeration": false
+        "commaChainedEnumeration": true
       },
       "progressUnchanged": true,
       "acceptance": {
         "sentenceLimit": true,
         "sentenceWordLimit": true,
-        "commaChainedEnumeration": true,
+        "commaChainedEnumeration": false,
         "characterRange": true,
         "questionLimit": true,
         "questionPosition": true,
@@ -1090,41 +1092,42 @@
       "lessonKey": "ai-reasoning-context-tools",
       "message": "Reasoning organizes steps, context supplies the facts and constraints, and tools let the system retrieve data or take a controlled action.",
       "blockId": "aiess-l10-b065",
-      "output": "Reasoning sequences troubleshooting steps while context supplies error logs and system limits. Tools then query databases or restart services to resolve customer issues. How might you adapt this approach when context shifts during a task?",
+      "output": "Reasoning organizes steps, context supplies facts and constraints, and tools enable retrieval or controlled action. That's accurate. A practical example: when diagnosing a car fault, reasoning sequences the checks, context includes the symptom and vehicle specs, and tools access the diagnostic scanner. How would you apply this trio if context was incomplete or contradictory?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "1a3dc07bb812e15e96c41bff831ba7cafb35f800384475a2d916ecafc64b9741",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 2,
+      "attempts": 1,
       "sampleAttempts": 1,
-      "deliveryPath": "repair",
-      "repairDrafts": 1,
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
       "firstDraftViolations": [
         "sentence_limit",
         "comma_chained_enumeration"
       ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 238,
-        "sentences": 3,
+        "characters": 377,
+        "sentences": 4,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          12,
-          11,
+          15,
+          2,
+          25,
           12
         ],
-        "maxSentenceWords": 12,
+        "maxSentenceWords": 25,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
-        "commaChainedEnumeration": false
+        "commaChainedEnumeration": true
       },
       "progressUnchanged": null,
       "acceptance": {
-        "sentenceLimit": true,
+        "sentenceLimit": false,
         "sentenceWordLimit": true,
-        "commaChainedEnumeration": true,
+        "commaChainedEnumeration": false,
         "characterRange": true,
         "questionLimit": true,
         "questionPosition": true,
@@ -1152,30 +1155,31 @@
       "lessonKey": "ai-safety-deploy",
       "message": "A safe deployment uses representative tests, permissions, human review, monitoring, and a clear response when the system fails.",
       "blockId": "aiess-l17-b112",
-      "output": "Core safeguards include representative tests, permissions, human review, and monitoring with response plans. Each layer catches different failure modes and protects against silent breakdowns. Which safeguard would matter most when deploying a new system?",
+      "output": "Your summary captures the key guardrails well. Representative tests, permissions, and monitoring are all essential. One clarification: human review works best when it's targeted, reviewing every output isn't scalable, but reviewing high-risk decisions or edge cases catches real problems. Which of these five elements do you think is hardest to actually implement in a real project?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "447f489cb90fd59d3dafa11068309afdd8841c5ea83b66bd8aca8c51db443e35",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 4,
-      "sampleAttempts": 2,
-      "deliveryPath": "sample_retry_repair",
-      "repairDrafts": 2,
+      "attempts": 1,
+      "sampleAttempts": 1,
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
       "firstDraftViolations": [
-        "comma_chained_enumeration"
+        "sentence_limit"
       ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 254,
-        "sentences": 3,
+        "characters": 382,
+        "sentences": 4,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          13,
-          11,
-          10
+          7,
+          8,
+          24,
+          17
         ],
-        "maxSentenceWords": 13,
+        "maxSentenceWords": 24,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -1183,7 +1187,7 @@
       },
       "progressUnchanged": null,
       "acceptance": {
-        "sentenceLimit": true,
+        "sentenceLimit": false,
         "sentenceWordLimit": true,
         "commaChainedEnumeration": true,
         "characterRange": true,
@@ -1214,7 +1218,7 @@
       "lessonKey": "ai-safety-deploy",
       "parentSampleId": "teachback-03",
       "blockId": "aiess-l17-b112",
-      "output": "Representative tests check whether the system behaves correctly on realistic data before it goes live. Permissions restrict who can access or change the system, preventing unauthorized misuse. Human review catches edge cases and unusual outputs that automated checks might miss. Monitoring tracks live performance and alerts teams to problems so they can respond quickly. Each layer works independently, so if one fails, others still protect users from harm.",
+      "output": "Targeted human review is hardest because it requires knowing which outputs matter most before problems happen. You need clear rules for what counts as high-risk, but real systems often surprise you with edge cases you didn't predict. Teams also struggle to keep reviewers focused and consistent over time. Building that judgment into your process takes trial and error, not just planning.",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "690033350da292d8a79b262ea4a23cbed8b610af8eca50cbf07a082c4cd83d4b",
       "finishReason": "stop",
@@ -1223,21 +1227,22 @@
       "sampleAttempts": 1,
       "deliveryPath": "first_draft",
       "repairDrafts": 0,
-      "firstDraftViolations": [],
+      "firstDraftViolations": [
+        "character_range"
+      ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 458,
-        "sentences": 5,
+        "characters": 388,
+        "sentences": 4,
         "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          15,
-          12,
-          13,
-          14,
-          14
+          16,
+          21,
+          11,
+          13
         ],
-        "maxSentenceWords": 15,
+        "maxSentenceWords": 21,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -1248,7 +1253,7 @@
         "sentenceLimit": true,
         "sentenceWordLimit": true,
         "commaChainedEnumeration": true,
-        "characterRange": true,
+        "characterRange": false,
         "questionLimit": true,
         "questionPosition": true,
         "singleFocusQuestion": true,
@@ -1274,7 +1279,7 @@
       "intent": "capstone",
       "lessonKey": "capstone",
       "message": "My use case is a weekly supplier-delay brief for an operations manager, and success means saving an hour without missing any verified delays.",
-      "output": "Your use case is clear: AI speeds up delay detection while you keep the verification step. That's a strong guardrail. How will you define \"verified delay\" so the prompt knows which signals matter to the operations manager?",
+      "output": "Your use case is clear and measurable. The real test is whether your prompt can reliably surface verified delays without the human having to re-check the data. How will you define what counts as a verified delay in your prompt so the AI doesn't flag noise?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "a21a158ee1375c9ce23331b1346b1e0a02f33f4bbc8d48033ed7c6b77bd01803",
       "finishReason": "stop",
@@ -1286,16 +1291,16 @@
       "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 222,
+        "characters": 256,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          16,
-          4,
-          17
+          7,
+          20,
+          19
         ],
-        "maxSentenceWords": 17,
+        "maxSentenceWords": 20,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -1333,7 +1338,7 @@
       "parentIntent": "capstone",
       "lessonKey": "capstone",
       "parentSampleId": "capstone-01",
-      "output": "A verified delay needs three concrete signals so the prompt filters noise. First, document the threshold: is it any shipment past promised date, or only those over 24 hours. Second, name the source: does the AI check tracking data, customer reports, or both. Third, specify what the operations manager must confirm before acting, for example, whether the delay is genuine or a data entry error. Without these definitions, the prompt will flag every minor hiccup and waste verification time. Build this into your prompt's context block so the AI knows exactly which delays deserve escalation.",
+      "output": "A verified delay needs a concrete threshold tied to your data source. For example, if your system tracks scheduled versus actual ship dates, define \"delay\" as any shipment arriving more than two business days after the promised date, pulled directly from your database timestamp. Your prompt should instruct the AI to extract only records matching that rule, cite the specific fields it checked, and flag cases where data is incomplete or ambiguous rather than guessing. This shifts the burden from the human re-checking everything to the AI showing its work transparently. Build one test case with a known delay and one without, then run both through your prompt to confirm it catches the real one and ignores borderline cases. What data source will you pull from to anchor that definition?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "bf81cf839175a0953ddf83cfbde7461008a549a25af6d1a5f614b80ae7c19e09",
       "finishReason": "stop",
@@ -1342,22 +1347,24 @@
       "sampleAttempts": 1,
       "deliveryPath": "first_draft",
       "repairDrafts": 0,
-      "firstDraftViolations": [],
+      "firstDraftViolations": [
+        "character_range"
+      ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 591,
+        "characters": 791,
         "sentences": 6,
-        "questionCount": 0,
+        "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
           12,
-          17,
-          14,
-          22,
-          14,
-          16
+          32,
+          31,
+          16,
+          28,
+          11
         ],
-        "maxSentenceWords": 22,
+        "maxSentenceWords": 32,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -1368,7 +1375,7 @@
         "sentenceLimit": true,
         "sentenceWordLimit": true,
         "commaChainedEnumeration": true,
-        "characterRange": true,
+        "characterRange": false,
         "questionLimit": true,
         "questionPosition": true,
         "singleFocusQuestion": true,
@@ -1394,7 +1401,7 @@
       "intent": "capstone",
       "lessonKey": "capstone",
       "message": "My workflow retrieves the approved shipment report, drafts the brief, checks every date against the source, and requires manager approval before sending.",
-      "output": "Your workflow has a solid human checkpoint at the end. The gap is the middle: you've named what goes in and what comes out, but not how the AI moves from raw report to draft brief. What specific fields or patterns from the shipment report does the AI need to extract and prioritize to build the brief?",
+      "output": "Your workflow has a strong human checkpoint at the end. The gap is the middle: your AI draft needs to show which dates it checked and why it flagged each delay, so the manager's approval is informed, not just a rubber stamp. What format will the AI use to cite its source data, for example, linking each flagged delay to the specific row in the shipment report it pulled from?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "a21a158ee1375c9ce23331b1346b1e0a02f33f4bbc8d48033ed7c6b77bd01803",
       "finishReason": "stop",
@@ -1406,16 +1413,16 @@
       "firstDraftViolations": [],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 301,
+        "characters": 376,
         "sentences": 3,
         "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
           10,
-          26,
-          21
+          32,
+          28
         ],
-        "maxSentenceWords": 26,
+        "maxSentenceWords": 32,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -1452,30 +1459,31 @@
       "intent": "capstone",
       "lessonKey": "capstone",
       "message": "My evaluation uses ten past reports, checks factual accuracy and omissions, and stops deployment if any invented shipment date appears.",
-      "output": "Your hallucination test is the right failure gate with ten reports as a solid sample size. You've defined what stops deployment but not what passes it, so clarify whether every date must match the source exactly or small omissions are acceptable if no false dates appear. Setting an explicit accuracy threshold will let you decide when the brief goes live.",
+      "output": "Your evaluation plan is disciplined: factual accuracy and a hard stop on hallucination. One gap: omissions. If the AI misses a real delay that exists in the report, your ten-test set may not catch it unless you explicitly check coverage. How will you confirm the AI found all delays that meet your definition, not just that it avoided inventing false ones?",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "a21a158ee1375c9ce23331b1346b1e0a02f33f4bbc8d48033ed7c6b77bd01803",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 4,
-      "sampleAttempts": 2,
-      "deliveryPath": "sample_retry_repair",
-      "repairDrafts": 2,
+      "attempts": 1,
+      "sampleAttempts": 1,
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
       "firstDraftViolations": [
-        "comma_chained_enumeration"
+        "sentence_limit"
       ],
       "providerTimeouts": 0,
       "metrics": {
         "characters": 356,
-        "sentences": 3,
-        "questionCount": 0,
+        "sentences": 4,
+        "questionCount": 1,
         "markdown": false,
         "sentenceWordCounts": [
-          16,
-          30,
-          14
+          13,
+          3,
+          24,
+          21
         ],
-        "maxSentenceWords": 30,
+        "maxSentenceWords": 24,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -1483,7 +1491,7 @@
       },
       "progressUnchanged": null,
       "acceptance": {
-        "sentenceLimit": true,
+        "sentenceLimit": false,
         "sentenceWordLimit": true,
         "commaChainedEnumeration": true,
         "characterRange": true,
@@ -1513,35 +1521,34 @@
       "parentIntent": "capstone",
       "lessonKey": "capstone",
       "parentSampleId": "capstone-03",
-      "output": "A passing threshold answers whether extracted dates need exact word-for-word matches or just accurate presence in the source. For example if your source says January 15 2024 and the AI outputs Jan 15 2024 you must decide if that counts as pass or fail. You might also decide whether omitting a date is worse than inventing one. Once you write down your rule such as all dates must be present and match the source format with zero false dates allowed you can score each test report the same way. You will then know exactly when the guardrail is working.",
+      "output": "Omission detection requires a separate coverage audit. Before running your ten tests, prepare a reference list of all delays you know exist in your source data, schedule slips, resource constraints, dependency breaks, anything matching your delay definition. Then map each test case to that reference: which delays should it surface, and did the AI find them. If the AI passes all hallucination tests but misses a real delay on your list, you've found a blind spot in your test design, not a model failure. Add a targeted test for that gap. This shifts your evaluation from \"did it avoid making things up\" to \"did it find what was actually there.\"",
       "model": "anthropic/claude-haiku-4.5",
       "promptHash": "bf81cf839175a0953ddf83cfbde7461008a549a25af6d1a5f614b80ae7c19e09",
       "finishReason": "stop",
       "generationStatus": "success",
-      "attempts": 2,
+      "attempts": 1,
       "sampleAttempts": 1,
-      "deliveryPath": "repair",
-      "repairDrafts": 1,
+      "deliveryPath": "first_draft",
+      "repairDrafts": 0,
       "firstDraftViolations": [
-        "sentence_word_limit",
-        "question_limit",
-        "question_position",
-        "comma_chained_enumeration"
+        "sentence_limit"
       ],
       "providerTimeouts": 0,
       "metrics": {
-        "characters": 552,
-        "sentences": 5,
+        "characters": 647,
+        "sentences": 7,
         "questionCount": 0,
         "markdown": false,
         "sentenceWordCounts": [
-          18,
-          26,
-          13,
-          32,
-          10
+          7,
+          30,
+          19,
+          28,
+          7,
+          19,
+          0
         ],
-        "maxSentenceWords": 32,
+        "maxSentenceWords": 30,
         "questionInFinalSentence": true,
         "asciiPunctuation": true,
         "singleParagraph": true,
@@ -1549,7 +1556,7 @@
       },
       "progressUnchanged": true,
       "acceptance": {
-        "sentenceLimit": true,
+        "sentenceLimit": false,
         "sentenceWordLimit": true,
         "commaChainedEnumeration": true,
         "characterRange": true,
@@ -1576,12 +1583,27 @@
   ],
   "lastError": null,
   "automatedAcceptance": {
-    "passed": true,
-    "failedSampleIds": []
+    "passed": false,
+    "failedSampleIds": [
+      "entry-01",
+      "entry-02",
+      "question-expand-01",
+      "question-02",
+      "question-03",
+      "question-07",
+      "teachback-01",
+      "teachback-expand-01",
+      "teachback-02",
+      "teachback-03",
+      "teachback-expand-02",
+      "capstone-expand-01",
+      "capstone-03",
+      "capstone-expand-02"
+    ]
   },
   "generationPolicy": {
     "timeoutMs": 75000,
-    "maxSampleAttempts": 3,
+    "maxSampleAttempts": 1,
     "allowFallback": false
   },
   "professorReview": {
@@ -1596,38 +1618,22 @@
     "passingRule": "At least 23/25 score 4+ on every dimension; no score may be 1 or 2."
   },
   "timeoutSummary": {
-    "providerAttempts": 44,
+    "providerAttempts": 25,
     "providerTimeouts": 0,
     "rate": 0
   },
   "generationSummary": {
-    "firstAttemptPass": {
-      "count": 15,
-      "rate": 0.6
+    "firstDraft": {
+      "count": 25,
+      "rate": 1
     },
-    "deliveredWithoutRepair": {
-      "count": 16,
-      "rate": 0.64
-    },
-    "deliveredAfterRepair": {
-      "count": 9,
-      "rate": 0.36
+    "postRepair": {
+      "count": 0,
+      "rate": 0
     },
     "sampleRetry": {
-      "count": 5,
-      "rate": 0.2
-    },
-    "livePathProjection": {
-      "successful": {
-        "count": 20,
-        "rate": 0.8
-      },
-      "fallback": {
-        "count": 5,
-        "rate": 0.2
-      },
-      "providerCalls": 35,
-      "averageCallsPerTurn": 1.4
+      "count": 0,
+      "rate": 0
     }
   }
 }
