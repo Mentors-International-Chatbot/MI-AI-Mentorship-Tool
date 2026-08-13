@@ -30,7 +30,7 @@ function percentiles(values: number[]) {
 }
 
 type Group = {
-  invocations: Array<{ responseLength: number | null; finishReason: string | null; success: boolean }>;
+  invocations: Array<{ responseLength: number | null; finishReason: string | null; success: boolean; errorMessage: string | null }>;
   messages: Array<{ content: string; generationStatus: string | null }>;
 };
 
@@ -38,6 +38,7 @@ function summarize(group: Group) {
   const delivered = group.messages.map((message) => deliveredTextMetrics(message.content));
   const knownFinish = group.invocations.filter((item) => item.finishReason !== null);
   const knownGeneration = group.messages.filter((item) => item.generationStatus !== null);
+  const timeouts = group.invocations.filter((item) => !item.success && /timeout/iu.test(item.errorMessage ?? ""));
   return {
     invocationCount: group.invocations.length,
     deliveredMessageCount: group.messages.length,
@@ -51,6 +52,7 @@ function summarize(group: Group) {
     markdownIncidence: { count: delivered.filter((item) => item.markdown).length, rate: delivered.length ? delivered.filter((item) => item.markdown).length / delivered.length : null },
     providerLengthFinish: { count: knownFinish.filter((item) => item.finishReason === "length").length, rate: knownFinish.length ? knownFinish.filter((item) => item.finishReason === "length").length / knownFinish.length : null, unknown: group.invocations.length - knownFinish.length },
     invocationFailure: { count: group.invocations.filter((item) => !item.success).length, rate: group.invocations.length ? group.invocations.filter((item) => !item.success).length / group.invocations.length : null },
+    traceTimeout: { count: timeouts.length, rate: group.invocations.length ? timeouts.length / group.invocations.length : null },
     persistedFallback: { count: knownGeneration.filter((item) => item.generationStatus === "fallback").length, rate: knownGeneration.length ? knownGeneration.filter((item) => item.generationStatus === "fallback").length / knownGeneration.length : null, unknown: group.messages.length - knownGeneration.length },
   };
 }
@@ -68,7 +70,7 @@ async function main() {
   const [invocations, messages, milestoneRows] = await Promise.all([
     prisma.aiInvocation.findMany({
       where: { context: { path: ["programVersionId"], equals: programVersionId }, ...(Object.keys(createdAt).length ? { createdAt } : {}) },
-      select: { responseLength: true, finishReason: true, success: true, context: true },
+      select: { responseLength: true, finishReason: true, success: true, errorMessage: true, context: true },
     }),
     prisma.message.findMany({
       where: { role: "assistant", metadata: { path: ["programVersionId"], equals: programVersionId }, ...(Object.keys(createdAt).length ? { createdAt } : {}) },

@@ -64,6 +64,47 @@ import { assembleOrderedModelMessages } from '@/lib/ai/modelMessages';
  * revisited, and it likely splits into two budgets rather than moving.
  */
 const AI_TIMEOUT_MS = 12000;
+const MAX_STYLE_REPAIRS = 1;
+
+export type BufferedGenerationPolicy = {
+    /** Per-attempt time-to-last-token budget for the buffered invocation. */
+    timeoutMs?: number;
+    /** Number of retries after the first attempt. */
+    maxRetries?: number;
+    /** Live traffic fails fast on timeouts; acceptance may retry them. */
+    retryTimeouts?: boolean;
+    /** Live traffic receives a recoverable fallback; acceptance must fail hard. */
+    allowFallback?: boolean;
+    /** Acceptance measurement only: record style violations without rewriting. */
+    observeFirstDraftOnly?: boolean;
+    /** Batch observability for provider attempts hidden inside one logical trace. */
+    onAttempt?: (event: { attempt: number; timeoutMs: number }) => void;
+    onAttemptFailure?: (event: { attempt: number; timeout: boolean; error: string }) => void;
+    /** Acceptance-only visibility into initial-draft and repair validation. */
+    onStyleValidation?: (event: {
+        stage: 'initial' | 'repair';
+        repairIndex: number;
+        passed: boolean;
+        violations: string[];
+    }) => void;
+};
+
+type ResolvedBufferedGenerationPolicy = Required<Omit<BufferedGenerationPolicy, "onAttempt" | "onAttemptFailure" | "onStyleValidation">>
+    & Pick<BufferedGenerationPolicy, "onAttempt" | "onAttemptFailure" | "onStyleValidation">;
+
+const LIVE_BUFFERED_GENERATION_POLICY: ResolvedBufferedGenerationPolicy = {
+    timeoutMs: AI_TIMEOUT_MS,
+    maxRetries: 1,
+    retryTimeouts: false,
+    allowFallback: true,
+    observeFirstDraftOnly: false,
+};
+
+function resolveBufferedGenerationPolicy(
+    policy?: BufferedGenerationPolicy,
+): ResolvedBufferedGenerationPolicy {
+    return { ...LIVE_BUFFERED_GENERATION_POLICY, ...policy };
+}
 
 async function invokeWithTimeout<T>(
     promise: Promise<T>,
@@ -96,28 +137,31 @@ export function contentToText(content: unknown): string {
 async function invokeWithRetry(
     chat: { invoke: (messages: (SystemMessage | HumanMessage | AIMessage)[]) => Promise<{ content: unknown; response_metadata?: unknown }> },
     messages: (SystemMessage | HumanMessage | AIMessage)[],
-    maxRetries: number = 1,
+    policy?: BufferedGenerationPolicy,
 ): Promise<{ content: unknown; response_metadata?: unknown }> {
+    const resolved = resolveBufferedGenerationPolicy(policy);
     let lastError: Error | null = null;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= resolved.maxRetries; attempt++) {
         try {
+            resolved.onAttempt?.({ attempt: attempt + 1, timeoutMs: resolved.timeoutMs });
             const response = await invokeWithTimeout(
                 chat.invoke(messages),
-                AI_TIMEOUT_MS,
-                `AI request timeout after ${AI_TIMEOUT_MS}ms`
+                resolved.timeoutMs,
+                `AI request timeout after ${resolved.timeoutMs}ms`
             );
             return response;
         } catch (error) {
             lastError = error as Error;
-            console.error(`[AI] Attempt ${attempt + 1}/${maxRetries + 1} failed:`, error);
+            const timedOut = error instanceof Error && error.message.includes('timeout');
+            resolved.onAttemptFailure?.({ attempt: attempt + 1, timeout: timedOut, error: error instanceof Error ? error.message : String(error) });
+            console.error(`[AI] Attempt ${attempt + 1}/${resolved.maxRetries + 1} failed:`, error);
 
-            // Don't retry on timeout errors - fail fast
-            if (error instanceof Error && error.message.includes('timeout')) {
+            if (!resolved.retryTimeouts && timedOut) {
                 throw error;
             }
 
-            if (attempt < maxRetries) {
+            if (attempt < resolved.maxRetries) {
                 const delay = Math.pow(2, attempt) * 1000;
                 await new Promise((resolve) => setTimeout(resolve, delay));
             }
@@ -129,7 +173,7 @@ async function invokeWithRetry(
 
 /**
  * A prompt is a preference; the configured response style is a release
- * contract. Styled player turns therefore get up to four model rewrites when
+ * contract. Styled player turns therefore get one model rewrite when
  * the completed, sanitized draft violates that contract. No text is truncated
  * and the same model/token cap is used for every attempt.
  */
@@ -142,22 +186,30 @@ export async function invokeStyledPlayerResponse(
     parentReply?: string,
     intent?: Parameters<typeof responseStyleViolations>[5],
     parentIntent?: Parameters<typeof responseStyleViolations>[6],
+    learnerText?: string,
+    generationPolicy?: BufferedGenerationPolicy,
 ): Promise<{ content: unknown; response_metadata?: unknown }> {
     let currentMessages = messages;
-    let response = await invokeWithRetry(chat, currentMessages);
+    let response = await invokeWithRetry(chat, currentMessages, generationPolicy);
 
     for (let repair = 0; ; repair++) {
         const raw = contentToText(response.content);
         const delivered = sanitizeForDelivery(parseMarkers(raw).cleanText);
-        const violations = responseStyleViolations(delivered, style, expanded, personaName, parentReply, intent, parentIntent);
+        const violations = responseStyleViolations(delivered, style, expanded, personaName, parentReply, intent, parentIntent, learnerText);
+        generationPolicy?.onStyleValidation?.({
+            stage: repair === 0 ? 'initial' : 'repair',
+            repairIndex: repair,
+            passed: violations.length === 0,
+            violations,
+        });
         if (violations.length === 0) return response;
-        // Never deliver an unchecked final rewrite. The old bounded loop made
-        // four repairs but returned repair four even when it still violated
-        // the contract. Throwing here enters the existing player fallback
+        if (generationPolicy?.observeFirstDraftOnly) return response;
+        // Never deliver an unchecked final rewrite. Throwing here enters the
+        // existing player fallback
         // path; the acceptance runner may retry the logical sample, while a
         // real learner receives the normal recoverable error message.
-        if (repair === 4) {
-            throw new Error(`Player response style contract failed after 4 repairs: ${violations.join(', ')}`);
+        if (repair === MAX_STYLE_REPAIRS) {
+            throw new Error(`Player response style contract failed after ${MAX_STYLE_REPAIRS} repair: ${violations.join(', ')}`);
         }
         // Repair is copy-editing, not a second teaching turn. Re-sending the
         // full multi-thousand-token course prompt made a tiny format correction
@@ -166,9 +218,9 @@ export async function invokeStyledPlayerResponse(
         // only for a faithful rewrite under the same output cap.
         currentMessages = [
             new SystemMessage("You are a precise copy editor. Preserve the draft's meaning and system markers; change only what the stated output contract requires."),
-            new HumanMessage(`${buildResponseStyleRepairInstruction(style, expanded, violations, repair >= 2, delivered.length, parentReply)}\n\nDRAFT TO REWRITE:\n${raw}`),
+            new HumanMessage(`${buildResponseStyleRepairInstruction(style, expanded, violations, MAX_STYLE_REPAIRS === 1 || repair >= 2, delivered.length, parentReply)}\n\nDRAFT TO REWRITE:\n${raw}`),
         ];
-        response = await invokeWithRetry(chat, currentMessages);
+        response = await invokeWithRetry(chat, currentMessages, generationPolicy);
     }
     return response;
 }
@@ -382,6 +434,7 @@ export async function generateAIResponse(
      */
     onToken?: (delta: string) => void,
     playerTurn?: { context: ValidatedPlayerContext; learnerText: string },
+    bufferedGenerationPolicy?: BufferedGenerationPolicy,
 ): Promise<AIResponse> {
     const startTime = performance.now();
     const timings: Record<string, number> = {};
@@ -655,6 +708,8 @@ export async function generateAIResponse(
                         expansionTarget,
                         playerTurn?.context.intent,
                         playerTurn?.context.parentIntent,
+                        playerTurn?.learnerText,
+                        bufferedGenerationPolicy,
                     );
                     if (onToken) {
                         markFirstToken();
@@ -664,7 +719,7 @@ export async function generateAIResponse(
                 }
                 return onToken
                     ? await streamWithRetry(chat, messages, onToken, markFirstToken)
-                    : await invokeWithRetry(chat, messages);
+                    : await invokeWithRetry(chat, messages, bufferedGenerationPolicy);
             },
         });
         const rawContent = contentToText(rawMessageContent);
@@ -727,6 +782,8 @@ export async function generateAIResponse(
             socioId: socio.id,
             error: error instanceof Error ? error.message : String(error),
         });
+
+        if (bufferedGenerationPolicy?.allowFallback === false) throw error;
 
         const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
         return {

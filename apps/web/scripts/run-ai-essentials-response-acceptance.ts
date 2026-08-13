@@ -9,13 +9,13 @@ import { handleIncomingMessage } from "../src/lib/messaging/handler";
 import { lessonSchema } from "../src/lib/journey-package/journey-package.schema";
 import { preparePlayerContext, resolvePlayerAccess, type PlayerParentIntent } from "../src/lib/player/service";
 import { deliveredTextMetrics } from "../src/lib/player/telemetryMetrics";
-import { finalQuestionHasOneFocus, hasTutorSelfIntroduction, repeatsParentOpening } from "../src/lib/player/responseStyle";
+import { finalQuestionHasOneFocus, hasPromptStartingPoint, hasTutorSelfIntroduction, repeatsParentOpening } from "../src/lib/player/responseStyle";
 
 const EXPECTED_BRANCH_ID = "br-misty-dawn-adj1cbft";
 const ORGANIZATION_SLUG = "ai-essentials-verification";
 const COLLECTION_KEY = "ai-essentials";
 
-type Sample = { id: string; intent: PlayerParentIntent | "expand"; parentIntent?: PlayerParentIntent; lessonKey: string; message?: string; parentSampleId?: string; identityAnchors?: string[]; domainNeutral?: boolean; requiresPromptStartingPoint?: boolean };
+type Sample = { id: string; intent: PlayerParentIntent | "expand"; parentIntent?: PlayerParentIntent; lessonKey: string; message?: string; parentSampleId?: string; identityAnchors?: string[]; requiresPromptStartingPoint?: boolean };
 type SampleOutput = Sample & {
   blockId?: string;
   output: string;
@@ -24,9 +24,14 @@ type SampleOutput = Sample & {
   finishReason: string | null;
   generationStatus: "success" | "fallback";
   attempts: number;
+  sampleAttempts: number;
+  deliveryPath: "first_draft" | "repair" | "sample_retry_first_draft" | "sample_retry_repair";
+  repairDrafts: number;
+  firstDraftViolations: string[];
+  providerTimeouts: number;
   metrics: ReturnType<typeof deliveredTextMetrics>;
   progressUnchanged: boolean | null;
-  acceptance: Record<string, boolean>;
+  acceptance: Record<string, boolean | null>;
 };
 type LessonIdentity = { title: string; otherTitles: string[] };
 type Checkpoint = {
@@ -42,6 +47,20 @@ type Checkpoint = {
   samples: SampleOutput[];
   lastError: { sampleId: string; message: string; at: string } | null;
   automatedAcceptance: { passed: boolean; failedSampleIds: string[] } | null;
+  generationPolicy?: { timeoutMs: number; maxSampleAttempts: number; allowFallback: false };
+  timeoutSummary?: { providerAttempts: number; providerTimeouts: number; rate: number | null };
+  generationSummary?: {
+    firstAttemptPass: { count: number; rate: number };
+    deliveredWithoutRepair: { count: number; rate: number };
+    deliveredAfterRepair: { count: number; rate: number };
+    sampleRetry: { count: number; rate: number };
+    livePathProjection: {
+      successful: { count: number; rate: number };
+      fallback: { count: number; rate: number };
+      providerCalls: number;
+      averageCallsPerTurn: number;
+    };
+  };
   professorReview: {
     required: true;
     completed: false;
@@ -67,13 +86,15 @@ function positiveIntegerArgument(name: string, fallback: number): number {
   return value;
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function expansionAddsNewOpening(parent: string | undefined, expanded: string): boolean {
   return Boolean(parent) && !repeatsParentOpening(parent, expanded);
 }
 
-const COURSE_DOMAIN_TERMS = /\b(?:supply chains?|suppliers?|shipments?|inventory|demand forecast(?:ing)?|safety stock|procurement|customer service|outdoor gear|marketing(?: email| campaign)?|baker(?:y|ies)|medical(?: diagnosis| clinic| advice)?|hiring tool|restaurants?)\b/iu;
 const STOCK_TEACHBACK_PRAISE = /\b(?:you(?:'ve| have)? nailed|complete shape|right (?:frame|order)|you(?:'ve| have)? (?:named|captured|listed|identified)(?: all| the| this)?|that(?:'s| is) exactly (?:the|right)|you(?:'ve| have) (?:got|mapped) the)\b/iu;
-const PROMPT_STARTING_POINT = /\b(?:act as|role)\b[\s\S]*\b(?:context|using)\b[\s\S]*\b(?:output|create)\b/iu;
 
 async function progressSnapshot(socioId: string) {
   const [blocks, lessons, milestones] = await Promise.all([
@@ -91,7 +112,8 @@ async function main() {
   const inputPath = resolve(argument("--inputs") ?? "../../content/ai-essentials-response-acceptance-inputs.json");
   const outputPath = resolve(argument("--output") ?? "../../content/ai-essentials-response-acceptance.json");
   const resume = process.argv.includes("--resume");
-  const maxSampleAttempts = positiveIntegerArgument("--max-sample-attempts", 3);
+  const firstDraftOnly = process.argv.includes("--first-draft-only");
+  const timeoutMs = positiveIntegerArgument("--timeout-ms", 75_000);
   const input = JSON.parse(readFileSync(inputPath, "utf8")) as { contentVersion: string; samples: Sample[] };
   if (input.contentVersion !== contentVersion || input.samples.length !== 25) throw new Error("Acceptance input must contain exactly 25 samples for the requested content version");
   const organization = await prisma.organization.findUniqueOrThrow({ where: { slug: ORGANIZATION_SLUG } });
@@ -122,6 +144,7 @@ async function main() {
       status: "running", runStartedAt: new Date().toISOString(), generatedAt: null,
       runId, socioId: socio.id, externalId, programVersionId: version.id, contentVersion,
       nextSampleIndex: 0, samples: [], lastError: null, automatedAcceptance: null,
+      generationPolicy: { timeoutMs, maxSampleAttempts: firstDraftOnly ? 1 : 3, allowFallback: false },
       professorReview: { required: true, completed: false, rubric: ["conversational tone", "clarity", "usefulness", "concision"], passingRule: "At least 23/25 score 4+ on every dimension; no score may be 1 or 2." },
     };
     writeCheckpoint(outputPath, checkpoint);
@@ -158,24 +181,47 @@ async function main() {
     let before: string | null = null;
     let after: string | null = null;
     let attempts = 0;
+    let sampleAttempts = 0;
+    let providerTimeouts = 0;
+    const styleValidations: Array<{ sampleAttempt: number; stage: "initial" | "repair"; repairIndex: number; passed: boolean; violations: string[] }> = [];
     try {
-      for (attempts = 1; attempts <= maxSampleAttempts; attempts++) {
-        context = await preparePlayerContext(access, { lessonKey: sample.lessonKey, blockId, intent: sample.intent, parentIntent });
-        before = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
-        startedAt = new Date();
-        result = await handleIncomingMessage({
-          externalId, channelType: "web", channel, language: "en",
-          message: sample.message ?? "Explain more.", playerContext: context,
-          // This suite measures tutor writing and player state. Sensing has its
-          // own acceptance run; launching a second model here couples response
-          // quality to unrelated provider latency and observation writes.
-          overrideDimensionState: {},
-        });
-        after = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
-        const delivered = !result.isError && !result.suppressed && result.responseText.trim().length > 0;
-        if (delivered || attempts === maxSampleAttempts) break;
-        process.stdout.write(`Retrying ${sample.id} after fallback (${attempts}/${maxSampleAttempts}).\n`);
+      let lastError: unknown;
+      const maxSampleAttempts = firstDraftOnly ? 1 : 3;
+      for (sampleAttempts = 1; sampleAttempts <= maxSampleAttempts; sampleAttempts++) {
+        try {
+          context = await preparePlayerContext(access, { lessonKey: sample.lessonKey, blockId, intent: sample.intent, parentIntent });
+          before = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
+          startedAt = new Date();
+          result = await handleIncomingMessage({
+            externalId, channelType: "web", channel, language: "en",
+            message: sample.message ?? "Explain more.", playerContext: context,
+            // This suite measures tutor writing and player state. Sensing has its
+            // own acceptance run; launching a second model here couples response
+            // quality to unrelated provider latency and observation writes.
+            overrideDimensionState: {},
+            // Acceptance is a buffered batch job. The outer loop retries the
+            // complete generation and style-validation path twice. No attempt
+            // is allowed to substitute fallback text.
+            bufferedGenerationPolicy: {
+              timeoutMs, maxRetries: 0, retryTimeouts: true, allowFallback: false,
+              observeFirstDraftOnly: firstDraftOnly,
+              onAttempt: () => { attempts += 1; },
+              onAttemptFailure: ({ timeout }) => { if (timeout) providerTimeouts += 1; },
+              onStyleValidation: (event) => { styleValidations.push({ sampleAttempt: sampleAttempts, ...event }); },
+            },
+          });
+          after = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
+          lastError = undefined;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (sampleAttempts < maxSampleAttempts) {
+            process.stdout.write(`Retrying ${sample.id} after hard generation failure (${sampleAttempts}/${maxSampleAttempts}).\n`);
+            await wait(2 ** (sampleAttempts - 1) * 1000);
+          }
+        }
       }
+      if (lastError) throw lastError;
     } catch (error) {
       checkpoint.status = "failed";
       checkpoint.lastError = { sampleId: sample.id, message: error instanceof Error ? error.message : String(error), at: new Date().toISOString() };
@@ -192,15 +238,25 @@ async function main() {
     const lessonIdentity = lessonIdentities.get(sample.lessonKey);
     const normalizedOutput = result.responseText.toLocaleLowerCase();
     const matchingIdentityAnchors = sample.identityAnchors?.filter((anchor) => normalizedOutput.includes(anchor.toLocaleLowerCase())).length ?? 0;
-    const correctLessonIdentity = sample.intent !== "lesson_entry" || !lessonIdentity || (
-      (sample.identityAnchors ? matchingIdentityAnchors >= Math.min(2, sample.identityAnchors.length) : normalizedOutput.includes(lessonIdentity.title.toLocaleLowerCase()))
-      && !lessonIdentity.otherTitles.some((title) => normalizedOutput.includes(title.toLocaleLowerCase()))
-    );
-    const cleanLessonEntry = sample.intent !== "lesson_entry" || (!/^\s*(?:lesson|module)\s+\d+\s*:/iu.test(result.responseText) && !/\[(?:end|start|complete)[^\]]*\]/iu.test(result.responseText));
-    const successfulGeneration = !result.isError && !result.suppressed && result.responseText.trim().length > 0;
+    let correctLessonIdentity: boolean | null = null;
+    if (sample.intent === "lesson_entry") {
+      correctLessonIdentity = lessonIdentity !== undefined && (
+        (sample.identityAnchors ? matchingIdentityAnchors >= Math.min(2, sample.identityAnchors.length) : normalizedOutput.includes(lessonIdentity.title.toLocaleLowerCase()))
+        && !lessonIdentity.otherTitles.some((title) => normalizedOutput.includes(title.toLocaleLowerCase()))
+      );
+    }
+    const cleanLessonEntry = sample.intent !== "lesson_entry" ? null : !/^\s*(?:lesson|module)\s+\d+\s*:/iu.test(result.responseText) && !/\[(?:end|start|complete)[^\]]*\]/iu.test(result.responseText);
+    const successfulGeneration = !result.isError && !result.suppressed && result.responseText.trim().length > 0 && trace?.success === true;
     const characterRange = sample.intent === "expand" ? { min: 450, max: 700 } : { min: 200, max: 420 };
     const noSelfReference = !hasTutorSelfIntroduction(result.responseText, "AI Mentor") && !hasTutorSelfIntroduction(result.responseText, "Tutor");
-    checkpoint.samples.push({ ...sample, blockId, output: result.responseText, model: trace?.model ?? null, promptHash: trace?.promptHash ?? null, finishReason: trace?.finishReason ?? null, generationStatus: successfulGeneration ? "success" : "fallback", attempts, metrics, progressUnchanged: sample.intent === "expand" ? before === after : null, acceptance: { sentenceLimit: metrics.sentences <= maxSentences, sentenceWordLimit: metrics.maxSentenceWords <= 35, characterRange: metrics.characters >= characterRange.min && metrics.characters <= characterRange.max, questionLimit: metrics.questionCount <= 1, questionPosition: metrics.questionInFinalSentence, singleFocusQuestion: finalQuestionHasOneFocus(result.responseText), asciiPunctuation: metrics.asciiPunctuation, singleParagraph: metrics.singleParagraph, noSelfReference, noMarkdown: !metrics.markdown, completeEnding, noLengthFinish: trace?.finishReason !== "length", successfulGeneration, noExpansionProgress: sample.intent !== "expand" || before === after, expansionGrounded, expansionNewOpening, correctLessonIdentity, cleanLessonEntry, domainNeutral: !sample.domainNeutral || !COURSE_DOMAIN_TERMS.test(result.responseText), noStockTeachbackPraise: (sample.intent !== "teach_back" && sample.parentIntent !== "teach_back") || !STOCK_TEACHBACK_PRAISE.test(result.responseText), promptStartingPoint: !sample.requiresPromptStartingPoint || PROMPT_STARTING_POINT.test(result.responseText) } });
+    const deliveredValidation = styleValidations.findLast((event) => event.passed) ?? styleValidations.at(-1);
+    if (!deliveredValidation) throw new Error(`No style validation recorded for ${sample.id}`);
+    const usedRepair = deliveredValidation.stage === "repair";
+    const deliveryPath: SampleOutput["deliveryPath"] = sampleAttempts === 1
+      ? (usedRepair ? "repair" : "first_draft")
+      : (usedRepair ? "sample_retry_repair" : "sample_retry_first_draft");
+    const firstDraftViolations = styleValidations.find((event) => event.sampleAttempt === 1 && event.stage === "initial")?.violations ?? [];
+    checkpoint.samples.push({ ...sample, blockId, output: result.responseText, model: trace?.model ?? null, promptHash: trace?.promptHash ?? null, finishReason: trace?.finishReason ?? null, generationStatus: successfulGeneration ? "success" : "fallback", attempts, sampleAttempts, deliveryPath, repairDrafts: styleValidations.filter((event) => event.stage === "repair").length, firstDraftViolations, providerTimeouts, metrics, progressUnchanged: sample.intent === "expand" ? before === after : null, acceptance: { sentenceLimit: metrics.sentences <= maxSentences, sentenceWordLimit: metrics.maxSentenceWords <= 35, commaChainedEnumeration: !metrics.commaChainedEnumeration, characterRange: metrics.characters >= characterRange.min && metrics.characters <= characterRange.max, questionLimit: metrics.questionCount <= 1, questionPosition: metrics.questionInFinalSentence, singleFocusQuestion: finalQuestionHasOneFocus(result.responseText), asciiPunctuation: metrics.asciiPunctuation, singleParagraph: metrics.singleParagraph, noSelfReference, noMarkdown: !metrics.markdown, completeEnding, traceRecorded: trace !== null, noLengthFinish: trace !== null && trace.finishReason !== "length", successfulGeneration, noExpansionProgress: sample.intent === "expand" ? before === after : null, expansionGrounded: sample.intent === "expand" ? expansionGrounded : null, expansionNewOpening: sample.intent === "expand" ? expansionNewOpening : null, correctLessonIdentity, cleanLessonEntry, noStockTeachbackPraise: (sample.intent === "teach_back" || sample.parentIntent === "teach_back") ? !STOCK_TEACHBACK_PRAISE.test(result.responseText) : null, promptStartingPoint: sample.requiresPromptStartingPoint ? hasPromptStartingPoint(result.responseText) : null } });
     if (sample.intent !== "expand") contexts.set(sample.id, { blockId, intent: sample.intent });
     checkpoint.nextSampleIndex = sampleIndex + 1;
     checkpoint.status = "running";
@@ -208,12 +264,35 @@ async function main() {
     writeCheckpoint(outputPath, checkpoint);
     process.stdout.write(`Checkpointed ${sample.id} (${checkpoint.nextSampleIndex}/${input.samples.length}).\n`);
   }
-  const failed = checkpoint.samples.flatMap((output) => Object.values(output.acceptance).every(Boolean) ? [] : [output.id]);
+  const failed = checkpoint.samples.flatMap((output) => Object.values(output.acceptance).every((value) => value !== false) && output.generationStatus === "success" ? [] : [output.id]);
   checkpoint.status = "complete";
   checkpoint.generatedAt = new Date().toISOString();
   checkpoint.automatedAcceptance = { passed: failed.length === 0, failedSampleIds: failed };
+  const providerAttempts = checkpoint.samples.reduce((total, sample) => total + sample.attempts, 0);
+  const providerTimeouts = checkpoint.samples.reduce((total, sample) => total + sample.providerTimeouts, 0);
+  checkpoint.generationPolicy = { timeoutMs, maxSampleAttempts: firstDraftOnly ? 1 : 3, allowFallback: false };
+  checkpoint.timeoutSummary = { providerAttempts, providerTimeouts, rate: providerAttempts ? providerTimeouts / providerAttempts : null };
+  const firstAttemptPassCount = checkpoint.samples.filter((sample) => sample.firstDraftViolations.length === 0).length;
+  const deliveredWithoutRepairCount = checkpoint.samples.filter((sample) => sample.deliveryPath === "first_draft" || sample.deliveryPath === "sample_retry_first_draft").length;
+  const deliveredAfterRepairCount = checkpoint.samples.filter((sample) => sample.deliveryPath === "repair" || sample.deliveryPath === "sample_retry_repair").length;
+  const sampleRetryCount = checkpoint.samples.filter((sample) => sample.sampleAttempts > 1).length;
+  const liveSuccessCount = checkpoint.samples.filter((sample) => sample.sampleAttempts === 1).length;
+  const liveProviderCalls = checkpoint.samples.reduce((total, sample) => total + (sample.firstDraftViolations.length === 0 ? 1 : 2), 0);
+  checkpoint.generationSummary = {
+    firstAttemptPass: { count: firstAttemptPassCount, rate: firstAttemptPassCount / checkpoint.samples.length },
+    deliveredWithoutRepair: { count: deliveredWithoutRepairCount, rate: deliveredWithoutRepairCount / checkpoint.samples.length },
+    deliveredAfterRepair: { count: deliveredAfterRepairCount, rate: deliveredAfterRepairCount / checkpoint.samples.length },
+    sampleRetry: { count: sampleRetryCount, rate: sampleRetryCount / checkpoint.samples.length },
+    livePathProjection: {
+      successful: { count: liveSuccessCount, rate: liveSuccessCount / checkpoint.samples.length },
+      fallback: { count: checkpoint.samples.length - liveSuccessCount, rate: (checkpoint.samples.length - liveSuccessCount) / checkpoint.samples.length },
+      providerCalls: liveProviderCalls,
+      averageCallsPerTurn: liveProviderCalls / checkpoint.samples.length,
+    },
+  };
   writeCheckpoint(outputPath, checkpoint);
   process.stdout.write(`Wrote ${checkpoint.samples.length} response samples to ${outputPath}; automated gate ${failed.length ? `failed: ${failed.join(", ")}` : "passed"}.\n`);
+  process.stdout.write(`Provider attempt timeouts: ${providerTimeouts}/${providerAttempts} (${providerAttempts ? (providerTimeouts / providerAttempts * 100).toFixed(1) : "0.0"}%).\n`);
   if (failed.length) process.exitCode = 1;
 }
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildResponseStyleInstruction,
   buildResponseStyleRepairInstruction,
+  finalQuestionHasOneFocus,
+  hasPromptStartingPoint,
   hasTutorSelfIntroduction,
   repeatsParentOpening,
   responseStyleViolations,
@@ -22,8 +24,8 @@ describe("player response style prompt", () => {
   });
 
   it("uses normal and expanded sentence limits without embedding a course code", () => {
-    expect(buildResponseStyleInstruction(style, false)).toContain("at most 3 complete sentences");
-    expect(buildResponseStyleInstruction(style, true)).toContain("at most 6 complete sentences");
+    expect(buildResponseStyleInstruction(style, false)).toContain("Never exceed 3 complete sentences");
+    expect(buildResponseStyleInstruction(style, true)).toContain("Never exceed 6 complete sentences");
     expect(buildResponseStyleInstruction(style, true)).not.toMatch(/AIESS|ai-essentials/i);
   });
 
@@ -31,11 +33,11 @@ describe("player response style prompt", () => {
     const question = buildResponseStyleInstruction(style, false, "question");
     const teachBack = buildResponseStyleInstruction(style, false, "teach_back");
     const expansion = buildResponseStyleInstruction(style, true, "expand", "question");
-    expect(question).toContain("Answer the learner's actual question in the first sentence");
+    expect(question).toContain("Answer in the first sentence");
     expect(question).not.toContain("complete shape");
-    expect(teachBack).toContain("Avoid stock praise");
+    expect(teachBack).toContain("praise the learner");
     expect(teachBack).not.toContain("Job concern");
-    expect(expansion).toContain("genuinely new material");
+    expect(expansion).toContain("first new detail");
     expect(expansion).toContain("expands a question reply");
     expect(expansion).not.toContain("supplier");
   });
@@ -44,8 +46,10 @@ describe("player response style prompt", () => {
     const prompt = buildResponseStyleInstruction(style, false);
     expect(prompt).toContain("at most 1 question");
     expect(prompt).toContain("plain text only");
-    expect(prompt).toContain("Do not join two complete thoughts with only a comma");
-    expect(prompt).toContain("focused on one thing");
+    expect(prompt).toContain("comma chains");
+    expect(prompt).toContain("one open focus");
+    expect(prompt).not.toContain("ASCII punctuation only");
+    expect(buildResponseStyleInstruction(style, false, "lesson_entry")).toContain("learner situation specific to this lesson");
   });
 
   it("uses 240 tokens normally, 480 for expansion, and no cap when omitted", () => {
@@ -74,8 +78,11 @@ describe("player response style prompt", () => {
     expect(responseStyleViolations(`${"x".repeat(210)} — done.`, style, false)).toContain("ascii_punctuation");
     expect(responseStyleViolations(`${"x".repeat(210)}.\nNext.`, style, false)).toContain("single_paragraph");
     expect(responseStyleViolations("I'm here to help you learn. ".repeat(10), style, false, "Tutor")).toContain("self_reference");
-    expect(responseStyleViolations(`${"x".repeat(205)}. Is it cost or speed?`, style, false)).toContain("question_focus");
+    expect(responseStyleViolations(`${"x".repeat(205)}. Is it cost or speed?`, style, false)).toContain("question_not_open");
     expect(responseStyleViolations(`${"x".repeat(205)}. Does that make sense?`, style, false)).toContain("question_not_open");
+    expect(finalQuestionHasOneFocus(`${"x".repeat(205)}. What did you give it, and what did you get back?`)).toBe(true);
+    expect(finalQuestionHasOneFocus(`${"x".repeat(205)}. What failed, and how will you fix it?`)).toBe(false);
+    expect(responseStyleViolations(`Use a role, task, context, constraints, and output format. ${"x".repeat(210)}.`, style, false)).toContain("comma_chained_enumeration");
     expect(hasTutorSelfIntroduction("I'm Tutor, and I'm glad you're here.", "Tutor")).toBe(true);
     expect(hasTutorSelfIntroduction("I can draft the first version.", "Tutor")).toBe(false);
   });
@@ -91,6 +98,11 @@ describe("player response style prompt", () => {
       .toContain("repeated_parent_question");
     expect(responseStyleViolations(`${"You've nailed the framework. ".repeat(9)}`, style, false, "Tutor", undefined, "teach_back"))
       .toContain("stock_praise");
+    expect(responseStyleViolations(`${"x".repeat(210)}.`, style, false, "Tutor", undefined, "question", undefined, "Can you write the prompt for me?"))
+      .toContain("prompt_starting_point");
+    expect(responseStyleViolations("Act as [role] and use [context] to create [output] that meets [criteria] while avoiding [constraint]. Tell me the audience so I can replace the placeholders. What audience should this address?", style, false, "Tutor", undefined, "question", undefined, "Can you write the prompt for me?"))
+      .not.toContain("prompt_starting_point");
+    expect(hasPromptStartingPoint("Act as a subject expert and use your knowledge to create output that meets success criteria.")).toBe(true);
   });
 
   it("builds a model rewrite request instead of truncating the draft", () => {
@@ -98,13 +110,26 @@ describe("player response style prompt", () => {
     expect(repair).toContain("at most 6 complete sentences total");
     expect(repair).toContain("no sentence over 35 words");
     expect(repair).toContain("no more than 1 question-mark character");
+    expect(repair).toContain("Use five complete sentences");
     expect(repair).toContain("Remove lower-priority detail");
     expect(repair).toContain("Return only the rewritten final reply");
     expect(buildResponseStyleRepairInstruction(style, true, ["question_limit"], true)).toContain(
       "Use zero question-mark characters",
     );
     expect(buildResponseStyleRepairInstruction(style, false, ["question_focus"]))
-      .toContain("either-or, and multi-part questions");
+      .toContain("never use yes-no or coordinate a second question");
+    expect(buildResponseStyleRepairInstruction(style, false, ["comma_chained_enumeration"]))
+      .toContain("Remove every four-or-more-item enumeration");
+    expect(buildResponseStyleRepairInstruction(style, false, ["comma_chained_enumeration"], true))
+      .toContain("Use no comma characters");
+    expect(buildResponseStyleRepairInstruction(style, true, ["repeated_parent_question"], true))
+      .toContain("Use zero question-mark characters");
+    expect(buildResponseStyleRepairInstruction(style, false, ["stock_praise"], true))
+      .toContain("Use no second-person words");
+    expect(buildResponseStyleRepairInstruction(style, false, ["prompt_starting_point"]))
+      .toContain("usable prompt starting point");
+    expect(buildResponseStyleRepairInstruction(style, false, ["prompt_starting_point"]))
+      .not.toContain("Sentence 1 must be");
     expect(buildResponseStyleRepairInstruction(style, true, ["control_marker"])).toContain(
       "Remove all other bracketed drafting markers such as [END]",
     );

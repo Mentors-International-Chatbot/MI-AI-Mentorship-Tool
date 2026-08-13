@@ -2,7 +2,7 @@ import { repo } from '@/lib/repo';
 import { resolveCourseMilestones } from '@/lib/ai/prompts/courseOutcome';
 import { resolvePromptScope } from '@/lib/ai/prompts/resolveScope';
 import { handleOnboarding } from '@/lib/onboarding/service';
-import { generateAIResponse } from '@/lib/ai/service';
+import { generateAIResponse, type BufferedGenerationPolicy } from '@/lib/ai/service';
 import { InteractionMode, parseScore, type ParsedMarkers } from '@/lib/ai/prompts';
 import { preloadCollection, getLessonCount } from '@/lib/lessons/db-lesson-service';
 import { persistSentimentAndFlag } from '@/lib/sentiment/pipeline';
@@ -70,6 +70,8 @@ export interface HandleMessageInput {
     playerContext?: ValidatedPlayerContext;
     /** Test/acceptance-only prior state; skips the independent sensing model. */
     overrideDimensionState?: DimensionStateMap;
+    /** Batch-only buffered generation behavior. Omitted by every live route. */
+    bufferedGenerationPolicy?: BufferedGenerationPolicy;
 }
 
 export interface HandleMessageResult {
@@ -196,7 +198,7 @@ async function persistPlayerObservations(params: {
 
 export async function handleIncomingMessage(input: HandleMessageInput): Promise<HandleMessageResult> {
     const startTime = performance.now();
-    const { externalId, channelType, message, channel, language, userName, systemInitiated, onToken, playerContext, overrideDimensionState } = input;
+    const { externalId, channelType, message, channel, language, userName, systemInitiated, onToken, playerContext, overrideDimensionState, bufferedGenerationPolicy } = input;
 
     let socio = await repo.getSocio(channelType, externalId);
     const isNewSocio = !socio;
@@ -513,6 +515,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         overrideDimensionState,
         systemInitiated ? undefined : onToken,
         playerContext ? { context: playerContext, learnerText: message } : undefined,
+        bufferedGenerationPolicy,
     );
 
     // ── Handle gated assessment mode ──────────────────────────────────────────

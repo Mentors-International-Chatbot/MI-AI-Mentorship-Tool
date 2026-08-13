@@ -64,7 +64,7 @@ function harness() {
 const NO_MESSAGES: [] = [];
 
 describe('invokeStyledPlayerResponse — the delivery contract', () => {
-  it('rejects an invalid fourth rewrite instead of delivering it unchecked', async () => {
+  it('rejects an invalid safety-net rewrite instead of delivering it unchecked', async () => {
     const chat = { invoke: vi.fn().mockResolvedValue({ content: 'One? Two? [END]' }) };
 
     await expect(invokeStyledPlayerResponse(chat, NO_MESSAGES, {
@@ -73,9 +73,55 @@ describe('invokeStyledPlayerResponse — the delivery contract', () => {
       markdown: 'none',
       maxQuestions: 1,
       expanded: { maxSentences: 6, maxOutputTokens: 480 },
-    }, false)).rejects.toThrow('Player response style contract failed after 4 repairs');
+    }, false)).rejects.toThrow('Player response style contract failed after 1 repair');
 
-    expect(chat.invoke).toHaveBeenCalledTimes(5);
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('can observe one invalid first draft without entering the live repair path', async () => {
+    const validations: Array<{ stage: string; repairIndex: number; passed: boolean; violations: string[] }> = [];
+    const chat = { invoke: vi.fn().mockResolvedValue({ content: 'One? Two? [END]' }) };
+    const response = await invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, undefined, undefined, undefined, {
+      observeFirstDraftOnly: true,
+      onStyleValidation: (event) => validations.push(event),
+    });
+
+    expect(response.content).toBe('One? Two? [END]');
+    expect(chat.invoke).toHaveBeenCalledTimes(1);
+    expect(validations).toEqual([expect.objectContaining({ stage: 'initial', repairIndex: 0, passed: false })]);
+  });
+
+  it('uses the batch timeout policy for each buffered attempt', async () => {
+    vi.useFakeTimers();
+    const chat = { invoke: vi.fn(() => new Promise<{ content: unknown }>(() => undefined)) };
+    const pending = invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, undefined, undefined, undefined, {
+      timeoutMs: 75_000,
+      maxRetries: 2,
+      retryTimeouts: true,
+      allowFallback: false,
+    });
+
+    const rejection = expect(pending).rejects.toThrow('AI request timeout after 75000ms');
+    await vi.advanceTimersByTimeAsync(75_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(75_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(75_000);
+    await rejection;
+    expect(chat.invoke).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
   });
 });
 
