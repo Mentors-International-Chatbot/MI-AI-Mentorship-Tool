@@ -68,6 +68,8 @@ export interface HandleMessageInput {
     onToken?: (delta: string) => void;
     /** Server-resolved context for the course player; never trusted from the client. */
     playerContext?: ValidatedPlayerContext;
+    /** Test/acceptance-only prior state; skips the independent sensing model. */
+    overrideDimensionState?: DimensionStateMap;
 }
 
 export interface HandleMessageResult {
@@ -194,7 +196,7 @@ async function persistPlayerObservations(params: {
 
 export async function handleIncomingMessage(input: HandleMessageInput): Promise<HandleMessageResult> {
     const startTime = performance.now();
-    const { externalId, channelType, message, channel, language, userName, systemInitiated, onToken, playerContext } = input;
+    const { externalId, channelType, message, channel, language, userName, systemInitiated, onToken, playerContext, overrideDimensionState } = input;
 
     let socio = await repo.getSocio(channelType, externalId);
     const isNewSocio = !socio;
@@ -497,7 +499,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
                     ? 'Evaluate the learner answer. Give concise affirmation or correction, then ask exactly one focused follow-up question.'
                     : 'This is the final teach-back turn. Give concise closing feedback and do not ask another question.'
                 : playerContext.intent === 'lesson_entry'
-                    ? 'Give one short framing message for this verified lesson in at most three sentences total. Name the exact verified lesson title naturally inside the first sentence; do not use a standalone title/header, do not call it Lesson 1, and do not emit bracketed status text such as [end of lesson].'
+                    ? 'Give one short framing message for this verified lesson in at most three sentences total. Make the exact verified subject unmistakable in the first sentence; do not use a standalone title/header, do not call it Lesson 1, and do not emit bracketed status text such as [end of lesson].'
                     : playerContext.intent === 'capstone'
                         ? 'Coach the learner on the capstone. Ask one focused question and do not do the project for them.'
                         : 'Answer the learner question using the current lesson context without advancing lesson progress.',
@@ -508,7 +510,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         socio,
         generationMessage,
         collectionKey,
-        undefined,
+        overrideDimensionState,
         systemInitiated ? undefined : onToken,
         playerContext ? { context: playerContext, learnerText: message } : undefined,
     );

@@ -9,13 +9,13 @@ import { handleIncomingMessage } from "../src/lib/messaging/handler";
 import { lessonSchema } from "../src/lib/journey-package/journey-package.schema";
 import { preparePlayerContext, resolvePlayerAccess, type PlayerParentIntent } from "../src/lib/player/service";
 import { deliveredTextMetrics } from "../src/lib/player/telemetryMetrics";
-import { hasTutorSelfIntroduction, repeatsParentOpening } from "../src/lib/player/responseStyle";
+import { finalQuestionHasOneFocus, hasTutorSelfIntroduction, repeatsParentOpening } from "../src/lib/player/responseStyle";
 
 const EXPECTED_BRANCH_ID = "br-misty-dawn-adj1cbft";
 const ORGANIZATION_SLUG = "ai-essentials-verification";
 const COLLECTION_KEY = "ai-essentials";
 
-type Sample = { id: string; intent: PlayerParentIntent | "expand"; parentIntent?: PlayerParentIntent; lessonKey: string; message?: string; parentSampleId?: string; identityAnchors?: string[] };
+type Sample = { id: string; intent: PlayerParentIntent | "expand"; parentIntent?: PlayerParentIntent; lessonKey: string; message?: string; parentSampleId?: string; identityAnchors?: string[]; domainNeutral?: boolean; requiresPromptStartingPoint?: boolean };
 type SampleOutput = Sample & {
   blockId?: string;
   output: string;
@@ -70,6 +70,10 @@ function positiveIntegerArgument(name: string, fallback: number): number {
 function expansionAddsNewOpening(parent: string | undefined, expanded: string): boolean {
   return Boolean(parent) && !repeatsParentOpening(parent, expanded);
 }
+
+const COURSE_DOMAIN_TERMS = /\b(?:supply chains?|suppliers?|shipments?|inventory|demand forecast(?:ing)?|safety stock|procurement|customer service|outdoor gear|marketing(?: email| campaign)?|baker(?:y|ies)|medical(?: diagnosis| clinic| advice)?|hiring tool|restaurants?)\b/iu;
+const STOCK_TEACHBACK_PRAISE = /\b(?:you(?:'ve| have)? nailed|complete shape|right (?:frame|order)|you(?:'ve| have)? (?:named|captured|listed|identified)(?: all| the| this)?|that(?:'s| is) exactly (?:the|right)|you(?:'ve| have) (?:got|mapped) the)\b/iu;
+const PROMPT_STARTING_POINT = /\b(?:act as|role)\b[\s\S]*\b(?:context|using)\b[\s\S]*\b(?:output|create)\b/iu;
 
 async function progressSnapshot(socioId: string) {
   const [blocks, lessons, milestones] = await Promise.all([
@@ -159,7 +163,14 @@ async function main() {
         context = await preparePlayerContext(access, { lessonKey: sample.lessonKey, blockId, intent: sample.intent, parentIntent });
         before = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
         startedAt = new Date();
-        result = await handleIncomingMessage({ externalId, channelType: "web", channel, language: "en", message: sample.message ?? "Explain more.", playerContext: context });
+        result = await handleIncomingMessage({
+          externalId, channelType: "web", channel, language: "en",
+          message: sample.message ?? "Explain more.", playerContext: context,
+          // This suite measures tutor writing and player state. Sensing has its
+          // own acceptance run; launching a second model here couples response
+          // quality to unrelated provider latency and observation writes.
+          overrideDimensionState: {},
+        });
         after = sample.intent === "expand" ? await progressSnapshot(socio.id) : null;
         const delivered = !result.isError && !result.suppressed && result.responseText.trim().length > 0;
         if (delivered || attempts === maxSampleAttempts) break;
@@ -180,15 +191,16 @@ async function main() {
     const expansionNewOpening = sample.intent !== "expand" || expansionAddsNewOpening(checkpoint.samples.find((item) => item.id === sample.parentSampleId)?.output, result.responseText);
     const lessonIdentity = lessonIdentities.get(sample.lessonKey);
     const normalizedOutput = result.responseText.toLocaleLowerCase();
+    const matchingIdentityAnchors = sample.identityAnchors?.filter((anchor) => normalizedOutput.includes(anchor.toLocaleLowerCase())).length ?? 0;
     const correctLessonIdentity = sample.intent !== "lesson_entry" || !lessonIdentity || (
-      (sample.identityAnchors?.some((anchor) => normalizedOutput.includes(anchor.toLocaleLowerCase())) ?? normalizedOutput.includes(lessonIdentity.title.toLocaleLowerCase()))
+      (sample.identityAnchors ? matchingIdentityAnchors >= Math.min(2, sample.identityAnchors.length) : normalizedOutput.includes(lessonIdentity.title.toLocaleLowerCase()))
       && !lessonIdentity.otherTitles.some((title) => normalizedOutput.includes(title.toLocaleLowerCase()))
     );
     const cleanLessonEntry = sample.intent !== "lesson_entry" || (!/^\s*(?:lesson|module)\s+\d+\s*:/iu.test(result.responseText) && !/\[(?:end|start|complete)[^\]]*\]/iu.test(result.responseText));
     const successfulGeneration = !result.isError && !result.suppressed && result.responseText.trim().length > 0;
     const characterRange = sample.intent === "expand" ? { min: 450, max: 700 } : { min: 200, max: 420 };
     const noSelfReference = !hasTutorSelfIntroduction(result.responseText, "AI Mentor") && !hasTutorSelfIntroduction(result.responseText, "Tutor");
-    checkpoint.samples.push({ ...sample, blockId, output: result.responseText, model: trace?.model ?? null, promptHash: trace?.promptHash ?? null, finishReason: trace?.finishReason ?? null, generationStatus: successfulGeneration ? "success" : "fallback", attempts, metrics, progressUnchanged: sample.intent === "expand" ? before === after : null, acceptance: { sentenceLimit: metrics.sentences <= maxSentences, sentenceWordLimit: metrics.maxSentenceWords <= 35, characterRange: metrics.characters >= characterRange.min && metrics.characters <= characterRange.max, questionLimit: metrics.questionCount <= 1, questionPosition: metrics.questionInFinalSentence, asciiPunctuation: metrics.asciiPunctuation, singleParagraph: metrics.singleParagraph, noSelfReference, noMarkdown: !metrics.markdown, completeEnding, noLengthFinish: trace?.finishReason !== "length", successfulGeneration, noExpansionProgress: sample.intent !== "expand" || before === after, expansionGrounded, expansionNewOpening, correctLessonIdentity, cleanLessonEntry } });
+    checkpoint.samples.push({ ...sample, blockId, output: result.responseText, model: trace?.model ?? null, promptHash: trace?.promptHash ?? null, finishReason: trace?.finishReason ?? null, generationStatus: successfulGeneration ? "success" : "fallback", attempts, metrics, progressUnchanged: sample.intent === "expand" ? before === after : null, acceptance: { sentenceLimit: metrics.sentences <= maxSentences, sentenceWordLimit: metrics.maxSentenceWords <= 35, characterRange: metrics.characters >= characterRange.min && metrics.characters <= characterRange.max, questionLimit: metrics.questionCount <= 1, questionPosition: metrics.questionInFinalSentence, singleFocusQuestion: finalQuestionHasOneFocus(result.responseText), asciiPunctuation: metrics.asciiPunctuation, singleParagraph: metrics.singleParagraph, noSelfReference, noMarkdown: !metrics.markdown, completeEnding, noLengthFinish: trace?.finishReason !== "length", successfulGeneration, noExpansionProgress: sample.intent !== "expand" || before === after, expansionGrounded, expansionNewOpening, correctLessonIdentity, cleanLessonEntry, domainNeutral: !sample.domainNeutral || !COURSE_DOMAIN_TERMS.test(result.responseText), noStockTeachbackPraise: (sample.intent !== "teach_back" && sample.parentIntent !== "teach_back") || !STOCK_TEACHBACK_PRAISE.test(result.responseText), promptStartingPoint: !sample.requiresPromptStartingPoint || PROMPT_STARTING_POINT.test(result.responseText) } });
     if (sample.intent !== "expand") contexts.set(sample.id, { blockId, intent: sample.intent });
     checkpoint.nextSampleIndex = sampleIndex + 1;
     checkpoint.status = "running";

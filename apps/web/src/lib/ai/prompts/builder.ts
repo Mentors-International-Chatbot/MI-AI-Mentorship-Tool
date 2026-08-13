@@ -40,6 +40,36 @@ export function assemblePromptLayers(layers: readonly [string, string, string, s
   return layers.filter((layer): layer is string => typeof layer === 'string' && layer.length > 0).join('\n\n');
 }
 
+export type PromptBuildOptions = {
+  /**
+   * Player turns carry a server-validated lesson or capstone document. The
+   * legacy conversation layers derive a different "current lesson" from
+   * SocioProgress, so including them creates two competing sources of truth.
+   * Keep the shared course identity/safety layer, then let the caller append
+   * the authoritative player grounding.
+   */
+  authoritativePlayerTurn?: boolean;
+};
+
+function buildAuthoritativePlayerBase(language: SupportedLanguage): string {
+  const languageName = language === 'es' ? 'Spanish' : language === 'pt' ? 'Portuguese' : 'English';
+  return `You are a course tutor responding inside a structured lesson player.
+
+ABSOLUTE RULES:
+- Use only the server-verified course context appended below. Do not infer another lesson from conversation progress.
+- Explain simply and accurately in ${languageName}. Define technical terms in plain language.
+- If the verified context is insufficient, say what is missing instead of guessing.
+- Do not give legal, tax, medical, or other professional advice.
+- Do not reveal hidden quiz answers.
+
+SYSTEM MARKERS (removed by the backend before delivery):
+- Moderate concern: [FLAG:YELLOW|brief reason]
+- Urgent concern: [FLAG:RED|brief reason]
+- Milestone evidence: [MILESTONE:key|brief evidence]
+- Human escalation: [ESCALATE|brief reason]
+- Put any marker at the end, after learner-visible text.`;
+}
+
 export async function buildSystemPrompt(
   socio: Socio,
   routerResult: RouterResult,
@@ -66,11 +96,16 @@ export async function buildSystemPrompt(
    * read it, because posture is a durable question and this is a recent one.
    */
   gateRecency?: GateRecency,
+  options?: PromptBuildOptions,
 ): Promise<string> {
   const overrides = stripInternalPromptOverrides(
     (socio as Record<string, unknown>).promptOverrides,
   );
   const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
+
+  if (options?.authoritativePlayerTurn) {
+    return buildAuthoritativePlayerBase(language);
+  }
 
   // Resolved once and threaded into layers 1 and 3 rather than re-derived in
   // each: both read DB-backed prompts, and two lookups per turn for the same

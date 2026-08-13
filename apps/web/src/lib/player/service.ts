@@ -138,12 +138,26 @@ export async function playerTutorGrounding(context: ValidatedPlayerContext): Pro
   });
   if (!row?.versions[0]) throw new PlayerError(404, "lesson_not_found", "Lesson not found");
   const lesson = lessonSchema.parse(row.versions[0].body);
-  const block = context.blockId ? lesson.blocks.find((item) => item.id === context.blockId) : undefined;
+  // Lesson entry has no block id, but still needs concrete, version-pinned
+  // subject matter. Without this fallback the model sees only a title and can
+  // drift into another lesson that happens to share a broad concept.
+  const block = context.blockId
+    ? lesson.blocks.find((item) => item.id === context.blockId)
+    : context.intent === "lesson_entry"
+      ? lesson.blocks[0]
+      : undefined;
   const safeBlock = block ? sanitizePlayerBlock(block) : undefined;
+  const parentIntent = context.intent === "expand" ? context.parentIntent : context.intent;
+  const lessonEntry = parentIntent === "lesson_entry";
+  const teachBack = parentIntent === "teach_back";
   return [
-    `Lesson: ${lesson.title}`,
+    lessonEntry ? `Lesson: ${lesson.title}` : `Lesson key: ${context.lessonKey}`,
     `Key concepts: ${lesson.keyConcepts.join(", ")}`,
-    safeBlock ? `Current block: ${JSON.stringify(safeBlock)}` : "",
+    // A question is grounded by its version-pinned concepts. Sending the full
+    // authored explanation also sends its illustrative industry, which the
+    // model repeatedly misread as learner context. Teach-backs retain their
+    // prompt/evaluation block, while entries retain the full opening block.
+    safeBlock && (lessonEntry || teachBack) ? `Current block: ${JSON.stringify(safeBlock)}` : "",
   ].filter(Boolean).join("\n");
 }
 

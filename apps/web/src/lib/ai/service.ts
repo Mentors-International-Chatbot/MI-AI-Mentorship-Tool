@@ -140,6 +140,8 @@ export async function invokeStyledPlayerResponse(
     expanded: boolean,
     personaName?: string,
     parentReply?: string,
+    intent?: Parameters<typeof responseStyleViolations>[5],
+    parentIntent?: Parameters<typeof responseStyleViolations>[6],
 ): Promise<{ content: unknown; response_metadata?: unknown }> {
     let currentMessages = messages;
     let response = await invokeWithRetry(chat, currentMessages);
@@ -147,7 +149,7 @@ export async function invokeStyledPlayerResponse(
     for (let repair = 0; ; repair++) {
         const raw = contentToText(response.content);
         const delivered = sanitizeForDelivery(parseMarkers(raw).cleanText);
-        const violations = responseStyleViolations(delivered, style, expanded, personaName, parentReply);
+        const violations = responseStyleViolations(delivered, style, expanded, personaName, parentReply, intent, parentIntent);
         if (violations.length === 0) return response;
         // Never deliver an unchecked final rewrite. The old bounded loop made
         // four repairs but returned repair four even when it still violated
@@ -400,7 +402,13 @@ export async function generateAIResponse(
     const playerPersonaName = typeof playerIdentity.mentorName === 'string' ? playerIdentity.mentorName : undefined;
     const expanded = playerTurn?.context.intent === 'expand';
     const maxTokens = resolvePlayerMaxTokens(responseStyle, expanded);
-    const chat = createOpenRouterChat({ temperature: 0.7, ...(maxTokens ? { maxTokens } : {}) });
+    // Styled player replies are constrained coaching, not creative writing.
+    // Lower variance improves adherence to the verified lesson and intent while
+    // leaving MI, PB&J, sensing, and every unconfigured path unchanged.
+    const chat = createOpenRouterChat({
+        temperature: responseStyle ? 0.3 : 0.7,
+        ...(maxTokens ? { maxTokens } : {}),
+    });
 
     // 0. State the router needs. Both reads are independent, so they go out
     //    together rather than one after the other.
@@ -541,6 +549,22 @@ export async function generateAIResponse(
             },
             select: { role: true, content: true },
         }).then((message) => message ? [message] : [])
+        : playerTurn
+        ? playerRuntimeRepo.message.findMany({
+            where: {
+                socioId: socio.id,
+                assessmentSessionId: null,
+                metadata: {
+                    path: ['programVersionId'],
+                    equals: playerTurn.context.programVersionId,
+                },
+                AND: [
+                    { metadata: { path: ['lessonKey'], equals: playerTurn.context.lessonKey } },
+                ],
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+        }).then((rows) => rows.reverse())
         : repo.getMessages(socio.id, 10);
     const [baseSystemPrompt, modelHistory, playerGrounding] = await Promise.all([
         buildSystemPrompt(
@@ -553,14 +577,20 @@ export async function generateAIResponse(
             modeResult.activeFlags,
             modeResult.reachedMilestoneKeys,
             modeResult.gateRecency,
+            playerTurn ? { authoritativePlayerTurn: true } : undefined,
         ),
         modelHistoryPromise,
         playerTurn ? playerTutorGrounding(playerTurn.context) : Promise.resolve(null),
     ]);
     const groundedSystemPrompt = playerGrounding
-        ? `${baseSystemPrompt}\n\nPLAYER COURSE CONTEXT (authoritative; do not reveal hidden quiz answers):\n${playerGrounding}\n- This verified player context overrides conflicting legacy lesson numbers, titles, and progress text elsewhere in the prompt.\n- Discuss only this verified lesson or capstone in the reply.`
+        ? `${baseSystemPrompt}\n\nPLAYER COURSE CONTEXT (authoritative; do not reveal hidden quiz answers):\n${playerGrounding}\n- This is the only lesson or capstone context for this turn. Discuss only this verified context.\n- Treat industry examples in the authored block as illustrations, not as the learner's own situation. Reuse an industry only when the learner or their stated project names it.`
         : baseSystemPrompt;
-    const responseInstruction = buildResponseStyleInstruction(responseStyle, expanded);
+    const responseInstruction = buildResponseStyleInstruction(
+        responseStyle,
+        expanded,
+        playerTurn?.context.intent,
+        playerTurn?.context.parentIntent,
+    );
     const systemPrompt = responseInstruction ? `${groundedSystemPrompt}\n\n${responseInstruction}` : groundedSystemPrompt;
     timings.buildPrompt = performance.now() - promptStart;
     timings.fetchHistory = 0; // folded into buildPrompt above
@@ -616,7 +646,16 @@ export async function generateAIResponse(
                     // Buffer configured player replies until the output
                     // contract is validated. Streaming an invalid first draft
                     // would make a later rewrite impossible to retract.
-                    const response = await invokeStyledPlayerResponse(chat, messages, responseStyle, expanded, playerPersonaName, expansionTarget);
+                    const response = await invokeStyledPlayerResponse(
+                        chat,
+                        messages,
+                        responseStyle,
+                        expanded,
+                        playerPersonaName,
+                        expansionTarget,
+                        playerTurn?.context.intent,
+                        playerTurn?.context.parentIntent,
+                    );
                     if (onToken) {
                         markFirstToken();
                         onToken(sanitizeForDelivery(parseMarkers(contentToText(response.content)).cleanText));

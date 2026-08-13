@@ -155,4 +155,36 @@ describe("frozen MI model input", () => {
       assembleOrderedModelMessages(systemPrompt, fixture.history, fixture.incomingText),
     ).toEqual(expectedMessages);
   });
+
+  it("uses only the shared core layer before authoritative player grounding", async () => {
+    const socio: Socio = {
+      ...fixture.socio,
+      createdAt: new Date(fixture.socio.createdAt),
+      updatedAt: new Date(fixture.socio.updatedAt),
+    };
+    const routerResult: RouterResult = {
+      ...fixture.routerResult,
+      mode: InteractionMode.LESSON_DELIVERY,
+    };
+
+    const playerBase = await buildSystemPrompt(
+      socio,
+      routerResult,
+      fixture.progress,
+      fixture.collectionKey,
+      fixture.dimensionState,
+      {},
+      fixture.activeFlags,
+      undefined,
+      fixture.gateRecency,
+      { authoritativePlayerTurn: true },
+    );
+
+    expect(mocks.getSocioContext).not.toHaveBeenCalled();
+    expect(mocks.getLessonTitle).not.toHaveBeenCalled();
+    expect(mocks.getLessonData).not.toHaveBeenCalled();
+    expect(mocks.getActivePromptCached).not.toHaveBeenCalled();
+    expect(playerBase).toContain("server-verified course context");
+    expect(playerBase).not.toContain("Celebrate every achievement");
+  });
 });

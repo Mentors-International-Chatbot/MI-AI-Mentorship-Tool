@@ -27,10 +27,25 @@ describe("player response style prompt", () => {
     expect(buildResponseStyleInstruction(style, true)).not.toMatch(/AIESS|ai-essentials/i);
   });
 
+  it("calibrates each player intent without leaking examples across intents", () => {
+    const question = buildResponseStyleInstruction(style, false, "question");
+    const teachBack = buildResponseStyleInstruction(style, false, "teach_back");
+    const expansion = buildResponseStyleInstruction(style, true, "expand", "question");
+    expect(question).toContain("Answer the learner's actual question in the first sentence");
+    expect(question).not.toContain("complete shape");
+    expect(teachBack).toContain("Avoid stock praise");
+    expect(teachBack).not.toContain("Job concern");
+    expect(expansion).toContain("genuinely new material");
+    expect(expansion).toContain("expands a question reply");
+    expect(expansion).not.toContain("supplier");
+  });
+
   it("states the question and plain-text constraints", () => {
     const prompt = buildResponseStyleInstruction(style, false);
     expect(prompt).toContain("at most 1 question");
     expect(prompt).toContain("plain text only");
+    expect(prompt).toContain("Do not join two complete thoughts with only a comma");
+    expect(prompt).toContain("focused on one thing");
   });
 
   it("uses 240 tokens normally, 480 for expansion, and no cap when omitted", () => {
@@ -59,6 +74,8 @@ describe("player response style prompt", () => {
     expect(responseStyleViolations(`${"x".repeat(210)} — done.`, style, false)).toContain("ascii_punctuation");
     expect(responseStyleViolations(`${"x".repeat(210)}.\nNext.`, style, false)).toContain("single_paragraph");
     expect(responseStyleViolations("I'm here to help you learn. ".repeat(10), style, false, "Tutor")).toContain("self_reference");
+    expect(responseStyleViolations(`${"x".repeat(205)}. Is it cost or speed?`, style, false)).toContain("question_focus");
+    expect(responseStyleViolations(`${"x".repeat(205)}. Does that make sense?`, style, false)).toContain("question_not_open");
     expect(hasTutorSelfIntroduction("I'm Tutor, and I'm glad you're here.", "Tutor")).toBe(true);
     expect(hasTutorSelfIntroduction("I can draft the first version.", "Tutor")).toBe(false);
   });
@@ -70,6 +87,10 @@ describe("player response style prompt", () => {
     expect(repeatsParentOpening(parent, repeated)).toBe(true);
     expect(repeatsParentOpening(parent, extended)).toBe(false);
     expect(responseStyleViolations(repeated, style, true, "Tutor", parent)).toContain("repeated_parent_opening");
+    expect(responseStyleViolations(`The tell is specificity. ${"x".repeat(420)}. What should you check?`, style, true, "Tutor", "A model predicts text. What should you check?"))
+      .toContain("repeated_parent_question");
+    expect(responseStyleViolations(`${"You've nailed the framework. ".repeat(9)}`, style, false, "Tutor", undefined, "teach_back"))
+      .toContain("stock_praise");
   });
 
   it("builds a model rewrite request instead of truncating the draft", () => {
@@ -82,6 +103,8 @@ describe("player response style prompt", () => {
     expect(buildResponseStyleRepairInstruction(style, true, ["question_limit"], true)).toContain(
       "Use zero question-mark characters",
     );
+    expect(buildResponseStyleRepairInstruction(style, false, ["question_focus"]))
+      .toContain("either-or, and multi-part questions");
     expect(buildResponseStyleRepairInstruction(style, true, ["control_marker"])).toContain(
       "Remove all other bracketed drafting markers such as [END]",
     );
