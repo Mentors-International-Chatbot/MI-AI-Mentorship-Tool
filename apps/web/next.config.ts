@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
+import { resolve } from "node:path";
 
 const nextConfig: NextConfig = {
+  // The repository intentionally has a root package for the content converter
+  // and an app package for Next. Declare the app root instead of asking Next to
+  // guess from two legitimate lockfiles.
+  turbopack: { root: resolve(__dirname) },
   async headers() {
     const ancestors = process.env.CANVAS_FRAME_ANCESTORS ?? "https://byu.instructure.com https://byu.beta.instructure.com https://byu.test.instructure.com";
     return [

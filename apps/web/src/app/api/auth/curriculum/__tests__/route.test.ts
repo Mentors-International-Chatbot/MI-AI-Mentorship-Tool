@@ -113,6 +113,16 @@ function loggedAt(level: 'info' | 'warn' | 'error') {
 }
 
 describe('POST /api/auth/curriculum — ParticipantProfile creation', () => {
+  it('distinguishes a session whose learner row belongs to another database branch', async () => {
+    mocks.getSocio.mockResolvedValueOnce(null);
+
+    const res = await POST(postRequest());
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({ code: 'session_database_mismatch' });
+    expect(mocks.setSocioCurriculum).not.toHaveBeenCalled();
+  });
+
   it('tier 2: creates a profile in the org the collection key resolved to', async () => {
     mocks.resolveOrganizationForSocio.mockResolvedValue({
       organizationId: ORG_ID,

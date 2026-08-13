@@ -9,6 +9,8 @@ type ClientSession = {
     role: 'socio' | 'mentor' | 'admin';
     language: string;
     curriculumCollectionKey: string | null;
+    homePath: string | null;
+    enrollmentIssue: 'not-enrolled' | 'no-published-course' | 'channel-not-supported' | null;
 };
 
 type SupportedLanguage = 'es' | 'en' | 'pt';
@@ -33,6 +35,11 @@ const UI_TEXT = {
         alreadyEnrolled: 'Ya estas inscrito en un curso.',
         goToChat: 'Ir al chat',
         availableCourses: 'Cursos Disponibles',
+        staleSession: 'Esta sesion pertenece a otra base de datos. Borra la sesion e inicia de nuevo.',
+        clearSession: 'Borrar sesion',
+        noPublishedCourse: 'Tu curso esta asignado, pero todavia no hay una version publicada disponible.',
+        notEnrolled: 'Tu cuenta existe, pero no tiene una inscripcion activa en la version publicada.',
+        channelUnsupported: 'Este curso no esta disponible en este canal.',
     },
     en: {
         languageTitle: 'Welcome',
@@ -47,6 +54,11 @@ const UI_TEXT = {
         alreadyEnrolled: 'You are already enrolled in a course.',
         goToChat: 'Go to chat',
         availableCourses: 'Available Courses',
+        staleSession: 'This session belongs to a different database. Clear it and sign in again.',
+        clearSession: 'Clear session',
+        noPublishedCourse: 'Your course is assigned, but no published version is available yet.',
+        notEnrolled: 'Your account exists, but it has no active enrollment in the published version.',
+        channelUnsupported: 'This course is not available through this channel.',
     },
     pt: {
         languageTitle: 'Bem-vindo',
@@ -61,6 +73,11 @@ const UI_TEXT = {
         alreadyEnrolled: 'Voce ja esta inscrito em um curso.',
         goToChat: 'Ir para o chat',
         availableCourses: 'Cursos Disponiveis',
+        staleSession: 'Esta sessao pertence a outro banco de dados. Limpe a sessao e entre novamente.',
+        clearSession: 'Limpar sessao',
+        noPublishedCourse: 'Seu curso esta atribuido, mas ainda nao ha uma versao publicada disponivel.',
+        notEnrolled: 'Sua conta existe, mas nao tem uma inscricao ativa na versao publicada.',
+        channelUnsupported: 'Este curso nao esta disponivel neste canal.',
     },
 };
 
@@ -83,6 +100,7 @@ export default function JoinPage() {
     const [error, setError] = useState('');
     const [initializing, setInitializing] = useState(true);
     const [courses, setCourses] = useState<CourseInfo[]>([]);
+    const [sessionMismatch, setSessionMismatch] = useState(false);
 
     const ui = UI_TEXT[language];
 
@@ -90,6 +108,13 @@ export default function JoinPage() {
         async function init() {
             try {
                 const res = await fetch('/api/auth/me');
+                if (res.status === 409) {
+                    const problem = await res.json() as { code?: string };
+                    if (problem.code === 'session_database_mismatch') {
+                        setSessionMismatch(true);
+                        return;
+                    }
+                }
                 if (!res.ok) {
                     window.location.href = '/login';
                     return;
@@ -97,9 +122,10 @@ export default function JoinPage() {
                 const data = (await res.json()) as ClientSession;
                 setSession(data);
 
-                // If already has curriculum, redirect to chat
-                if (data.curriculumCollectionKey) {
-                    router.replace('/home');
+                // A course key is not enough for player delivery: the current
+                // branch must also contain a published version and enrollment.
+                if (data.curriculumCollectionKey && !data.enrollmentIssue) {
+                    router.replace(data.homePath || '/home');
                     return;
                 }
 
@@ -147,6 +173,15 @@ export default function JoinPage() {
         }
     }
 
+    async function clearStaleSession() {
+        setIsLoading(true);
+        try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+        } finally {
+            window.location.href = '/login';
+        }
+    }
+
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
         const code = courseCode.trim();
@@ -190,18 +225,33 @@ export default function JoinPage() {
         );
     }
 
+    if (sessionMismatch) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4">
+                <div className="w-full max-w-md rounded-xl border border-amber-300 bg-amber-50 p-6 text-center dark:border-amber-800 dark:bg-amber-950">
+                    <p className="text-sm text-amber-900 dark:text-amber-100">{ui.staleSession}</p>
+                    <button onClick={clearStaleSession} disabled={isLoading} className="mt-4 px-6 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg font-medium disabled:opacity-50">
+                        {ui.clearSession}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     // If already enrolled (shouldn't happen but just in case)
     if (session?.curriculumCollectionKey) {
+        const enrollmentMessage = session.enrollmentIssue === 'no-published-course'
+            ? ui.noPublishedCourse
+            : session.enrollmentIssue === 'not-enrolled'
+                ? ui.notEnrolled
+                : session.enrollmentIssue === 'channel-not-supported'
+                    ? ui.channelUnsupported
+                    : null;
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4">
                 <div className="w-full max-w-md text-center">
-                    <p className="text-zinc-600 dark:text-zinc-400 mb-4">{ui.alreadyEnrolled}</p>
-                    <button
-                        onClick={() => router.push('/home')}
-                        className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
-                    >
-                        {ui.goToChat}
-                    </button>
+                    <p className="text-zinc-600 dark:text-zinc-400 mb-4">{enrollmentMessage ?? ui.alreadyEnrolled}</p>
+                    {!enrollmentMessage && <button onClick={() => router.push(session.homePath || '/home')} className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors">{ui.goToChat}</button>}
                 </div>
             </div>
         );

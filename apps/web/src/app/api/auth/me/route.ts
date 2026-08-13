@@ -4,13 +4,17 @@ import { prisma } from '@/lib/db';
 import { repo } from '@/lib/repo';
 import { DEFAULT_LANGUAGE, isSupportedLanguage } from '@/lib/i18n/languages';
 import { getCourseMeta } from '@/lib/courses/course-meta';
+import { resolveLearnerHome } from '@/lib/courses/learnerHome';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const session = await verifySession();
   if (!session) {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    return NextResponse.json({
+      error: 'Not authenticated',
+      code: 'no_session',
+    }, { status: 401 });
   }
 
   let language = 'es';
@@ -18,19 +22,33 @@ export async function GET() {
   let courseName: string | null = null;
   let mentorName: string | null = null;
   let displayName: string | null = null;
+  let homePath: string | null = null;
+  let enrollmentIssue: 'not-enrolled' | 'no-published-course' | 'channel-not-supported' | null = null;
 
   if (session.role === 'socio') {
     const socio = await repo.getSocio('web', session.userId);
-    if (socio) {
-      language = socio.language || DEFAULT_LANGUAGE;
-      curriculumCollectionKey = socio.curriculumCollectionKey ?? null;
+    if (!socio) {
+      // The JWT is valid but its database identity is absent. In development
+      // this most commonly means the browser kept a cookie while DATABASE_URL
+      // switched to another Neon branch. It is not a missing API route.
+      return NextResponse.json({
+        error: 'This session belongs to a different or reset database. Clear it and sign in again.',
+        code: 'session_database_mismatch',
+      }, { status: 409 });
+    }
+    language = socio.language || DEFAULT_LANGUAGE;
+    curriculumCollectionKey = socio.curriculumCollectionKey ?? null;
 
-      // Fetch course metadata if socio has a curriculum
-      if (curriculumCollectionKey) {
-        const meta = await getCourseMeta(curriculumCollectionKey);
-        courseName = meta.courseName;
-        mentorName = meta.mentorName;
-        displayName = meta.displayName;
+    // Fetch course metadata if socio has a curriculum.
+    if (curriculumCollectionKey) {
+      const meta = await getCourseMeta(curriculumCollectionKey);
+      courseName = meta.courseName;
+      mentorName = meta.mentorName;
+      displayName = meta.displayName;
+      homePath = await resolveLearnerHome(socio.id);
+      const joinError = homePath.match(/^\/join\?error=(not-enrolled|no-published-course|channel-not-supported)$/u)?.[1];
+      if (joinError === 'not-enrolled' || joinError === 'no-published-course' || joinError === 'channel-not-supported') {
+        enrollmentIssue = joinError;
       }
     }
   } else {
@@ -38,6 +56,12 @@ export async function GET() {
       where: { id: session.userId },
       select: { preferredLanguage: true },
     });
+    if (!mentor) {
+      return NextResponse.json({
+        error: 'This session belongs to a different or reset database. Clear it and sign in again.',
+        code: 'session_database_mismatch',
+      }, { status: 409 });
+    }
     const pl = mentor?.preferredLanguage ?? 'en';
     language = isSupportedLanguage(pl) ? pl : 'en';
   }
@@ -51,6 +75,8 @@ export async function GET() {
     courseName,
     mentorName,
     displayName,
+    homePath,
+    enrollmentIssue,
   });
 }
 
@@ -71,7 +97,10 @@ export async function PATCH(req: NextRequest) {
 
   const socio = await repo.getSocio('web', session.userId);
   if (!socio) {
-    return NextResponse.json({ error: 'Socio not found' }, { status: 404 });
+    return NextResponse.json({
+      error: 'This session belongs to a different or reset database. Clear it and sign in again.',
+      code: 'session_database_mismatch',
+    }, { status: 409 });
   }
 
   await repo.updateSocio(socio.id, { language: body.language });

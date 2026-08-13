@@ -120,7 +120,10 @@ export async function POST(req: NextRequest) {
 
     const socio = await repo.getSocio('web', session.userId);
     if (!socio) {
-        return NextResponse.json({ error: 'Socio not found' }, { status: 404 });
+        return NextResponse.json({
+            error: 'This session belongs to a different or reset database. Clear it and sign in again.',
+            code: 'session_database_mismatch',
+        }, { status: 409 });
     }
 
     // AI Essentials is tenant-owned. A published version in a synthetic test

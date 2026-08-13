@@ -29,6 +29,12 @@ export async function resolveLearnerHome(
     include: { collection: { include: { lessons: { orderBy: { orderIndex: "asc" }, include: { versions: { where: { active: true }, take: 1 } } } } } },
     orderBy: selectedVersionId ? undefined : { publishedAt: "desc" },
   });
+  // AI Essentials is a versioned player course. A curriculum key without a
+  // published version must not fall through resolveDelivery(undefined), whose
+  // legacy default is chat, or the learner is silently sent to the wrong UI.
+  if (socio.curriculumCollectionKey === "ai-essentials" && !version) {
+    return "/join?error=no-published-course";
+  }
   const delivery = resolveDelivery(version?.metadata);
   if (delivery.surface === "chat") return "/chat";
   if (!enrollment || enrollment.programVersionId !== version?.id) return "/join?error=not-enrolled";
