@@ -72,4 +72,28 @@ describe("generation manifest gates", () => {
   it("refuses phase 2 generation before authored inputs are approved", () => {
     expect(() => validateGenerationManifest({ ...manifest, authoredInputsApproved: false, requiredAuthoredInputs: ["milestones", "diagnostic"] })).toThrow(/milestones, diagnostic/);
   });
+
+  it("validates declared dimension reachability and diagnostic mappings", () => {
+    const dimensionManifest: GenerationManifest = {
+      ...manifest,
+      dimensions: [{ key: "working_with_ai", label: "Working with AI", concepts: ["prompting"], topics: ["iteration"], lessonKeys: ["a"] }],
+      diagnosticDimensionMap: { prompting: "working_with_ai" },
+    };
+    expect(() => validateGenerationManifest(dimensionManifest)).not.toThrow();
+    expect(() => validateGenerationManifest({ ...dimensionManifest, dimensions: [{ ...dimensionManifest.dimensions![0], lessonKeys: [] }] })).toThrow(/no teach-back lesson source/);
+    expect(() => validateGenerationManifest({ ...dimensionManifest, dimensions: [{ ...dimensionManifest.dimensions![0], lessonKeys: ["missing"] }] })).toThrow(/outside the manifest/);
+    expect(() => validateGenerationManifest({ ...dimensionManifest, diagnosticDimensionMap: { prompting: "unknown" } })).toThrow(/undeclared dimensions/);
+  });
+
+  it("accepts one lesson as a source for more than one dimension", () => {
+    const sharedLesson: GenerationManifest = {
+      ...manifest,
+      dimensions: [
+        { key: "model_choice", label: "Model choice", concepts: ["model_selection"], topics: ["tool shapes"], lessonKeys: ["a"] },
+        { key: "tools_and_safety", label: "Tools and safety", concepts: ["ai_systems"], topics: ["tool shapes"], lessonKeys: ["a"] },
+      ],
+      diagnosticDimensionMap: { model_selection: "model_choice", ai_systems: "tools_and_safety" },
+    };
+    expect(() => validateGenerationManifest(sharedLesson)).not.toThrow();
+  });
 });

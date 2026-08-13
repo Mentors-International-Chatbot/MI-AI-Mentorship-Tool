@@ -21,6 +21,56 @@
     "maxQuestions": 1,
     "expanded": { "maxSentences": 6, "maxOutputTokens": 480 }
   },
+  "dimensions": [
+    {
+      "key": "ai_impact_adaptation",
+      "label": "AI impact and adaptation",
+      "concepts": ["ai_impact", "ai_productivity"],
+      "topics": ["impact", "Jevons", "adaptation"],
+      "lessonKeys": ["ai-day-in-the-life", "ai-prospering-gameplan"]
+    },
+    {
+      "key": "how_ai_works",
+      "label": "How AI works",
+      "concepts": ["machine_learning", "expert_systems", "hallucinations"],
+      "topics": ["expert systems versus machine learning", "training and inference", "patterns versus truth"],
+      "lessonKeys": ["ai-pattern-vs-truth", "ai-expert-vs-ml"]
+    },
+    {
+      "key": "working_with_ai",
+      "label": "Working with AI",
+      "concepts": ["prompting", "reasoning", "tools_harness"],
+      "topics": ["prompting", "reasoning", "context", "tools", "harnesses"],
+      "lessonKeys": ["ai-prompting-iteration", "ai-reasoning-context-tools", "ai-harness-control"]
+    },
+    {
+      "key": "model_choice",
+      "label": "Model and tool choice",
+      "concepts": ["model_selection"],
+      "topics": ["LLM versus multimodal", "size and cost tradeoffs", "open versus proprietary", "tool shapes"],
+      "lessonKeys": ["ai-model-landscape", "ai-tool-shapes"]
+    },
+    {
+      "key": "tools_and_safety",
+      "label": "Tools and safety",
+      "concepts": ["ai_systems", "guardrails"],
+      "topics": ["ethics", "tool shapes", "guardrails", "deployment"],
+      "lessonKeys": ["ai-tool-shapes", "ai-safety-deploy"]
+    }
+  ],
+  "diagnosticDimensionMap": {
+    "ai_impact": "ai_impact_adaptation",
+    "ai_productivity": "ai_impact_adaptation",
+    "machine_learning": "how_ai_works",
+    "expert_systems": "how_ai_works",
+    "hallucinations": "how_ai_works",
+    "prompting": "working_with_ai",
+    "reasoning": "working_with_ai",
+    "tools_harness": "working_with_ai",
+    "model_selection": "model_choice",
+    "ai_systems": "tools_and_safety",
+    "guardrails": "tools_and_safety"
+  },
   "milestones": [],
   "authoredInputsApproved": false,
   "requiredAuthoredInputs": [

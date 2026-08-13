@@ -30,6 +30,15 @@ export type GenerationManifest = {
     expanded?: { maxSentences: number; maxOutputTokens: number };
   };
   milestones: ManifestMilestone[];
+  dimensions?: Array<{
+    key: string;
+    label: string;
+    concepts: string[];
+    topics: string[];
+    lessonKeys: string[];
+  }>;
+  /** Maps each source diagnostic concept onto the version's declared dimension. */
+  diagnosticDimensionMap?: Record<string, string>;
   diagnosticReplacement?: {
     itemIndex: number;
     item: { concept: string; type: "mcq"; prompt: string; options: string[]; correct: number; explain: string };
@@ -90,6 +99,20 @@ export function validateGenerationManifest(manifest: GenerationManifest): void {
   if (manifest.schemaVersion !== "1.2") throw new Error(`Unsupported manifest schema ${manifest.schemaVersion}`);
   if (new Set(manifest.lessonKeys).size !== manifest.lessonKeys.length) throw new Error("Generation manifest contains duplicate lesson keys");
   if (manifest.lessonKeys.length !== manifest.expectedLessonCount) throw new Error(`Manifest expected ${manifest.expectedLessonCount} lessons but declares ${manifest.lessonKeys.length}`);
+  if (manifest.dimensions) {
+    const dimensionKeys = manifest.dimensions.map((dimension) => dimension.key);
+    if (new Set(dimensionKeys).size !== dimensionKeys.length) throw new Error("Generation manifest contains duplicate dimension keys");
+    const lessonKeys = new Set(manifest.lessonKeys);
+    for (const dimension of manifest.dimensions) {
+      if (dimension.lessonKeys.length === 0) throw new Error(`Dimension ${dimension.key} has no teach-back lesson source`);
+      const unknown = dimension.lessonKeys.filter((lessonKey) => !lessonKeys.has(lessonKey));
+      if (unknown.length) throw new Error(`Dimension ${dimension.key} references lessons outside the manifest: ${unknown.join(", ")}`);
+    }
+    if (manifest.diagnosticDimensionMap) {
+      const unknown = [...new Set(Object.values(manifest.diagnosticDimensionMap))].filter((key) => !dimensionKeys.includes(key));
+      if (unknown.length) throw new Error(`Diagnostic mapping references undeclared dimensions: ${unknown.join(", ")}`);
+    }
+  }
   if (manifest.authoredInputsApproved === false) {
     throw new Error(`Authored inputs are not approved: ${(manifest.requiredAuthoredInputs ?? []).join(", ") || "unspecified inputs"}`);
   }
@@ -245,6 +268,9 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
     diagnostic.items[itemIndex] = item;
   }
   const overrides = existsSync(options.overridesPath) ? readJson<Overrides>(options.overridesPath) : {};
+  const dimensions = manifest.dimensions ?? Object.entries(CONCEPT_LABELS).map(([key, label]) => ({
+    key, label, concepts: [key], topics: [], lessonKeys: lessons.filter((lesson) => lesson.concepts.includes(key)).map((lesson) => lesson.id),
+  }));
   const identityMap = existsSync(options.idMapPath) ? readJson<IdentityMap>(options.idMapPath) : { version: 1, nextSequence: 1, entries: [] };
   const candidates: CandidateBlock[] = [];
 
@@ -287,8 +313,10 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
     mapped.splice(insertionIndex, 0, {
       id: teachBackMatch.stableId, order: 0, blockType: "teach_back", concepts: [lesson.concepts[0]],
       contentVersion: teachBackOverride?.contentVersion ?? 1, prompt: (teachBackMatch.source as { prompt: string }).prompt,
-      evaluatesConcepts: lesson.concepts.map((concept) => CONCEPT_LABELS[concept] ?? concept.replaceAll("_", " ")),
-      dimensionKey: lesson.concepts[0], delivery: "inline",
+      evaluatesConcepts: (manifest.dimensions
+        ? dimensions.filter((dimension) => dimension.lessonKeys.includes(lesson.id)).map((dimension) => dimension.label)
+        : lesson.concepts.map((concept) => CONCEPT_LABELS[concept] ?? concept.replaceAll("_", " "))),
+      dimensionKey: dimensions.find((dimension) => dimension.lessonKeys.includes(lesson.id))?.key ?? lesson.concepts[0], delivery: "inline",
     } as (typeof mapped)[number]);
     return {
       key: lesson.id, title: lesson.title, category: `Track ${lesson.track}`,
@@ -321,10 +349,10 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
         mode: "baseline_quiz", steps: [],
         diagnostic: {
           id: diagnostic.id, title: diagnostic.title, description: diagnostic.description, threshold: diagnostic.pass_threshold,
-          questions: diagnostic.items.map((item, index) => ({ id: `diagnostic-${String(index + 1).padStart(2, "0")}`, prompt: item.prompt, format: "multiple_choice", options: item.options, answerKey: item.options[item.correct], explanation: item.explain, dimensionKey: item.concept })),
+          questions: diagnostic.items.map((item, index) => ({ id: `diagnostic-${String(index + 1).padStart(2, "0")}`, prompt: item.prompt, format: "multiple_choice", options: item.options, answerKey: item.options[item.correct], explanation: item.explain, dimensionKey: manifest.diagnosticDimensionMap?.[item.concept] ?? item.concept })),
         },
       },
-      trackedDimensions: Object.entries(CONCEPT_LABELS).map(([key, label]) => ({ key, label, category: "comprehension", primary: true, scale: { min: 0, max: 1 }, calibrationMode: "zero_start" })),
+      trackedDimensions: dimensions.map(({ key, label }) => ({ key, label, category: "comprehension", primary: true, scale: { min: 0, max: 1 }, calibrationMode: "zero_start" })),
       alertRules: [], dashboard: { panels: [{ type: "lesson_progress" }, { type: "assessment_scores" }, { type: "weekly_summary" }] },
     },
     curriculum: { collectionKey: "ai-essentials", lessons: packageLessons },
@@ -348,13 +376,22 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
   if (parsed.curriculum.lessons.length !== manifest.expectedLessonCount || (manifest.expectedBlockCount !== undefined && blockCount !== manifest.expectedBlockCount)) {
     throw new Error(`Unexpected output counts: ${parsed.curriculum.lessons.length} lessons, ${JSON.stringify(counts)}`);
   }
-  const teachBackDimensions = new Set(lessons.flatMap((lesson) => lesson.concepts));
+  const teachBackDimensions = manifest.dimensions
+    ? new Set(parsed.curriculum.lessons.flatMap((lesson) => lesson.blocks.flatMap((block) => {
+        if (block.blockType !== "teach_back") return [];
+        return dimensions.flatMap((dimension) => block.evaluatesConcepts.includes(dimension.label) ? [dimension.key] : []);
+      })))
+    : new Set(lessons.flatMap((lesson) => lesson.concepts));
   const allDimensions = new Set(parsed.config.trackedDimensions.map((dimension) => dimension.key));
   const unreachable = [...allDimensions].filter((dimension) => !teachBackDimensions.has(dimension));
   if (unreachable.length) throw new Error(`Tracked dimensions unreachable from emitted teach-backs: ${unreachable.join(", ")}`);
-  const lessonDimensions = new Set(lessons.flatMap((lesson) => lesson.concepts));
-  const deadDiagnosticDimensions = parsed.config.onboarding?.diagnostic?.questions.flatMap((question) => question.dimensionKey && !lessonDimensions.has(question.dimensionKey) ? [question.dimensionKey] : []) ?? [];
+  const deadDiagnosticDimensions = parsed.config.onboarding?.diagnostic?.questions.flatMap((question) => question.dimensionKey && !allDimensions.has(question.dimensionKey) ? [question.dimensionKey] : []) ?? [];
   if (deadDiagnosticDimensions.length) throw new Error(`Diagnostic dimensions have no remaining lesson source: ${[...new Set(deadDiagnosticDimensions)].join(", ")}`);
+  if (manifest.dimensions) {
+    const diagnosticDimensions = new Set(parsed.config.onboarding?.diagnostic?.questions.flatMap((question) => question.dimensionKey ? [question.dimensionKey] : []) ?? []);
+    const unseededDimensions = [...allDimensions].filter((dimension) => !diagnosticDimensions.has(dimension));
+    if (unseededDimensions.length) throw new Error(`Declared dimensions missing from diagnostic mapping: ${unseededDimensions.join(", ")}`);
+  }
   const matchById = new Map(matches.map((match) => [match.stableId, match]));
   const contentChanges = parsed.curriculum.lessons.flatMap((lesson) => lesson.blocks.flatMap((block) => {
     if (block.contentVersion <= 1) return [];
