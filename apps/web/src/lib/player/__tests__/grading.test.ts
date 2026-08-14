@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lessonBlockSchema } from "@/lib/journey-package/journey-package.schema";
-import { gradePlayerBlock, matchesExpansionParent, milestoneStates, PlayerError, sanitizePlayerBlock } from "../service";
+import { aggregateDiagnosticDimensionScores, gradePlayerBlock, matchesExpansionParent, milestoneStates, passingDiagnosticDimensions, PlayerError, sanitizePlayerBlock } from "../service";
 
 const quiz = lessonBlockSchema.parse({
   id: "quiz", order: 1, blockType: "quiz_checkpoint", concepts: ["ai_impact"],
@@ -20,6 +20,32 @@ describe("sequential milestone availability", () => {
 
   it("unlocks only the immediate successor on the next snapshot", () => {
     expect(milestoneStates(milestones, new Set(), new Set(["m1"])).map((item) => item.status)).toEqual(["reached", "current", "locked"]);
+  });
+});
+
+describe("diagnostic dimension aggregation", () => {
+  const question = (id: string) => ({ id, dimensionKey: "how_ai_works" });
+
+  it("scores every question in a repeated dimension instead of keeping the last answer", () => {
+    expect(aggregateDiagnosticDimensionScores([
+      { question: question("q1"), correct: true },
+      { question: question("q2"), correct: false },
+    ])).toEqual({ how_ai_works: 0.5 });
+    expect(aggregateDiagnosticDimensionScores([
+      { question: question("q1"), correct: false },
+      { question: question("q2"), correct: true },
+    ])).toEqual({ how_ai_works: 0.5 });
+  });
+
+  it("produces one score per dimension for threshold seeding", () => {
+    const scores = aggregateDiagnosticDimensionScores([
+      { question: question("q1"), correct: true },
+      { question: question("q2"), correct: true },
+      { question: { dimensionKey: "working_with_ai" }, correct: true },
+      { question: { dimensionKey: "working_with_ai" }, correct: false },
+    ]);
+    expect(scores).toEqual({ how_ai_works: 1, working_with_ai: 0.5 });
+    expect(passingDiagnosticDimensions(scores, 0.75)).toEqual([["how_ai_works", 1]]);
   });
 });
 

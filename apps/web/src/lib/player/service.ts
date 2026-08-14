@@ -426,6 +426,29 @@ export function diagnosticDto(access: PlayerAccess) {
   }) };
 }
 
+export function aggregateDiagnosticDimensionScores(
+  results: ReadonlyArray<{ question: { dimensionKey?: string }; correct: boolean }>,
+): Record<string, number> {
+  const dimensions = new Map<string, { correct: number; total: number }>();
+  for (const { question, correct } of results) {
+    if (!question.dimensionKey) continue;
+    const aggregate = dimensions.get(question.dimensionKey) ?? { correct: 0, total: 0 };
+    aggregate.total += 1;
+    if (correct) aggregate.correct += 1;
+    dimensions.set(question.dimensionKey, aggregate);
+  }
+  return Object.fromEntries(
+    [...dimensions].map(([dimensionKey, aggregate]) => [dimensionKey, aggregate.correct / aggregate.total]),
+  );
+}
+
+export function passingDiagnosticDimensions(
+  dimensionScores: Readonly<Record<string, number>>,
+  threshold: number,
+): Array<[string, number]> {
+  return Object.entries(dimensionScores).filter(([, score]) => score >= threshold);
+}
+
 export async function submitDiagnostic(access: PlayerAccess, answers: unknown) {
   const diagnostic = access.config.onboarding?.diagnostic;
   if (!diagnostic) throw new PlayerError(404, "diagnostic_not_found", "This course has no diagnostic");
@@ -434,18 +457,17 @@ export async function submitDiagnostic(access: PlayerAccess, answers: unknown) {
   if (diagnostic.questions.some((question) => typeof submitted[question.id] !== "string")) throw new PlayerError(400, "incomplete_answers", "Submit one answer per question");
   if (diagnostic.questions.some((question) => !question.options?.includes(submitted[question.id] as string))) throw new PlayerError(400, "invalid_answers", "Every answer must be one of the question options");
   const results = diagnostic.questions.map((question) => ({ question, correct: submitted[question.id] === question.answerKey }));
-  const dimensionScores = Object.fromEntries(results.map(({ question, correct }) => [question.dimensionKey!, correct ? 1 : 0]));
+  const dimensionScores = aggregateDiagnosticDimensionScores(results);
   const overallScore = results.filter((item) => item.correct).length / results.length;
   const attempt = await playerRuntimeRepo.diagnosticAttempt.create({ data: { socioId: access.socioId, programVersionId: access.programVersionId, collectionKey: access.collectionKey, answers: submitted as object, dimensionScores, overallScore } });
-  for (const { question, correct } of results) {
-    if (!correct || !question.dimensionKey) continue;
+  for (const [dimensionKey] of passingDiagnosticDimensions(dimensionScores, diagnostic.threshold)) {
     await playerRuntimeRepo.socioDimensionState.upsert({
-      where: { socioId_dimensionKey: { socioId: access.socioId, dimensionKey: question.dimensionKey } },
-      create: { socioId: access.socioId, dimensionKey: question.dimensionKey, level: diagnostic.threshold, trend: "flat", confidence: 1, evidence: `Baseline diagnostic ${attempt.id}` },
+      where: { socioId_dimensionKey: { socioId: access.socioId, dimensionKey } },
+      create: { socioId: access.socioId, dimensionKey, level: diagnostic.threshold, trend: "flat", confidence: 1, evidence: `Baseline diagnostic ${attempt.id}` },
       update: { level: diagnostic.threshold, trend: "flat", confidence: 1, evidence: `Baseline diagnostic ${attempt.id}` },
     });
-    const metric = await playerRuntimeRepo.metricDefinition.findUnique({ where: { organizationId_key: { organizationId: access.organizationId, key: question.dimensionKey } } });
-    if (metric) await playerRuntimeRepo.metricObservation.create({ data: { metricId: metric.id, enrollmentId: access.enrollmentId, signalType: "point", value: diagnostic.threshold, confidence: 1, evidenceRefs: { kind: "diagnostic", attemptId: attempt.id, dimensionKey: question.dimensionKey }, source: "system_observed", observedAt: attempt.completedAt } });
+    const metric = await playerRuntimeRepo.metricDefinition.findUnique({ where: { organizationId_key: { organizationId: access.organizationId, key: dimensionKey } } });
+    if (metric) await playerRuntimeRepo.metricObservation.create({ data: { metricId: metric.id, enrollmentId: access.enrollmentId, signalType: "point", value: diagnostic.threshold, confidence: 1, evidenceRefs: { kind: "diagnostic", attemptId: attempt.id, dimensionKey }, source: "system_observed", observedAt: attempt.completedAt } });
   }
   return {
     attemptId: attempt.id, overallScore, threshold: diagnostic.threshold, dimensionScores,
