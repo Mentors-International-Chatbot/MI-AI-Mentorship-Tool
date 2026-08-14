@@ -82,6 +82,39 @@ describe('invokeTraced — success path', () => {
     expect(lastRow().finishReason).toBe('stop');
   });
 
+  it('keeps the unstyled MI lesson-delivery row on the legacy one-row shape', async () => {
+    await invokeTraced({
+      ...BASE,
+      operation: 'lesson_delivery',
+      mode: 'LESSON_DELIVERY',
+      socioId: 'mi-socio',
+      invoke: async () => ({ content: 'MI reply' }),
+    });
+
+    expect(mockPrisma.aiInvocation.create).toHaveBeenCalledTimes(1);
+    const row = lastRow();
+    expect(row.context).toBeUndefined();
+    expect(Object.keys(row).sort()).toEqual([
+      'assessmentSessionId',
+      'context',
+      'errorMessage',
+      'finishReason',
+      'latencyMs',
+      'mode',
+      'model',
+      'operation',
+      'organizationId',
+      'promptHash',
+      'promptText',
+      'promptTokensApprox',
+      'promptVersion',
+      'responseLength',
+      'socioId',
+      'success',
+      'ttftMs',
+    ]);
+  });
+
   it('reports an unknown finish reason as null', async () => {
     await invokeTraced({ ...BASE, invoke: async () => ({ content: 'hello' }) });
     expect(lastRow().finishReason).toBeNull();

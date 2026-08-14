@@ -1,4 +1,5 @@
 import { HumanMessage, SystemMessage, AIMessage, AIMessageChunk } from "@langchain/core/messages";
+import { randomUUID } from "node:crypto";
 import { repo } from '@/lib/repo';
 import { Socio, Message, SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
 import {
@@ -27,6 +28,10 @@ import { resolveAnalysisPolicy, type AnalysisPolicy } from '@/lib/ai/analysisPol
 import type { SentimentResult } from '@/lib/sentiment/analyzer';
 import { createOpenRouterChat, resolveOpenRouterModel } from '@/lib/ai/openrouter';
 import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
+import {
+    buildPlayerInvocationTraceContext,
+    type PlayerGenerationStage,
+} from '@/lib/ai/trace/playerInvocation';
 import { CORE_PROMPT_VERSION } from './prompts/layers/core';
 import { CONTEXT_PROMPT_VERSION } from './prompts/layers/context';
 import { TASK_PROMPT_VERSION } from './prompts/layers/task';
@@ -65,6 +70,23 @@ import { assembleOrderedModelMessages } from '@/lib/ai/modelMessages';
  */
 const AI_TIMEOUT_MS = 12000;
 const MAX_STYLE_REPAIRS = 1;
+const PLAYER_REPAIR_SYSTEM_PROMPT = "You are a precise copy editor. Preserve the draft's meaning and system markers; change only what the stated output contract requires.";
+
+type BufferedInvokeResponse = { content: unknown; response_metadata?: unknown };
+type BufferedMessages = (SystemMessage | HumanMessage | AIMessage)[];
+type BufferedAttemptInvoker = (event: {
+    messages: BufferedMessages;
+    providerAttempt: number;
+    invoke: () => Promise<BufferedInvokeResponse>;
+}) => Promise<BufferedInvokeResponse>;
+
+export type StyledPlayerAttemptInvoker = (event: {
+    stage: PlayerGenerationStage;
+    repairIndex: number;
+    messages: BufferedMessages;
+    providerAttempt: number;
+    invoke: () => Promise<BufferedInvokeResponse>;
+}) => Promise<BufferedInvokeResponse>;
 
 export type BufferedGenerationPolicy = {
     /** Per-attempt time-to-last-token budget for the buffered invocation. */
@@ -135,21 +157,29 @@ export function contentToText(content: unknown): string {
  * retry still absorbs the transient 5xx that motivated retrying at all.
  */
 async function invokeWithRetry(
-    chat: { invoke: (messages: (SystemMessage | HumanMessage | AIMessage)[]) => Promise<{ content: unknown; response_metadata?: unknown }> },
-    messages: (SystemMessage | HumanMessage | AIMessage)[],
+    chat: { invoke: (messages: BufferedMessages) => Promise<BufferedInvokeResponse> },
+    messages: BufferedMessages,
     policy?: BufferedGenerationPolicy,
-): Promise<{ content: unknown; response_metadata?: unknown }> {
+    invokeAttempt?: BufferedAttemptInvoker,
+): Promise<BufferedInvokeResponse> {
     const resolved = resolveBufferedGenerationPolicy(policy);
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= resolved.maxRetries; attempt++) {
         try {
             resolved.onAttempt?.({ attempt: attempt + 1, timeoutMs: resolved.timeoutMs });
-            const response = await invokeWithTimeout(
+            const providerAttempt = attempt + 1;
+            const invoke = () => invokeWithTimeout(
                 chat.invoke(messages),
                 resolved.timeoutMs,
-                `AI request timeout after ${resolved.timeoutMs}ms`
+                `AI request timeout after ${resolved.timeoutMs}ms`,
             );
+            // The timeout encloses only the provider call, just as it did
+            // before tracing moved inward. A slow trace write must never cause
+            // a second model invocation or consume the learner's retry budget.
+            const response = invokeAttempt
+                ? await invokeAttempt({ messages, providerAttempt, invoke })
+                : await invoke();
             return response;
         } catch (error) {
             lastError = error as Error;
@@ -178,8 +208,8 @@ async function invokeWithRetry(
  * and the same model/token cap is used for every attempt.
  */
 export async function invokeStyledPlayerResponse(
-    chat: { invoke: (messages: (SystemMessage | HumanMessage | AIMessage)[]) => Promise<{ content: unknown; response_metadata?: unknown }> },
-    messages: (SystemMessage | HumanMessage | AIMessage)[],
+    chat: { invoke: (messages: BufferedMessages) => Promise<BufferedInvokeResponse> },
+    messages: BufferedMessages,
     style: ResponseStyle,
     expanded: boolean,
     personaName?: string,
@@ -188,9 +218,17 @@ export async function invokeStyledPlayerResponse(
     parentIntent?: Parameters<typeof responseStyleViolations>[6],
     learnerText?: string,
     generationPolicy?: BufferedGenerationPolicy,
-): Promise<{ content: unknown; response_metadata?: unknown }> {
+    invokeAttempt?: StyledPlayerAttemptInvoker,
+): Promise<BufferedInvokeResponse> {
     let currentMessages = messages;
-    let response = await invokeWithRetry(chat, currentMessages, generationPolicy);
+    let response = await invokeWithRetry(
+        chat,
+        currentMessages,
+        generationPolicy,
+        invokeAttempt
+            ? (event) => invokeAttempt({ stage: 'initial', repairIndex: 0, ...event })
+            : undefined,
+    );
 
     for (let repair = 0; ; repair++) {
         const raw = contentToText(response.content);
@@ -217,10 +255,18 @@ export async function invokeStyledPlayerResponse(
         // already contains the grounded substance; this minimal context asks
         // only for a faithful rewrite under the same output cap.
         currentMessages = [
-            new SystemMessage("You are a precise copy editor. Preserve the draft's meaning and system markers; change only what the stated output contract requires."),
+            new SystemMessage(PLAYER_REPAIR_SYSTEM_PROMPT),
             new HumanMessage(`${buildResponseStyleRepairInstruction(style, expanded, violations, MAX_STYLE_REPAIRS === 1 || repair >= 2, delivered.length, parentReply)}\n\nDRAFT TO REWRITE:\n${raw}`),
         ];
-        response = await invokeWithRetry(chat, currentMessages, generationPolicy);
+        const repairIndex = repair + 1;
+        response = await invokeWithRetry(
+            chat,
+            currentMessages,
+            generationPolicy,
+            invokeAttempt
+                ? (event) => invokeAttempt({ stage: 'repair', repairIndex, ...event })
+                : undefined,
+        );
     }
     return response;
 }
@@ -666,62 +712,82 @@ export async function generateAIResponse(
     // 4. Call LLM with retry
     try {
         const invokeStart = performance.now();
-        // One trace row per logical turn: retries inside invokeWithRetry are part
-        // of the same traced call, so latencyMs covers the whole attempt chain.
-        const { content: rawMessageContent } = await invokeTraced({
-            operation: 'lesson_delivery',
-            model: resolveOpenRouterModel(),
-            promptVersion: buildLessonPromptVersion({
-                dbVersions: dbPromptVersions,
-                contentIdentity: getContentIdentity(modeResult.routerResult, collectionKey),
-                language: (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage,
-                stance: modeResult.routerResult.stance,
-            }),
-            systemPrompt,
-            socioId: socio.id,
-            // The exact router mode (RETEACH, FREEFORM_QUESTION, ...) lives here;
-            // operation stays coarse so the whole chat path is queryable as one.
-            mode: modeResult.routerResult.mode,
-            context: playerTurn ? {
-                surface: 'player',
-                courseCode: playerTurn.context.courseCode,
-                collectionKey: playerTurn.context.collectionKey,
-                programVersionId: playerTurn.context.programVersionId,
-                lessonKey: playerTurn.context.lessonKey,
-                ...(playerTurn.context.blockId ? { blockId: playerTurn.context.blockId } : {}),
-                intent: playerTurn.context.intent,
-                ...(playerTurn.context.parentIntent ? { parentIntent: playerTurn.context.parentIntent } : {}),
-            } : undefined,
-            // markFirstToken is what stamps ttftMs; only the streaming branch
-            // ever calls it, so non-streaming rows keep a null TTFT.
-            invoke: async (markFirstToken): Promise<{ content: unknown }> => {
-                if (responseStyle) {
-                    // Buffer configured player replies until the output
-                    // contract is validated. Streaming an invalid first draft
-                    // would make a later rewrite impossible to retract.
-                    const response = await invokeStyledPlayerResponse(
-                        chat,
-                        messages,
-                        responseStyle,
-                        expanded,
-                        playerPersonaName,
-                        expansionTarget,
-                        playerTurn?.context.intent,
-                        playerTurn?.context.parentIntent,
-                        playerTurn?.learnerText,
-                        bufferedGenerationPolicy,
-                    );
-                    if (onToken) {
-                        markFirstToken();
-                        onToken(sanitizeForDelivery(parseMarkers(contentToText(response.content)).cleanText));
-                    }
-                    return response;
-                }
-                return onToken
-                    ? await streamWithRetry(chat, messages, onToken, markFirstToken)
-                    : await invokeWithRetry(chat, messages, bufferedGenerationPolicy);
-            },
+        const model = resolveOpenRouterModel();
+        const promptVersion = buildLessonPromptVersion({
+            dbVersions: dbPromptVersions,
+            contentIdentity: getContentIdentity(modeResult.routerResult, collectionKey),
+            language: (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage,
+            stance: modeResult.routerResult.stance,
         });
+        const playerTraceContext = playerTurn ? {
+            surface: 'player',
+            courseCode: playerTurn.context.courseCode,
+            collectionKey: playerTurn.context.collectionKey,
+            programVersionId: playerTurn.context.programVersionId,
+            lessonKey: playerTurn.context.lessonKey,
+            ...(playerTurn.context.blockId ? { blockId: playerTurn.context.blockId } : {}),
+            intent: playerTurn.context.intent,
+            ...(playerTurn.context.parentIntent ? { parentIntent: playerTurn.context.parentIntent } : {}),
+        } : undefined;
+
+        let rawMessageContent: unknown;
+        if (responseStyle && playerTurn && playerTraceContext) {
+            // Styled player turns are the only path whose logical turn can
+            // contain a second, semantically distinct model invocation. Trace
+            // those provider calls separately so live repair and retry rates
+            // are observable. MI and every unstyled path stay on the legacy
+            // one-row logical boundary below.
+            const turnTraceId = randomUUID();
+            const response = await invokeStyledPlayerResponse(
+                chat,
+                messages,
+                responseStyle,
+                expanded,
+                playerPersonaName,
+                expansionTarget,
+                playerTurn.context.intent,
+                playerTurn.context.parentIntent,
+                playerTurn.learnerText,
+                bufferedGenerationPolicy,
+                ({ stage, repairIndex, providerAttempt, invoke }) => invokeTraced({
+                    operation: 'lesson_delivery',
+                    model,
+                    promptVersion,
+                    systemPrompt: stage === 'initial' ? systemPrompt : PLAYER_REPAIR_SYSTEM_PROMPT,
+                    socioId: socio.id,
+                    mode: modeResult.routerResult.mode,
+                    context: buildPlayerInvocationTraceContext(playerTraceContext, {
+                        turnTraceId,
+                        generationStage: stage,
+                        repairIndex,
+                        providerAttempt,
+                    }),
+                    invoke: () => invoke(),
+                }),
+            );
+            if (onToken) {
+                onToken(sanitizeForDelivery(parseMarkers(contentToText(response.content)).cleanText));
+            }
+            rawMessageContent = response.content;
+        } else {
+            // Preserve the historical trace contract for MI: one AiInvocation
+            // row for the complete logical turn, with no v2 player-call keys.
+            const response = await invokeTraced({
+                operation: 'lesson_delivery',
+                model,
+                promptVersion,
+                systemPrompt,
+                socioId: socio.id,
+                // The exact router mode (RETEACH, FREEFORM_QUESTION, ...) lives
+                // here; operation stays coarse so the whole path is queryable.
+                mode: modeResult.routerResult.mode,
+                context: playerTraceContext,
+                invoke: async (markFirstToken): Promise<{ content: unknown }> => onToken
+                    ? await streamWithRetry(chat, messages, onToken, markFirstToken)
+                    : await invokeWithRetry(chat, messages, bufferedGenerationPolicy),
+            });
+            rawMessageContent = response.content;
+        }
         const rawContent = contentToText(rawMessageContent);
         timings.llmInvoke = performance.now() - invokeStart;
 

@@ -64,6 +64,8 @@ function harness() {
 const NO_MESSAGES: [] = [];
 
 describe('invokeStyledPlayerResponse — the delivery contract', () => {
+  const validReply = 'A useful answer starts with the verified lesson context and explains the core idea in direct language. It then connects that idea to one concrete learner decision without inventing facts or extra background. What part would you like to apply first?';
+
   it('rejects an invalid safety-net rewrite instead of delivering it unchecked', async () => {
     const chat = { invoke: vi.fn().mockResolvedValue({ content: 'One? Two? [END]' }) };
 
@@ -121,6 +123,68 @@ describe('invokeStyledPlayerResponse — the delivery contract', () => {
     await vi.advanceTimersByTimeAsync(75_000);
     await rejection;
     expect(chat.invoke).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it('labels the initial draft and repair as distinct provider invocations', async () => {
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: 'One? Two? [END]' })
+        .mockResolvedValueOnce({ content: validReply }),
+    };
+    const observed: Array<{ stage: string; repairIndex: number; providerAttempt: number }> = [];
+
+    const response = await invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, undefined, undefined, undefined, undefined, async (event) => {
+      observed.push({
+        stage: event.stage,
+        repairIndex: event.repairIndex,
+        providerAttempt: event.providerAttempt,
+      });
+      return event.invoke();
+    });
+
+    expect(response.content).toBe(validReply);
+    expect(observed).toEqual([
+      { stage: 'initial', repairIndex: 0, providerAttempt: 1 },
+      { stage: 'repair', repairIndex: 1, providerAttempt: 1 },
+    ]);
+  });
+
+  it('keeps provider retry ordinal separate from repair stage', async () => {
+    vi.useFakeTimers();
+    const chat = {
+      invoke: vi.fn()
+        .mockRejectedValueOnce(new Error('upstream 502'))
+        .mockResolvedValueOnce({ content: validReply }),
+    };
+    const observed: Array<{ stage: string; repairIndex: number; providerAttempt: number }> = [];
+    const pending = invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, undefined, undefined, undefined, undefined, async (event) => {
+      observed.push({
+        stage: event.stage,
+        repairIndex: event.repairIndex,
+        providerAttempt: event.providerAttempt,
+      });
+      return event.invoke();
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).resolves.toEqual({ content: validReply });
+    expect(observed).toEqual([
+      { stage: 'initial', repairIndex: 0, providerAttempt: 1 },
+      { stage: 'initial', repairIndex: 0, providerAttempt: 2 },
+    ]);
     vi.useRealTimers();
   });
 });

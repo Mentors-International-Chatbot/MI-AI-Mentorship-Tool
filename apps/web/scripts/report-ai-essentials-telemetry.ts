@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { prisma } from "../src/lib/db";
 import { programVersionConfigSchema } from "../src/lib/journey-package/program-version-config.schema";
 import { deliveredTextMetrics } from "../src/lib/player/telemetryMetrics";
+import { summarizePlayerInvocationFlow } from "../src/lib/ai/trace/playerInvocation";
 
 function argument(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -113,6 +114,7 @@ async function main() {
   const report = JSON.stringify({
     programVersion: { id: version.id, contentVersion: version.version, collectionKey: version.collection?.slug ?? null },
     range: { from: from?.toISOString() ?? null, to: to?.toISOString() ?? null },
+    liveInvocationFlow: summarizePlayerInvocationFlow(invocations),
     byIntentAndExpansionParent: Object.fromEntries([...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, group]) => [key, summarize(group)])),
     historicalUnknowns: { invocationsWithoutContext: invocations.filter((item) => !item.context).length, messagesWithoutGenerationStatus: messages.filter((item) => !(item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata) && typeof (item.metadata as Record<string, unknown>).generationStatus === "string")).length },
     milestoneReview: {
