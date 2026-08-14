@@ -672,8 +672,9 @@ describe('stance framing', () => {
     // milestone_progress existed there was no record that anyone DID anything.
     const mockMs = resolveCourseMilestones as unknown as ReturnType<typeof vi.fn>;
     mockMs.mockResolvedValue([
-      { key: 'assembled', name: 'Assembled a sandwich', afterLessonKey: 'l1' },
-      { key: 'delivered', name: 'Gave one to someone', afterLessonKey: 'l2' },
+      { key: 'assembled', name: 'Assembled a sandwich', afterLessonKey: 'l1', checkDescription: 'Ask about assembly.' },
+      { key: 'delivered', name: 'Gave one to someone', afterLessonKey: 'l2', checkDescription: 'Ask who received it and what happened.' },
+      { key: 'reflected', name: 'Reflected on it', afterLessonKey: 'l3', checkDescription: 'Ask what they learned.' },
     ]);
 
     const coach = await buildStanceBlock({
@@ -685,6 +686,9 @@ describe('stance framing', () => {
 
     expect(coach).toContain('Assembled a sandwich [assembled] — done');
     expect(coach).toContain('Gave one to someone [delivered] — pending');
+    expect(coach).toContain('Current milestone conversation: Ask who received it and what happened.');
+    expect(coach).not.toContain('Ask about assembly.');
+    expect(coach).not.toContain('Ask what they learned.');
     // The marker instruction must quote an exact key, so the key is rendered.
     expect(coach).toContain('[MILESTONE:key]');
   });

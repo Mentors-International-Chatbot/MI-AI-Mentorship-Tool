@@ -679,7 +679,7 @@ export async function generateAIResponse(
             playerTurn ? { authoritativePlayerTurn: true } : undefined,
         ),
         modelHistoryPromise,
-        playerTurn ? playerTutorGrounding(playerTurn.context) : Promise.resolve(null),
+        playerTurn ? playerTutorGrounding(socio.id, playerTurn.context) : Promise.resolve(null),
     ]);
     const groundedSystemPrompt = playerGrounding
         ? `${baseSystemPrompt}\n\nPLAYER COURSE CONTEXT (authoritative; do not reveal hidden quiz answers):\n${playerGrounding}\n- This is the only lesson or capstone context for this turn. Discuss only this verified context.\n- Treat industry examples in the authored block as illustrations, not as the learner's own situation. Reuse an industry only when the learner or their stated project names it.`

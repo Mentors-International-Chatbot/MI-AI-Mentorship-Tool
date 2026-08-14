@@ -3,7 +3,7 @@ import type { RequestIdentity } from "@/lib/auth/requestIdentity";
 import { resolveCourseCode } from "@/lib/courses/resolver";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
 import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
-import { programVersionConfigSchema } from "@/lib/journey-package/program-version-config.schema";
+import { programVersionConfigSchema, type ProgramVersionConfig } from "@/lib/journey-package/program-version-config.schema";
 
 export class PlayerError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -121,8 +121,22 @@ export function sanitizePlayerBlock(block: LessonBlock) {
   return block;
 }
 
+export function capstoneTutorGrounding(
+  outcome: NonNullable<ProgramVersionConfig["outcome"]>,
+  currentMilestoneKeys: ReadonlySet<string>,
+): string {
+  const current = outcome.milestones.find((milestone) => currentMilestoneKeys.has(milestone.key));
+  const check = current?.checkDescription
+    ? { key: current.key, name: current.name, checkDescription: current.checkDescription }
+    : null;
+  return [
+    `Capstone: ${JSON.stringify(outcome.project)}`,
+    check ? `Current milestone conversation: ${JSON.stringify(check)}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 /** Server-only lesson grounding for player tutor turns. Correct answers stay out. */
-export async function playerTutorGrounding(context: ValidatedPlayerContext): Promise<string> {
+export async function playerTutorGrounding(socioId: string, context: ValidatedPlayerContext): Promise<string> {
   const version = await playerRuntimeRepo.programVersion.findUnique({
     where: { id: context.programVersionId },
     select: { version: true, config: true },
@@ -130,7 +144,13 @@ export async function playerTutorGrounding(context: ValidatedPlayerContext): Pro
   if (!version) throw new PlayerError(404, "course_unpublished", "Course version not found");
   if (context.intent === "capstone" || (context.intent === "expand" && context.parentIntent === "capstone")) {
     const config = programVersionConfigSchema.parse(version.config);
-    return `Capstone: ${JSON.stringify(config.outcome?.project ?? {})}`;
+    if (!config.outcome) return "Capstone: {}";
+    const currentMilestoneKeys = await playerMilestoneAvailabilitySnapshot(socioId, {
+      ...context,
+      intent: "capstone",
+      parentIntent: undefined,
+    });
+    return capstoneTutorGrounding(config.outcome, currentMilestoneKeys);
   }
   const row = await playerRuntimeRepo.contentLesson.findFirst({
     where: { slug: context.lessonKey, collection: { programVersions: { some: { id: context.programVersionId } } } },

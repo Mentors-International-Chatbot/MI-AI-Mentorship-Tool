@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lessonBlockSchema } from "@/lib/journey-package/journey-package.schema";
-import { aggregateDiagnosticDimensionScores, gradePlayerBlock, matchesExpansionParent, milestoneStates, passingDiagnosticDimensions, PlayerError, sanitizePlayerBlock } from "../service";
+import { aggregateDiagnosticDimensionScores, capstoneTutorGrounding, gradePlayerBlock, matchesExpansionParent, milestoneStates, passingDiagnosticDimensions, PlayerError, sanitizePlayerBlock } from "../service";
 
 const quiz = lessonBlockSchema.parse({
   id: "quiz", order: 1, blockType: "quiz_checkpoint", concepts: ["ai_impact"],
@@ -20,6 +20,28 @@ describe("sequential milestone availability", () => {
 
   it("unlocks only the immediate successor on the next snapshot", () => {
     expect(milestoneStates(milestones, new Set(), new Set(["m1"])).map((item) => item.status)).toEqual(["reached", "current", "locked"]);
+  });
+});
+
+describe("capstone mentor grounding", () => {
+  const outcome = {
+    project: { title: "Build a workflow", deliverables: [] },
+    milestones: [
+      { key: "m1", name: "One", availability: { type: "immediate" as const }, checkDescription: "Ask only about the first milestone." },
+      { key: "m2", name: "Two", availability: { type: "after_milestone" as const, milestoneKey: "m1" }, checkDescription: "Do not expose the second check yet." },
+    ],
+    mentorResources: [],
+  };
+
+  it("includes checkDescription for the current milestone only", () => {
+    const grounding = capstoneTutorGrounding(outcome, new Set(["m1"]));
+    expect(grounding).toContain("Ask only about the first milestone.");
+    expect(grounding).not.toContain("Do not expose the second check yet.");
+  });
+
+  it("preserves the prior project-only grounding when the current milestone has no check", () => {
+    const withoutCheck = { ...outcome, milestones: [{ ...outcome.milestones[0], checkDescription: undefined }] };
+    expect(capstoneTutorGrounding(withoutCheck, new Set(["m1"]))).toBe(`Capstone: ${JSON.stringify(outcome.project)}`);
   });
 });
 

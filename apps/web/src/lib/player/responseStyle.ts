@@ -274,7 +274,7 @@ export function buildResponseStyleInstruction(
   );
   if (style.markdown === "none") lines.push("- Use plain text only: no Markdown headings, lists, emphasis, tables, links, or code fences.");
   lines.push(
-    `- Keep every sentence under ${MAX_SENTENCE_WORDS} words, preferably 12-22. Use periods instead of comma chains; never enumerate four or more items.`,
+    `- Keep every sentence under ${MAX_SENTENCE_WORDS} words, preferably 12-22. Use periods instead of comma chains. When a list would run past three items, name its overall shape instead of enumerating it.`,
     "- Use no preamble, section label, Markdown, newline, self-introduction, or tutor name.",
     "- Sound human through direct, specific attention to the learner's subject. Do not manufacture warmth with praise, welcomes, or enthusiasm about yourself.",
     "- Answer a direct question or confusion before redirecting.",

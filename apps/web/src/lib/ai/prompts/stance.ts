@@ -514,7 +514,7 @@ const TASK_BLOCK_LABELS: Record<
   SupportedLanguage,
   {
     header: string; exercise: string; commitment: string; project: string;
-    deliverables: string; progress: string; done: string; pending: string; marker: string;
+    deliverables: string; progress: string; currentCheck: string; done: string; pending: string; marker: string;
   }
 > = {
   es: {
@@ -524,6 +524,7 @@ const TASK_BLOCK_LABELS: Record<
     project: 'Proyecto del curso',
     deliverables: 'Entregables',
     progress: 'Avance del proyecto',
+    currentCheck: 'Conversación del hito actual',
     done: 'hecho',
     pending: 'pendiente',
     marker: 'Cuando el participante REPORTE haber completado un hito pendiente, agrega [MILESTONE:clave] al final de tu respuesta, usando la clave exacta de la lista. Solo cuando lo reporte él, nunca por tu cuenta.',
@@ -535,6 +536,7 @@ const TASK_BLOCK_LABELS: Record<
     project: 'Course project',
     deliverables: 'Deliverables',
     progress: 'Project progress',
+    currentCheck: 'Current milestone conversation',
     done: 'done',
     pending: 'pending',
     marker: 'When the participant REPORTS completing a pending milestone, add [MILESTONE:key] at the end of your reply, using the exact key from the list. Only when they report it, never on your own.',
@@ -546,6 +548,7 @@ const TASK_BLOCK_LABELS: Record<
     project: 'Projeto do curso',
     deliverables: 'Entregáveis',
     progress: 'Progresso do projeto',
+    currentCheck: 'Conversa do marco atual',
     done: 'feito',
     pending: 'pendente',
     marker: 'Quando o participante RELATAR ter concluído um marco pendente, adicione [MILESTONE:chave] ao final da sua resposta, usando a chave exata da lista. Somente quando ele relatar, nunca por conta própria.',
@@ -615,6 +618,10 @@ async function buildTaskFactsBlock(
       .map((m) => `${m.name} [${m.key}] — ${reached.has(m.key) ? l.done : l.pending}`)
       .join('; ');
     lines.push(`- ${l.progress}: ${rendered}`);
+    const current = milestones.find((milestone) => !reached.has(milestone.key));
+    if (current?.checkDescription) {
+      lines.push(`- ${l.currentCheck}: ${current.checkDescription}`);
+    }
     // Only ask for the marker when something is still outstanding. Inviting it
     // with everything done is an invitation to emit a duplicate.
     if (milestones.some((m) => !reached.has(m.key))) {

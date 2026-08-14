@@ -47,6 +47,7 @@ describe("player response style prompt", () => {
     expect(prompt).toContain("at most 1 question");
     expect(prompt).toContain("plain text only");
     expect(prompt).toContain("comma chains");
+    expect(prompt).toContain("name its overall shape instead of enumerating it");
     expect(prompt).toContain("one open focus");
     expect(prompt).not.toContain("ASCII punctuation only");
     expect(buildResponseStyleInstruction(style, false, "lesson_entry")).toContain("learner situation specific to this lesson");
