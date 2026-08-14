@@ -71,11 +71,159 @@
     "ai_systems": "tools_and_safety",
     "guardrails": "tools_and_safety"
   },
-  "milestones": [],
+  "diagnostic": {
+    "id": "ai-placement-diagnostic",
+    "title": "AI Essentials Placement Diagnostic",
+    "description": "Ten quick questions that help the course start at the right place for you.",
+    "threshold": 0.75,
+    "items": [
+      {
+        "dimensionKey": "ai_impact_adaptation",
+        "prompt": "A tool cuts the time a task takes from two hours to ten minutes. What usually happens next in real workplaces?",
+        "options": ["The work disappears entirely", "People do more of that kind of work, not less", "Nothing changes", "The tool gets banned"],
+        "correct": 1,
+        "explanation": "When something gets cheap, people use more of it. That's Jevons paradox, and it's why \"AI does this faster\" rarely means \"there's nothing left to do.\""
+      },
+      {
+        "dimensionKey": "ai_impact_adaptation",
+        "prompt": "Which is most likely to be replaced first by AI?",
+        "options": ["An entire job", "The routine parts inside a job", "Jobs that need a license", "Jobs that pay well"],
+        "correct": 1
+      },
+      {
+        "dimensionKey": "how_ai_works",
+        "prompt": "An AI writes a confident paragraph with a specific date, name, and number in it. What does that confidence tell you?",
+        "options": ["It's probably right", "It checked a source", "Very little — confident wording and correct facts are separate things", "It's definitely wrong"],
+        "correct": 2
+      },
+      {
+        "dimensionKey": "how_ai_works",
+        "prompt": "Where does a language model's \"knowledge\" come from?",
+        "options": ["A fact-checked encyclopedia", "Rules written by experts", "Patterns in a large pile of text it was trained on", "Live internet searches every time"],
+        "correct": 2
+      },
+      {
+        "dimensionKey": "working_with_ai",
+        "prompt": "Your first prompt gives you a mediocre answer. What's the best next move?",
+        "options": ["Ask the same thing again", "Add much more text to the prompt", "Change one thing, then see what that changed", "Switch to a different AI"],
+        "correct": 2
+      },
+      {
+        "dimensionKey": "working_with_ai",
+        "prompt": "You want AI to summarize a document you have. What matters most?",
+        "options": ["Asking politely", "Giving it the actual document", "Using a bigger model", "Making the prompt longer"],
+        "correct": 1
+      },
+      {
+        "dimensionKey": "model_choice",
+        "prompt": "You need to sort 500 emails into three simple categories, every day. Which is the better fit?",
+        "options": ["The largest, most capable model available", "A smaller, faster, cheaper model", "Any model — it makes no difference", "A model you train yourself"],
+        "correct": 1
+      },
+      {
+        "dimensionKey": "model_choice",
+        "prompt": "You want to hand an AI a photo of a handwritten receipt and get the total back. What kind of model do you need?",
+        "options": ["Any text chatbot", "One that accepts images as well as text", "A spreadsheet", "A larger version of a text-only model"],
+        "correct": 1,
+        "explanation": "Models that take more than text — images, audio, video — are called multimodal. Text-only models can't see your receipt no matter how large they are."
+      },
+      {
+        "dimensionKey": "tools_and_safety",
+        "prompt": "You build something that drafts replies to customer questions and sends them automatically. What's the most important thing to add?",
+        "options": ["A faster model", "A person who checks before anything goes out", "More example replies", "A longer prompt"],
+        "correct": 1
+      },
+      {
+        "dimensionKey": "tools_and_safety",
+        "prompt": "Your automation works on the ten cases you tested. What's the risk when it meets a case you didn't test?",
+        "options": ["It stops and tells you", "It produces something wrong and doesn't flag it", "It asks you what to do", "There's no risk"],
+        "correct": 1
+      }
+    ]
+  },
+  "milestones": [
+    {
+      "key": "pick-it",
+      "name": "Pick it",
+      "days": "1–2",
+      "unlocks": ["ai-prompting-iteration", "ai-day-in-the-life"],
+      "availability": { "type": "immediate" },
+      "objective": "Decide what you're going to automate, and decide what \"finished\" looks like before you start.",
+      "completion": "At the end, the learner has one sentence naming the task, who it's for, and how they'll know it worked.",
+      "checkInPrompts": [
+        "What's the task, and how often do you do it now?",
+        "Who benefits when this works — you, or someone else?",
+        "How will you know it's done? Not \"it's good,\" but something you could actually check."
+      ],
+      "dimensionKeys": ["working_with_ai", "ai_impact_adaptation"],
+      "authorNote": "The most common failure here is over-scoping. Talk learners down, not up. A project abandoned on day four teaches nothing."
+    },
+    {
+      "key": "make-it-work-once",
+      "name": "Make it work once",
+      "days": "3–6",
+      "unlocks": ["ai-reasoning-context-tools"],
+      "availability": { "type": "after_milestone", "milestoneKey": "pick-it" },
+      "objective": "Get a version that produces the right output one time, on one real example. It does not need to be repeatable yet.",
+      "completion": "At the end, the learner has one real output they'd actually use, plus the prompt or setup that produced it.",
+      "checkInPrompts": [
+        "Show me what it produced. Would you actually use this?",
+        "What did you have to give it before it worked?",
+        "What did you try first that didn't work?"
+      ],
+      "dimensionKeys": ["working_with_ai", "how_ai_works"]
+    },
+    {
+      "key": "fix-whats-broken",
+      "name": "Fix what's broken",
+      "days": "7–9",
+      "unlocks": ["ai-pattern-vs-truth", "ai-model-landscape"],
+      "availability": { "type": "after_milestone", "milestoneKey": "make-it-work-once" },
+      "objective": "Run it on cases you haven't tried yet. Find where it fails, and decide which failures matter.",
+      "completion": "At the end, the learner has three cases they ran, what went wrong in at least one, and what they changed.",
+      "checkInPrompts": [
+        "What did it get wrong? Be specific.",
+        "Did it ever make something up that looked correct?",
+        "Which failures can you live with, and which would stop you from using this?"
+      ],
+      "dimensionKeys": ["how_ai_works", "model_choice"],
+      "authorNote": "This is where hallucinations stop being abstract. Learners see it happen to their own work, which is why the lesson sits here rather than in week one."
+    },
+    {
+      "key": "make-it-run-again",
+      "name": "Make it run again without you rebuilding it",
+      "days": "10–12",
+      "unlocks": ["ai-harness-control", "ai-tool-shapes"],
+      "availability": { "type": "after_milestone", "milestoneKey": "fix-whats-broken" },
+      "objective": "The test that defines this course: can you run this next week without starting over?",
+      "completion": "At the end, the learner has a saved prompt and checklist, a script someone can run, or something that fires on a schedule. Any of the three counts.",
+      "checkInPrompts": [
+        "If you did this again next Tuesday, what would you have to redo?",
+        "What did you save, and where is it?",
+        "Could someone else run this from what you wrote down?"
+      ],
+      "dimensionKeys": ["working_with_ai", "tools_and_safety"],
+      "authorNote": "This repeats the project-selection question against the real thing. A saved prompt, template, and checklist genuinely count. Requiring unattended automation would fail most learners on free-tier tools."
+    },
+    {
+      "key": "ship-it",
+      "name": "Ship it and say what you learned",
+      "days": "13–14",
+      "unlocks": ["ai-safety-deploy", "ai-prospering-gameplan"],
+      "availability": { "type": "after_milestone", "milestoneKey": "make-it-run-again" },
+      "objective": "Use it for real, then say plainly what the AI did, what you did, and where you'd tell someone to be careful.",
+      "completion": "At the end, the learner has a short write-up and, optionally, a screenshot or link to the thing they made.",
+      "checkInPrompts": [
+        "What does the AI handle, and what do you still have to check yourself?",
+        "Where would this hurt someone if it got something wrong and nobody noticed?",
+        "What would you tell someone starting this from scratch?"
+      ],
+      "dimensionKeys": ["tools_and_safety", "ai_impact_adaptation"],
+      "authorNote": "The ethics content lands here rather than in a standalone unit. It's hardest to teach abstractly and easiest to teach to someone holding something they built."
+    }
+  ],
   "authoredInputsApproved": false,
   "requiredAuthoredInputs": [
-    "the exact five v3 automation milestone definitions",
-    "the replacement diagnostic item",
-    "professor-approved content rewrites"
+    "professor-approved content rewrites, including multimodal and ethics content"
   ]
 }

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { matchIdentityCandidates, validateGenerationManifest, type CandidateBlock, type GenerationManifest, type IdentityEntry, type IdentityMap } from "./convert-learnmachine-package";
 
@@ -95,5 +98,40 @@ describe("generation manifest gates", () => {
       diagnosticDimensionMap: { model_selection: "model_choice", ai_systems: "tools_and_safety" },
     };
     expect(() => validateGenerationManifest(sharedLesson)).not.toThrow();
+  });
+
+  it("accepts the authored v2 bank with two items for every declared dimension", () => {
+    const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+    const v2 = JSON.parse(readFileSync(resolve(root, "content/ai-essentials-v2-manifest.json"), "utf8")) as GenerationManifest;
+    expect(v2.diagnostic?.items).toHaveLength(10);
+    expect(v2.milestones).toHaveLength(5);
+    expect(() => validateGenerationManifest({ ...v2, authoredInputsApproved: true })).not.toThrow();
+  });
+
+  it("rejects authored diagnostic items outside declared dimensions", () => {
+    const dimensionManifest: GenerationManifest = {
+      ...manifest,
+      dimensions: [{ key: "working_with_ai", label: "Working with AI", concepts: ["prompting"], topics: ["iteration"], lessonKeys: ["a"] }],
+      diagnostic: {
+        id: "diagnostic", title: "Diagnostic", threshold: 0.75,
+        items: [
+          { dimensionKey: "working_with_ai", prompt: "One", options: ["A", "B"], correct: 0 },
+          { dimensionKey: "unknown", prompt: "Two", options: ["A", "B"], correct: 1 },
+        ],
+      },
+    };
+    expect(() => validateGenerationManifest(dimensionManifest)).toThrow(/undeclared dimensions: unknown/);
+  });
+
+  it("requires two authored diagnostic items per declared dimension", () => {
+    const dimensionManifest: GenerationManifest = {
+      ...manifest,
+      dimensions: [{ key: "working_with_ai", label: "Working with AI", concepts: ["prompting"], topics: ["iteration"], lessonKeys: ["a"] }],
+      diagnostic: {
+        id: "diagnostic", title: "Diagnostic", threshold: 0.75,
+        items: [{ dimensionKey: "working_with_ai", prompt: "One", options: ["A", "B"], correct: 0 }],
+      },
+    };
+    expect(() => validateGenerationManifest(dimensionManifest)).toThrow(/at least two diagnostic items: working_with_ai \(1\)/);
   });
 });

@@ -18,6 +18,26 @@ type ManifestMilestone = {
   name: string;
   availability: { type: "immediate" } | { type: "after_lesson"; lessonKey: string } | { type: "after_milestone"; milestoneKey: string };
   checkDescription?: string;
+  days?: string;
+  unlocks?: string[];
+  objective?: string;
+  completion?: string;
+  checkInPrompts?: string[];
+  dimensionKeys?: string[];
+  authorNote?: string;
+};
+type ManifestDiagnostic = {
+  id: string;
+  title: string;
+  description?: string;
+  threshold: number;
+  items: Array<{
+    dimensionKey: string;
+    prompt: string;
+    options: string[];
+    correct: number;
+    explanation?: string;
+  }>;
 };
 export type GenerationManifest = {
   schemaVersion: "1.2";
@@ -39,6 +59,9 @@ export type GenerationManifest = {
   }>;
   /** Maps each source diagnostic concept onto the version's declared dimension. */
   diagnosticDimensionMap?: Record<string, string>;
+  /** A complete authored bank. When present, it replaces the source diagnostic. */
+  diagnostic?: ManifestDiagnostic;
+  /** Legacy support for released manifests that replace one source item. */
   diagnosticReplacement?: {
     itemIndex: number;
     item: { concept: string; type: "mcq"; prompt: string; options: string[]; correct: number; explain: string };
@@ -112,7 +135,27 @@ export function validateGenerationManifest(manifest: GenerationManifest): void {
       const unknown = [...new Set(Object.values(manifest.diagnosticDimensionMap))].filter((key) => !dimensionKeys.includes(key));
       if (unknown.length) throw new Error(`Diagnostic mapping references undeclared dimensions: ${unknown.join(", ")}`);
     }
+    if (manifest.diagnostic) {
+      const counts = new Map(dimensionKeys.map((key) => [key, 0]));
+      const unknown = new Set<string>();
+      for (const item of manifest.diagnostic.items) {
+        if (item.options.length < 2) throw new Error(`Authored diagnostic item "${item.prompt}" requires at least two options`);
+        if (!Number.isInteger(item.correct) || item.correct < 0 || item.correct >= item.options.length) throw new Error(`Authored diagnostic item "${item.prompt}" has an invalid correct option index`);
+        if (!counts.has(item.dimensionKey)) unknown.add(item.dimensionKey);
+        else counts.set(item.dimensionKey, counts.get(item.dimensionKey)! + 1);
+      }
+      if (unknown.size) throw new Error(`Authored diagnostic references undeclared dimensions: ${[...unknown].join(", ")}`);
+      const undersampled = [...counts].filter(([, count]) => count < 2).map(([key, count]) => `${key} (${count})`);
+      if (undersampled.length) throw new Error(`Every declared dimension requires at least two diagnostic items: ${undersampled.join(", ")}`);
+    }
+    for (const milestone of manifest.milestones) {
+      const unknownDimensions = (milestone.dimensionKeys ?? []).filter((key) => !dimensionKeys.includes(key));
+      if (unknownDimensions.length) throw new Error(`Milestone ${milestone.key} references undeclared dimensions: ${unknownDimensions.join(", ")}`);
+      const unknownLessons = (milestone.unlocks ?? []).filter((key) => !lessonKeys.has(key));
+      if (unknownLessons.length) throw new Error(`Milestone ${milestone.key} references lessons outside the manifest: ${unknownLessons.join(", ")}`);
+    }
   }
+  if (manifest.diagnostic && manifest.diagnosticReplacement) throw new Error("Manifest cannot declare both a complete diagnostic and a diagnostic replacement");
   if (manifest.authoredInputsApproved === false) {
     throw new Error(`Authored inputs are not approved: ${(manifest.requiredAuthoredInputs ?? []).join(", ") || "unspecified inputs"}`);
   }
@@ -261,7 +304,21 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
   validateGenerationManifest(manifest);
   const lessons = loadLessons(options.source, manifest.lessonKeys);
   const contentDir = sourceContentDir(options.source);
-  const diagnostic = readJson<SourceDiagnostic>(resolve(contentDir, "placement-diagnostic.json"));
+  const sourceDiagnostic = readJson<SourceDiagnostic>(resolve(contentDir, "placement-diagnostic.json"));
+  const diagnostic: SourceDiagnostic = manifest.diagnostic ? {
+    id: manifest.diagnostic.id,
+    title: manifest.diagnostic.title,
+    description: manifest.diagnostic.description,
+    pass_threshold: manifest.diagnostic.threshold,
+    items: manifest.diagnostic.items.map((item) => ({
+      concept: item.dimensionKey,
+      type: "mcq",
+      prompt: item.prompt,
+      options: item.options,
+      correct: item.correct,
+      explain: item.explanation ?? `The best answer is "${item.options[item.correct]}".`,
+    })),
+  } : sourceDiagnostic;
   if (manifest.diagnosticReplacement) {
     const { itemIndex, item } = manifest.diagnosticReplacement;
     if (!Number.isInteger(itemIndex) || itemIndex < 0 || itemIndex >= diagnostic.items.length) throw new Error(`Diagnostic replacement index ${itemIndex} is out of range`);
@@ -362,7 +419,16 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
         description: "Design an AI-assisted workflow that turns a messy operational request into a reliable, evidence-backed recommendation. Show how a person frames the task, supplies context, uses tools, checks the output, handles failure, and makes the final decision.",
         deliverables: deliverables.map((name) => ({ name })),
       },
-      milestones: manifest.milestones,
+      milestones: manifest.milestones.map((milestone) => ({
+        key: milestone.key,
+        name: milestone.name,
+        availability: milestone.availability,
+        checkDescription: milestone.checkDescription ?? ([
+          milestone.objective,
+          milestone.completion,
+          milestone.checkInPrompts?.length ? `Check in by asking: ${milestone.checkInPrompts.join(" ")}` : undefined,
+        ].filter(Boolean).join(" ") || undefined),
+      })),
       mentorResources: [],
     },
   };
@@ -377,10 +443,7 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
     throw new Error(`Unexpected output counts: ${parsed.curriculum.lessons.length} lessons, ${JSON.stringify(counts)}`);
   }
   const teachBackDimensions = manifest.dimensions
-    ? new Set(parsed.curriculum.lessons.flatMap((lesson) => lesson.blocks.flatMap((block) => {
-        if (block.blockType !== "teach_back") return [];
-        return dimensions.flatMap((dimension) => block.evaluatesConcepts.includes(dimension.label) ? [dimension.key] : []);
-      })))
+    ? new Set(parsed.curriculum.lessons.flatMap((lesson) => lesson.blocks.flatMap((block) => block.blockType === "teach_back" ? [block.dimensionKey] : [])))
     : new Set(lessons.flatMap((lesson) => lesson.concepts));
   const allDimensions = new Set(parsed.config.trackedDimensions.map((dimension) => dimension.key));
   const unreachable = [...allDimensions].filter((dimension) => !teachBackDimensions.has(dimension));
@@ -388,9 +451,17 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
   const deadDiagnosticDimensions = parsed.config.onboarding?.diagnostic?.questions.flatMap((question) => question.dimensionKey && !allDimensions.has(question.dimensionKey) ? [question.dimensionKey] : []) ?? [];
   if (deadDiagnosticDimensions.length) throw new Error(`Diagnostic dimensions have no remaining lesson source: ${[...new Set(deadDiagnosticDimensions)].join(", ")}`);
   if (manifest.dimensions) {
-    const diagnosticDimensions = new Set(parsed.config.onboarding?.diagnostic?.questions.flatMap((question) => question.dimensionKey ? [question.dimensionKey] : []) ?? []);
+    const diagnosticCounts = new Map<string, number>();
+    for (const question of parsed.config.onboarding?.diagnostic?.questions ?? []) {
+      if (question.dimensionKey) diagnosticCounts.set(question.dimensionKey, (diagnosticCounts.get(question.dimensionKey) ?? 0) + 1);
+    }
+    const diagnosticDimensions = new Set(diagnosticCounts.keys());
     const unseededDimensions = [...allDimensions].filter((dimension) => !diagnosticDimensions.has(dimension));
     if (unseededDimensions.length) throw new Error(`Declared dimensions missing from diagnostic mapping: ${unseededDimensions.join(", ")}`);
+    if (manifest.diagnostic) {
+      const undersampledDimensions = [...allDimensions].filter((dimension) => (diagnosticCounts.get(dimension) ?? 0) < 2);
+      if (undersampledDimensions.length) throw new Error(`Declared dimensions require at least two emitted diagnostic items: ${undersampledDimensions.join(", ")}`);
+    }
   }
   const matchById = new Map(matches.map((match) => [match.stableId, match]));
   const contentChanges = parsed.curriculum.lessons.flatMap((lesson) => lesson.blocks.flatMap((block) => {
