@@ -27,6 +27,7 @@ import {
   dashboardSchema,
   baselineDiagnosticSchema,
   responseStyleSchema,
+  projectSelectionSchema,
   outcomeSchema,
 } from "./journey-package.schema";
 
@@ -110,6 +111,9 @@ export const programVersionConfigSchema = z.object({
 
   /** Learner-visible generation limits. Absent for legacy programs. */
   responseStyle: responseStyleSchema.optional(),
+
+  /** Authored project presets and interest signals. Absent for legacy programs. */
+  projectSelection: projectSelectionSchema.optional(),
 
   /** Onboarding flow configuration. */
   onboarding: z

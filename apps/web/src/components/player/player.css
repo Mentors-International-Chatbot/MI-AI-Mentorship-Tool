@@ -36,3 +36,20 @@
 .player-chip { width: auto; min-height: 2.25rem; padding: .35rem .75rem; border-radius: 999px; font-size: .875rem; }
 .player-project-link { display: inline-block; margin-top: .35rem; font-weight: 700; }
 @media (max-width: 760px) { .capstone-grid { grid-template-columns: 1fr; } }
+.project-setup-shell { max-width: none; }
+.project-interest-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-top: 1.5rem; }
+.player-card .project-choice-card { display: flex; align-items: flex-start; gap: .7rem; min-height: 112px; margin: 0; padding: 1rem; text-align: left; background: #fff; color: var(--player-ink); border: 1px solid var(--player-line); font: inherit; }
+.player-card .project-choice-card[aria-pressed="true"] { border-color: var(--player-accent); background: #e8f5f1; box-shadow: inset 0 0 0 1px var(--player-accent); }
+.player-card .project-choice-card span { display: grid; place-items: center; flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: #dceee9; color: var(--player-accent); font-weight: 900; }
+.project-choice-count { color: var(--player-muted); font-weight: 700; }
+.project-assistant-message { font-family: Georgia, serif; font-size: 1.2rem; line-height: 1.55; }
+.project-proposal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin-top: 1.5rem; }
+.player-card .project-proposal-card { display: grid; align-content: start; gap: .65rem; min-height: 190px; margin: 0; padding: 1.1rem; text-align: left; background: #fff; color: var(--player-ink); border: 1px solid var(--player-line); }
+.player-card .project-proposal-card:hover { border-color: var(--player-accent); transform: translateY(-2px); }
+.project-proposal-card span { color: var(--player-muted); font-weight: 500; }
+.project-name-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr); gap: 1rem; align-items: start; }
+.project-name-label { display: grid; gap: .5rem; font-weight: 750; }
+.project-name-label input { border: 1px solid #bcccdc; border-radius: 12px; padding: .85rem 1rem; font: inherit; }
+.project-confirm-card h2 { margin-bottom: .35rem; }
+.project-reframe-note { color: var(--player-accent); font-weight: 700; }
+@media (max-width: 760px) { .project-interest-grid, .project-proposal-grid, .project-name-grid { grid-template-columns: 1fr; } .player-card .project-choice-card, .player-card .project-proposal-card { min-height: auto; } }

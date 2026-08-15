@@ -21,6 +21,168 @@
     "maxQuestions": 1,
     "expanded": { "maxSentences": 6, "maxOutputTokens": 480 }
   },
+  "projectSelection": {
+    "presets": [
+      {
+        "key": "morning-brief",
+        "family": "routine",
+        "label": "A daily brief with your schedule and what's due",
+        "defaultLevel": "L3",
+        "exampleContexts": ["a full class load plus a job", "commuting and needing the day up front"]
+      },
+      {
+        "key": "notes-to-summary",
+        "family": "messy-input",
+        "label": "Turn class or meeting notes into a clean summary and action items",
+        "defaultLevel": "L2",
+        "exampleContexts": ["a club officer who takes meeting notes", "long lectures you record"]
+      },
+      {
+        "key": "social-posts",
+        "family": "routine",
+        "label": "Draft social posts for a club, team, or small business",
+        "defaultLevel": "L2",
+        "exampleContexts": ["running a club's Instagram", "a family business that never posts"]
+      },
+      {
+        "key": "job-tailoring",
+        "family": "routine",
+        "label": "Tailor your resume and cover letter to a real job posting",
+        "defaultLevel": "L1",
+        "exampleContexts": ["applying to internships this semester"]
+      },
+      {
+        "key": "weekly-recap",
+        "family": "routine",
+        "label": "A weekly recap email built from a form or sheet",
+        "defaultLevel": "L2",
+        "exampleContexts": ["a team lead who sends updates", "an intramural team"]
+      },
+      {
+        "key": "study-guide",
+        "family": "messy-input",
+        "label": "Turn readings or slides into a study guide and practice questions",
+        "defaultLevel": "L1",
+        "exampleContexts": ["your hardest class this term"]
+      },
+      {
+        "key": "sheet-cleaner",
+        "family": "messy-input",
+        "label": "Clean up a messy spreadsheet automatically",
+        "defaultLevel": "L2",
+        "exampleContexts": ["a club budget nobody maintains", "sign-up data from a form"]
+      },
+      {
+        "key": "inbox-triage",
+        "family": "routine",
+        "label": "Sort your inbox and get one daily digest",
+        "defaultLevel": "L2",
+        "exampleContexts": ["an inbox you have stopped reading"]
+      },
+      {
+        "key": "faq-responder",
+        "family": "handoff",
+        "label": "Draft replies to the questions a business gets over and over",
+        "defaultLevel": "L2",
+        "exampleContexts": ["a family business answering the same five questions", "a club inbox with repeat questions"]
+      },
+      {
+        "key": "scheduler",
+        "family": "handoff",
+        "label": "Build a shift or roster scheduler for a job or club",
+        "defaultLevel": "L2",
+        "exampleContexts": ["a manager who builds the schedule by hand every week"]
+      },
+      {
+        "key": "expense-logger",
+        "family": "messy-input",
+        "label": "Photo or text of a receipt in, a categorized row out",
+        "defaultLevel": "L2",
+        "exampleContexts": ["tracking spending for a club or a job"]
+      },
+      {
+        "key": "reading-digest",
+        "family": "messy-input",
+        "label": "Sources in, short summaries out",
+        "defaultLevel": "L1",
+        "exampleContexts": ["following an industry for a class or an internship"]
+      }
+    ],
+    "interestTopics": [
+      {
+        "key": "stop-repeating-myself",
+        "label": "Stop doing the same boring task every week",
+        "dimensions": ["ai_impact_adaptation", "working_with_ai"],
+        "presetAffinity": ["morning-brief", "weekly-recap", "inbox-triage", "social-posts"]
+      },
+      {
+        "key": "better-answers",
+        "label": "Get much better answers out of AI than I do now",
+        "dimensions": ["working_with_ai"],
+        "presetAffinity": ["study-guide", "job-tailoring", "notes-to-summary"]
+      },
+      {
+        "key": "spot-made-up",
+        "label": "Know when AI is making things up",
+        "dimensions": ["how_ai_works"],
+        "presetAffinity": ["sheet-cleaner", "expense-logger", "reading-digest"]
+      },
+      {
+        "key": "under-the-hood",
+        "label": "Understand what's actually happening under the hood",
+        "dimensions": ["how_ai_works"],
+        "presetAffinity": ["reading-digest", "notes-to-summary"]
+      },
+      {
+        "key": "pick-right-tool",
+        "label": "Pick the right AI tool instead of guessing",
+        "dimensions": ["model_choice"],
+        "presetAffinity": ["expense-logger", "inbox-triage", "sheet-cleaner"]
+      },
+      {
+        "key": "build-for-others",
+        "label": "Build something other people can actually use",
+        "dimensions": ["tools_and_safety", "working_with_ai"],
+        "presetAffinity": ["scheduler", "faq-responder", "weekly-recap", "social-posts"]
+      },
+      {
+        "key": "not-fooled-by-hype",
+        "label": "Not get fooled by AI hype",
+        "dimensions": ["ai_impact_adaptation", "how_ai_works"],
+        "presetAffinity": ["reading-digest", "study-guide"]
+      },
+      {
+        "key": "career-impact",
+        "label": "Figure out what AI means for the career I want",
+        "dimensions": ["ai_impact_adaptation"],
+        "presetAffinity": ["job-tailoring", "reading-digest"]
+      },
+      {
+        "key": "connect-real-data",
+        "label": "Connect AI to real data and tools, not just a chat box",
+        "dimensions": ["tools_and_safety", "working_with_ai"],
+        "presetAffinity": ["morning-brief", "sheet-cleaner", "expense-logger"]
+      },
+      {
+        "key": "catch-failures",
+        "label": "Catch AI failures before they cause damage",
+        "dimensions": ["tools_and_safety", "how_ai_works"],
+        "presetAffinity": ["faq-responder", "scheduler", "expense-logger"]
+      },
+      {
+        "key": "business-case",
+        "label": "Make a case my boss or professor would actually accept",
+        "dimensions": ["model_choice", "ai_impact_adaptation"],
+        "presetAffinity": ["weekly-recap", "faq-responder"]
+      },
+      {
+        "key": "what-it-costs",
+        "label": "Understand what running this stuff actually costs",
+        "dimensions": ["model_choice"],
+        "presetAffinity": ["morning-brief", "inbox-triage"]
+      }
+    ]
+  },
   "dimensions": [
     {
       "key": "ai_impact_adaptation",

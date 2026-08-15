@@ -9,6 +9,9 @@ import type {
   ProgramVersion,
   Cohort,
   Enrollment,
+  LearnerProject,
+  LearnerProjectStatus,
+  StageLearnerProjectInput,
   EnrollmentInvitation,
   ParticipantProfile,
   MentorProfile,
@@ -34,6 +37,7 @@ import type {
   ProgramVersion as PrismaProgramVersion,
   Cohort as PrismaCohort,
   Enrollment as PrismaEnrollment,
+  LearnerProject as PrismaLearnerProject,
   EnrollmentInvitation as PrismaEnrollmentInvitation,
   ParticipantProfile as PrismaParticipantProfile,
   MentorProfile as PrismaMentorProfile,
@@ -50,6 +54,28 @@ import type {
   Socio as PrismaSocio,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
+
+export class LearnerProjectTransitionError extends Error {
+  constructor(
+    public readonly from: LearnerProjectStatus | null,
+    public readonly to: LearnerProjectStatus,
+    message?: string,
+  ) {
+    super(message ?? `LearnerProject status cannot transition from ${from ?? 'none'} to ${to}`);
+    this.name = 'LearnerProjectTransitionError';
+  }
+}
+
+export function isLearnerProjectStatusTransitionAllowed(
+  from: LearnerProjectStatus | null,
+  to: LearnerProjectStatus,
+): boolean {
+  if (from === null) return to === 'DRAFT';
+  if (from === 'DRAFT') return to === 'DRAFT' || to === 'ACTIVE' || to === 'ABANDONED';
+  if (from === 'ACTIVE') return to === 'ACTIVE' || to === 'CHANGED' || to === 'ABANDONED';
+  if (from === 'ABANDONED') return to === 'DRAFT';
+  return false;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Mapping Functions (Prisma → App types)
@@ -124,6 +150,28 @@ function toEnrollment(p: PrismaEnrollment): Enrollment {
     enrolledAt: p.enrolledAt,
     completedAt: p.completedAt,
     metadata: p.metadata as Record<string, unknown> | null,
+  };
+}
+
+function toLearnerProject(p: PrismaLearnerProject): LearnerProject {
+  return {
+    id: p.id,
+    organizationId: p.organizationId,
+    enrollmentId: p.enrollmentId,
+    socioId: p.socioId,
+    presetKey: p.presetKey,
+    title: p.title,
+    oneLiner: p.oneLiner,
+    context: p.context,
+    automationLevel: p.automationLevel,
+    interests: p.interests,
+    status: p.status as LearnerProjectStatus,
+    lifeContext: p.lifeContext,
+    reframedAt: p.reframedAt,
+    automationValidatedAt: p.automationValidatedAt,
+    createdAt: p.createdAt,
+    confirmedAt: p.confirmedAt,
+    updatedAt: p.updatedAt,
   };
 }
 
@@ -584,6 +632,47 @@ async function verifyEnrollmentOwnership(ctx: TenantContext, enrollmentId: strin
       resourceId: enrollmentId,
     });
   }
+}
+
+async function verifyLearnerProjectEnrollmentOwnership(
+  ctx: TenantContext,
+  enrollmentId: string,
+): Promise<{ organizationId: string; socioId: string }> {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    select: {
+      participant: { select: { socioId: true } },
+      cohort: { select: { program: { select: { organizationId: true } } } },
+    },
+  });
+  if (!enrollment) {
+    throw new TenantIsolationError('Enrollment not found', {
+      requestedOrgId: ctx.organizationId,
+      resourceType: 'Enrollment',
+      resourceId: enrollmentId,
+    });
+  }
+  const organizationId = enrollment.cohort.program.organizationId;
+  if (organizationId !== ctx.organizationId) {
+    throw new TenantIsolationError('Cross-tenant access denied', {
+      requestedOrgId: ctx.organizationId,
+      actualOrgId: organizationId,
+      resourceType: 'Enrollment',
+      resourceId: enrollmentId,
+    });
+  }
+  if (!enrollment.participant.socioId) {
+    throw new TenantIsolationError('Enrollment has no learner identity', {
+      requestedOrgId: ctx.organizationId,
+      actualOrgId: organizationId,
+      resourceType: 'Enrollment',
+      resourceId: enrollmentId,
+    });
+  }
+  return {
+    organizationId,
+    socioId: enrollment.participant.socioId,
+  };
 }
 
 /**
@@ -1060,6 +1149,221 @@ export const tenantPrismaRepo: TenantRepo = {
       },
     });
     return toEnrollment(enrollment);
+  },
+
+  // ─── Learner Projects ─────────────────────────────────────────────────────
+  async getCurrentLearnerProject(ctx, enrollmentId) {
+    const owner = await verifyLearnerProjectEnrollmentOwnership(ctx, enrollmentId);
+    const project = await prisma.learnerProject.findFirst({
+      where: { enrollmentId, status: { in: ['DRAFT', 'ACTIVE'] } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!project) return null;
+    if (project.organizationId !== owner.organizationId || project.socioId !== owner.socioId) {
+      throw new TenantIsolationError('LearnerProject ownership does not match its enrollment', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: project.organizationId,
+        resourceType: 'LearnerProject',
+        resourceId: project.id,
+      });
+    }
+    return toLearnerProject(project);
+  },
+
+  async saveLearnerProjectInterests(ctx, enrollmentId, interests) {
+    const owner = await verifyLearnerProjectEnrollmentOwnership(ctx, enrollmentId);
+    const current = await prisma.learnerProject.findFirst({
+      where: { enrollmentId, status: { in: ['DRAFT', 'ACTIVE'] } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (current?.status === 'ACTIVE') throw new LearnerProjectTransitionError('ACTIVE', 'DRAFT');
+    if (current && (current.organizationId !== owner.organizationId || current.socioId !== owner.socioId)) {
+      throw new TenantIsolationError('LearnerProject ownership does not match its enrollment', {
+        requestedOrgId: ctx.organizationId, actualOrgId: current.organizationId,
+        resourceType: 'LearnerProject', resourceId: current.id,
+      });
+    }
+    const reset = {
+      interests,
+      presetKey: null,
+      title: null,
+      oneLiner: null,
+      context: null,
+      automationLevel: null,
+      lifeContext: null,
+      reframedAt: null,
+      automationValidatedAt: null,
+      confirmedAt: null,
+      status: 'DRAFT' as const,
+    };
+    if (current) {
+      return toLearnerProject(await prisma.learnerProject.update({ where: { id: current.id }, data: reset }));
+    }
+    const latest = await prisma.learnerProject.findFirst({ where: { enrollmentId }, orderBy: { updatedAt: 'desc' } });
+    if (latest && (latest.organizationId !== owner.organizationId || latest.socioId !== owner.socioId)) {
+      throw new TenantIsolationError('LearnerProject ownership does not match its enrollment', {
+        requestedOrgId: ctx.organizationId, actualOrgId: latest.organizationId,
+        resourceType: 'LearnerProject', resourceId: latest.id,
+      });
+    }
+    if (latest?.status === 'ABANDONED') {
+      return toLearnerProject(await prisma.learnerProject.update({ where: { id: latest.id }, data: reset }));
+    }
+    return toLearnerProject(await prisma.learnerProject.create({
+      data: {
+        organizationId: owner.organizationId,
+        enrollmentId,
+        socioId: owner.socioId,
+        ...reset,
+      },
+    }));
+  },
+
+  async saveLearnerProjectLifeContext(ctx, enrollmentId, lifeContext) {
+    const owner = await verifyLearnerProjectEnrollmentOwnership(ctx, enrollmentId);
+    const current = await prisma.learnerProject.findFirst({
+      where: { enrollmentId, status: { in: ['DRAFT', 'ACTIVE'] } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!current || current.status !== 'DRAFT') throw new LearnerProjectTransitionError(current?.status as LearnerProjectStatus | undefined ?? null, 'DRAFT');
+    if (current.organizationId !== owner.organizationId || current.socioId !== owner.socioId) {
+      throw new TenantIsolationError('LearnerProject ownership does not match its enrollment', {
+        requestedOrgId: ctx.organizationId, actualOrgId: current.organizationId,
+        resourceType: 'LearnerProject', resourceId: current.id,
+      });
+    }
+    return toLearnerProject(await prisma.learnerProject.update({
+      where: { id: current.id }, data: { lifeContext },
+    }));
+  },
+
+  async stageLearnerProject(ctx, enrollmentId, data: StageLearnerProjectInput) {
+    const owner = await verifyLearnerProjectEnrollmentOwnership(ctx, enrollmentId);
+    const current = await prisma.learnerProject.findFirst({
+      where: { enrollmentId, status: { in: ['DRAFT', 'ACTIVE'] } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!current || current.status !== 'DRAFT') throw new LearnerProjectTransitionError(current?.status as LearnerProjectStatus | undefined ?? null, 'DRAFT');
+    if (current.organizationId !== owner.organizationId || current.socioId !== owner.socioId) {
+      throw new TenantIsolationError('LearnerProject ownership does not match its enrollment', {
+        requestedOrgId: ctx.organizationId, actualOrgId: current.organizationId,
+        resourceType: 'LearnerProject', resourceId: current.id,
+      });
+    }
+    const now = new Date();
+    return toLearnerProject(await prisma.learnerProject.update({
+      where: { id: current.id },
+      data: {
+        presetKey: data.presetKey,
+        title: null,
+        oneLiner: data.oneLiner,
+        context: data.context ?? null,
+        automationLevel: data.automationLevel,
+        interests: data.interests,
+        lifeContext: data.lifeContext,
+        automationValidatedAt: now,
+        ...(data.reframed ? { reframedAt: current.reframedAt ?? now } : {}),
+      },
+    }));
+  },
+
+  async putLearnerProject(ctx, enrollmentId, data) {
+    const owner = await verifyLearnerProjectEnrollmentOwnership(ctx, enrollmentId);
+    const current = await prisma.learnerProject.findFirst({
+      where: { enrollmentId, status: { in: ['DRAFT', 'ACTIVE'] } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (current && (current.organizationId !== owner.organizationId || current.socioId !== owner.socioId)) {
+      throw new TenantIsolationError('LearnerProject ownership does not match its enrollment', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: current.organizationId,
+        resourceType: 'LearnerProject',
+        resourceId: current.id,
+      });
+    }
+
+    const latest = current ?? await prisma.learnerProject.findFirst({
+      where: { enrollmentId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (latest && (latest.organizationId !== owner.organizationId || latest.socioId !== owner.socioId)) {
+      throw new TenantIsolationError('LearnerProject ownership does not match its enrollment', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: latest.organizationId,
+        resourceType: 'LearnerProject',
+        resourceId: latest.id,
+      });
+    }
+
+    const from = current?.status as LearnerProjectStatus | undefined
+      ?? (latest?.status === 'ABANDONED' ? 'ABANDONED' : null);
+    const to = data.status ?? (current?.status as LearnerProjectStatus | undefined) ?? 'DRAFT';
+    if (!isLearnerProjectStatusTransitionAllowed(from, to)) {
+      throw new LearnerProjectTransitionError(from, to);
+    }
+    if (to === 'ACTIVE' && !current?.automationValidatedAt) {
+      throw new LearnerProjectTransitionError(from, to, 'LearnerProject must pass the automation gate before confirmation');
+    }
+    if (current?.status === 'DRAFT' && to === 'ACTIVE') {
+      const stagedInterests = [...current.interests].sort();
+      const submittedInterests = [...data.interests].sort();
+      const changesValidatedProject = current.presetKey !== data.presetKey
+        || current.oneLiner !== data.oneLiner
+        || current.context !== (data.context ?? null)
+        || current.automationLevel !== data.automationLevel
+        || JSON.stringify(stagedInterests) !== JSON.stringify(submittedInterests);
+      if (changesValidatedProject) {
+        throw new LearnerProjectTransitionError(from, to, 'Confirmation must preserve the project that passed the automation gate');
+      }
+    }
+
+    const fields = {
+      organizationId: owner.organizationId,
+      enrollmentId,
+      socioId: owner.socioId,
+      presetKey: data.presetKey,
+      title: data.title,
+      oneLiner: data.oneLiner,
+      context: data.context ?? null,
+      automationLevel: data.automationLevel,
+      interests: data.interests,
+    };
+
+    if (!current) {
+      if (latest?.status === 'ABANDONED') {
+        const reopened = await prisma.learnerProject.update({
+          where: { id: latest.id },
+          data: { ...fields, status: 'DRAFT', confirmedAt: null },
+        });
+        return toLearnerProject(reopened);
+      }
+      const created = await prisma.learnerProject.create({
+        data: { ...fields, status: 'DRAFT', confirmedAt: null },
+      });
+      return toLearnerProject(created);
+    }
+
+    if (current.status === 'ACTIVE' && to === 'CHANGED') {
+      const [, replacement] = await prisma.$transaction([
+        prisma.learnerProject.update({
+          where: { id: current.id },
+          data: { status: 'CHANGED' },
+        }),
+        prisma.learnerProject.create({
+          data: { ...fields, status: 'DRAFT', confirmedAt: null },
+        }),
+      ]);
+      return toLearnerProject(replacement);
+    }
+
+    const confirmedAt = to === 'ACTIVE'
+      ? current.confirmedAt ?? new Date()
+      : to === 'DRAFT' ? null : current.confirmedAt;
+    const updated = await prisma.learnerProject.update({
+      where: { id: current.id },
+      data: { ...fields, status: to, confirmedAt },
+    });
+    return toLearnerProject(updated);
   },
 
   // ─── Enrollment Invitations ────────────────────────────────────────────────

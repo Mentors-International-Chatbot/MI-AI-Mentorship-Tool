@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { journeyPackageSchema } from "../apps/web/src/lib/journey-package/journey-package.schema";
+import { journeyPackageSchema, projectSelectionSchema, type ProjectSelectionConfig } from "../apps/web/src/lib/journey-package/journey-package.schema";
 
 export const LESSON_ORDER = [
   "ai-day-in-the-life", "ai-magic-examples", "ai-revolution-vs-past",
@@ -49,6 +49,7 @@ export type GenerationManifest = {
     maxSentences?: number; maxOutputTokens?: number; markdown?: "allowed" | "none"; maxQuestions?: number;
     expanded?: { maxSentences: number; maxOutputTokens: number };
   };
+  projectSelection?: ProjectSelectionConfig;
   milestones: ManifestMilestone[];
   dimensions?: Array<{
     key: string;
@@ -121,6 +122,7 @@ export type ConvertOptions = {
 export function validateGenerationManifest(manifest: GenerationManifest): void {
   if (manifest.schemaVersion !== "1.2") throw new Error(`Unsupported manifest schema ${manifest.schemaVersion}`);
   if (new Set(manifest.lessonKeys).size !== manifest.lessonKeys.length) throw new Error("Generation manifest contains duplicate lesson keys");
+  if (manifest.projectSelection) projectSelectionSchema.parse(manifest.projectSelection);
   if (manifest.lessonKeys.length !== manifest.expectedLessonCount) throw new Error(`Manifest expected ${manifest.expectedLessonCount} lessons but declares ${manifest.lessonKeys.length}`);
   if (manifest.dimensions) {
     const dimensionKeys = manifest.dimensions.map((dimension) => dimension.key);
@@ -402,6 +404,7 @@ export function convertLearnMachinePackage(options: ConvertOptions) {
     config: {
       aiBehavior: { tone: "clear, practical, and encouraging", teachingStyle: "Socratic coaching with concise feedback", languageInstruction: "Respond in English." },
       responseStyle: manifest.responseStyle,
+      projectSelection: manifest.projectSelection,
       onboarding: {
         mode: "baseline_quiz", steps: [],
         diagnostic: {

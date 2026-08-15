@@ -105,6 +105,8 @@ describe("generation manifest gates", () => {
     const v2 = JSON.parse(readFileSync(resolve(root, "content/ai-essentials-v2-manifest.json"), "utf8")) as GenerationManifest;
     expect(v2.diagnostic?.items).toHaveLength(10);
     expect(v2.milestones).toHaveLength(5);
+    expect(v2.projectSelection?.presets).toHaveLength(12);
+    expect(v2.projectSelection?.interestTopics).toHaveLength(12);
     expect(() => validateGenerationManifest({ ...v2, authoredInputsApproved: true })).not.toThrow();
   });
 

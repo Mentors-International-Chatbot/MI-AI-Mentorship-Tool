@@ -407,6 +407,67 @@ export const baselineDiagnosticSchema = z.object({
   questions: z.array(quizQuestionSchema).min(1),
 });
 
+const projectSelectionDimensionSchema = z.enum([
+  "ai_impact_adaptation",
+  "how_ai_works",
+  "working_with_ai",
+  "model_choice",
+  "tools_and_safety",
+]);
+
+const projectPresetSchema = z.object({
+  key,
+  family: z.enum(["routine", "messy-input", "handoff"]),
+  label: z.string().min(1),
+  defaultLevel: z.enum(["L1", "L2", "L3"]),
+  exampleContexts: z.array(z.string().min(1)).min(1),
+});
+
+const projectInterestTopicSchema = z.object({
+  key,
+  label: z.string().min(1),
+  dimensions: z.array(projectSelectionDimensionSchema).min(1),
+  presetAffinity: z.array(key).min(1),
+});
+
+/** Authored proposal inputs. `family` is a conversation-only diversity hint. */
+export const projectSelectionSchema = z.object({
+  presets: z.array(projectPresetSchema).min(1),
+  interestTopics: z.array(projectInterestTopicSchema).min(1),
+}).superRefine((selection, ctx) => {
+  const presetKeys = selection.presets.map((preset) => preset.key);
+  const interestKeys = selection.interestTopics.map((interest) => interest.key);
+  if (new Set(presetKeys).size !== presetKeys.length) {
+    ctx.addIssue({ code: "custom", message: "projectSelection preset keys must be unique", path: ["presets"] });
+  }
+  if (new Set(interestKeys).size !== interestKeys.length) {
+    ctx.addIssue({ code: "custom", message: "projectSelection interest topic keys must be unique", path: ["interestTopics"] });
+  }
+  const declaredPresets = new Set(presetKeys);
+  const affinityCounts = new Map(presetKeys.map((presetKey) => [presetKey, 0]));
+  selection.interestTopics.forEach((interest, interestIndex) => {
+    if (new Set(interest.dimensions).size !== interest.dimensions.length) {
+      ctx.addIssue({ code: "custom", message: `projectSelection interest "${interest.key}" has duplicate dimensions`, path: ["interestTopics", interestIndex, "dimensions"] });
+    }
+    if (new Set(interest.presetAffinity).size !== interest.presetAffinity.length) {
+      ctx.addIssue({ code: "custom", message: `projectSelection interest "${interest.key}" has duplicate preset affinities`, path: ["interestTopics", interestIndex, "presetAffinity"] });
+    }
+    interest.presetAffinity.forEach((presetKey) => {
+      if (!declaredPresets.has(presetKey)) {
+        ctx.addIssue({ code: "custom", message: `projectSelection interest "${interest.key}" references unknown preset "${presetKey}"`, path: ["interestTopics", interestIndex, "presetAffinity"] });
+      } else {
+        affinityCounts.set(presetKey, (affinityCounts.get(presetKey) ?? 0) + 1);
+      }
+    });
+  });
+  affinityCounts.forEach((count, presetKey) => {
+    if (count < 2) {
+      ctx.addIssue({ code: "custom", message: `projectSelection preset "${presetKey}" requires affinity from at least two interests`, path: ["presets"] });
+    }
+  });
+});
+export type ProjectSelectionConfig = z.infer<typeof projectSelectionSchema>;
+
 // ── Config (-> ProgramVersion.config) ────────────────────────────────────────
 
 export const configSchema = z.object({
@@ -422,6 +483,8 @@ export const configSchema = z.object({
     .optional(),
   /** Learner-visible generation limits. Omission preserves legacy behavior. */
   responseStyle: responseStyleSchema.optional(),
+  /** Optional authored inputs for per-enrollment learner project selection. */
+  projectSelection: projectSelectionSchema.optional(),
   onboarding: z
     .object({
       mode: z.enum(["survey", "baseline_quiz", "skip"]),

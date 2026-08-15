@@ -65,6 +65,7 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
   if (!socio) throw new PlayerError(404, "learner_not_found", "Learner not found");
 
   let programVersion;
+  let selectedEnrollmentId: string | undefined;
   if (identity.ltiContextId) {
     const context = await playerRuntimeRepo.ltiContext.findUnique({
       where: { id: identity.ltiContextId },
@@ -74,6 +75,11 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
       throw new PlayerError(403, "context_mismatch", "This Canvas link does not authorize the requested course");
     }
     programVersion = context.programVersion;
+    selectedEnrollmentId = socio.participantProfile?.enrollments.find((item) =>
+      item.cohortId === context.cohortId
+      && item.programVersionId === context.programVersionId
+      && item.status === "active"
+    )?.id;
   } else {
     if (socio.curriculumCollectionKey !== collectionKey) {
       throw new PlayerError(403, "not_enrolled", "You are not enrolled in this course");
@@ -89,13 +95,14 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
     }) : null;
     if (!enrollment?.programVersion) throw new PlayerError(403, "not_enrolled", "An active enrollment in this course is required");
     programVersion = enrollment.programVersion;
+    selectedEnrollmentId = enrollment.id;
   }
   if (!programVersion?.collection || !["published", "archived"].includes(programVersion.status)) throw new PlayerError(404, "course_unpublished", "Course is not released");
   const delivery = resolveDelivery(programVersion.metadata);
   if (delivery.surface !== "player" || !delivery.supportedChannels.includes(identity.channel)) {
     throw new PlayerError(403, "channel_not_supported", `Course is not available through ${identity.channel}`);
   }
-  const enrollment = socio.participantProfile?.enrollments.find((item) => item.programVersionId === programVersion.id && item.status === "active");
+  const enrollment = socio.participantProfile?.enrollments.find((item) => item.id === selectedEnrollmentId);
   if (!enrollment) throw new PlayerError(403, "not_enrolled", "An active enrollment in this course is required");
   return {
     socioId: socio.id, collectionKey, organizationId: programVersion.program.organizationId,

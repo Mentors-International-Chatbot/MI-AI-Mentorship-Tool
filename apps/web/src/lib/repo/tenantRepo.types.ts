@@ -71,6 +71,43 @@ export type Enrollment = {
   metadata: Record<string, unknown> | null;
 };
 
+export type LearnerProjectStatus = 'DRAFT' | 'ACTIVE' | 'CHANGED' | 'ABANDONED';
+
+export type LearnerProject = {
+  id: string;
+  organizationId: string;
+  enrollmentId: string;
+  socioId: string;
+  presetKey: string | null;
+  title: string | null;
+  oneLiner: string | null;
+  context: string | null;
+  automationLevel: string | null;
+  interests: string[];
+  status: LearnerProjectStatus;
+  lifeContext: string | null;
+  reframedAt: Date | null;
+  automationValidatedAt: Date | null;
+  createdAt: Date;
+  confirmedAt: Date | null;
+  updatedAt: Date;
+};
+
+export type PutLearnerProjectInput = {
+  presetKey: string;
+  title: string;
+  oneLiner: string;
+  context?: string | null;
+  automationLevel: string;
+  interests: string[];
+  status?: LearnerProjectStatus;
+};
+
+export type StageLearnerProjectInput = Omit<PutLearnerProjectInput, 'status' | 'title'> & {
+  lifeContext: string;
+  reframed: boolean;
+};
+
 export type EnrollmentInvitation = {
   id: string;
   cohortId: string;
@@ -352,6 +389,18 @@ export interface TenantRepo {
   getEnrollmentsByParticipant(ctx: TenantContext, participantId: string): Promise<Enrollment[]>;
   createEnrollment(ctx: TenantContext, cohortId: string, participantId: string): Promise<Enrollment>;
   updateEnrollmentStatus(ctx: TenantContext, enrollmentId: string, status: Enrollment['status']): Promise<Enrollment>;
+
+  // ─── Learner Projects ─────────────────────────────────────────────────────
+  /** The one current DRAFT/ACTIVE project for an enrollment, if any. */
+  getCurrentLearnerProject(ctx: TenantContext, enrollmentId: string): Promise<LearnerProject | null>;
+  saveLearnerProjectInterests(ctx: TenantContext, enrollmentId: string, interests: string[]): Promise<LearnerProject>;
+  saveLearnerProjectLifeContext(ctx: TenantContext, enrollmentId: string, lifeContext: string): Promise<LearnerProject>;
+  stageLearnerProject(ctx: TenantContext, enrollmentId: string, data: StageLearnerProjectInput): Promise<LearnerProject>;
+  /**
+   * Create or replace the enrollment's current project while enforcing the
+   * status transition contract. ACTIVE → CHANGED returns the new DRAFT row.
+   */
+  putLearnerProject(ctx: TenantContext, enrollmentId: string, data: PutLearnerProjectInput): Promise<LearnerProject>;
 
   // ─── Enrollment Invitations ────────────────────────────────────────────────
   createInvitation(ctx: TenantContext, cohortId: string, channel: string, target: string, expiresAt: Date): Promise<EnrollmentInvitation>;

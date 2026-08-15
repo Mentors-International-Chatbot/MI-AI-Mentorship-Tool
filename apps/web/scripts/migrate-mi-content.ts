@@ -1,5 +1,7 @@
 #!/usr/bin/env npx tsx
 import "dotenv/config";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 /**
  * MI Content Migration Script
  * ═══════════════════════════════════════════════════════════════════════════
@@ -99,7 +101,7 @@ function transformLesson(legacy: LegacyLesson): PackageLesson {
 // Build JourneyPackage
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function buildMIJourneyPackage(): Promise<JourneyPackage> {
+export async function buildMIJourneyPackage(): Promise<JourneyPackage> {
   // Dynamically import the legacy lessons
   const { getLessonData, hasLessonData } = await import("../src/lib/lessons/data");
 
@@ -385,4 +387,6 @@ Next steps:
   }
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  void main();
+}

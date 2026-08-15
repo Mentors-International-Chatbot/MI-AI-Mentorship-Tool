@@ -538,11 +538,49 @@ model Enrollment {
   programVersion ProgramVersion?    @relation(fields: [programVersionId], references: [id])
   observations   MetricObservation[]
   alerts         Alert[]
+  learnerProjects LearnerProject[]
 
   @@unique([participantId, cohortId])
   @@index([cohortId])
   @@index([participantId])
   @@map("enrollments")
+}
+
+enum LearnerProjectStatus {
+  DRAFT
+  ACTIVE
+  CHANGED
+  ABANDONED
+}
+
+/// The learner-authored project selection for one enrollment. Historical
+/// CHANGED/ABANDONED rows are retained; raw migration SQL enforces at most one
+/// current (DRAFT or ACTIVE) row because Prisma cannot express partial indexes.
+model LearnerProject {
+  id              String               @id @default(uuid())
+  organizationId  String               @map("organization_id")
+  enrollmentId    String               @map("enrollment_id")
+  socioId         String               @map("socio_id")
+  presetKey       String?              @map("preset_key")
+  title           String?
+  oneLiner        String?              @map("one_liner")
+  context         String?
+  automationLevel String?              @map("automation_level")
+  interests       String[]
+  status          LearnerProjectStatus @default(DRAFT)
+  lifeContext     String?              @map("life_context")
+  reframedAt      DateTime?            @map("reframed_at")
+  automationValidatedAt DateTime?      @map("automation_validated_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  confirmedAt     DateTime?            @map("confirmed_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([socioId])
+  @@index([enrollmentId])
+  @@map("learner_projects")
 }
 
 model EnrollmentInvitation {
@@ -858,6 +896,10 @@ model AssessmentSession {
 /// `checkDescription` on a milestone is conversational ("Learner reports
 /// completing the exercise"), so the writer is a [MILESTONE:key] marker the AI
 /// emits, the same mechanism as [LESSON_COMPLETE:n] and [FINANCIAL:...].
+///
+/// RETAKE BLOCKER: this identity is still socioId + collectionKey + milestoneKey.
+/// It must become enrollment-scoped before AI Essentials supports retakes, or
+/// two enrollments in the same collection will share capstone milestone state.
 model MilestoneProgress {
   id             String   @id @default(uuid())
   organizationId String   @map("organization_id")
