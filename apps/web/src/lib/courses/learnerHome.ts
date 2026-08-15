@@ -13,7 +13,7 @@ export async function resolveLearnerHome(
     where: {
       participantId: socio.participantProfile.id,
       status: "active",
-      programVersion: { status: "published", collection: { slug: socio.curriculumCollectionKey } },
+      programVersion: { status: { in: ["published", "archived"] }, collection: { slug: socio.curriculumCollectionKey } },
       ...(programVersionId ? { programVersionId } : {}),
     },
     orderBy: { enrolledAt: "desc" },
@@ -23,7 +23,7 @@ export async function resolveLearnerHome(
   const version = await playerRuntimeRepo.programVersion.findFirst({
     where: {
       ...(selectedVersionId ? { id: selectedVersionId } : {}),
-      status: "published",
+      status: selectedVersionId ? { in: ["published", "archived"] } : "published",
       collection: { slug: socio.curriculumCollectionKey },
     },
     include: { collection: { include: { lessons: { orderBy: { orderIndex: "asc" }, include: { versions: { where: { active: true }, take: 1 } } } } } },
