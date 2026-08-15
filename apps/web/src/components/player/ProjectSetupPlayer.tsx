@@ -152,6 +152,7 @@ export function ProjectSetupPlayer({ course }: { course: string }) {
       });
       setProject(result.project);
       if (project?.id) window.sessionStorage.removeItem(`oci_project_setup:${project.id}`);
+      window.location.assign("/home");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to confirm project"); }
     finally { setBusy(false); }
   }

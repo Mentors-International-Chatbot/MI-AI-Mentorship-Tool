@@ -531,6 +531,7 @@ model Enrollment {
   status           String    @default("active") // "active", "paused", "completed", "dropped"
   enrolledAt       DateTime  @default(now()) @map("enrolled_at")
   completedAt      DateTime? @map("completed_at")
+  projectSelectionGrandfatheredAt DateTime? @map("project_selection_grandfathered_at")
   metadata         Json?
 
   participant    ParticipantProfile @relation(fields: [participantId], references: [id], onDelete: Cascade)

@@ -4,6 +4,7 @@ import { resolveCourseCode } from "@/lib/courses/resolver";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
 import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
 import { programVersionConfigSchema, type ProgramVersionConfig } from "@/lib/journey-package/program-version-config.schema";
+import { learnerProjectSelectionRequired } from "./learnerProject";
 
 export class PlayerError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -276,6 +277,9 @@ export async function recordPlayerTutorSuccess(socioId: string, context: Validat
 }
 
 export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
+  if (await learnerProjectSelectionRequired(access)) {
+    throw new PlayerError(403, "project_required", "Choose your project before starting the course");
+  }
   const diagnosticRequired = access.config.onboarding?.mode === "baseline_quiz";
   if (diagnosticRequired) {
     const attempts = await playerRuntimeRepo.diagnosticAttempt.count({ where: { socioId: access.socioId, programVersionId: access.programVersionId } });

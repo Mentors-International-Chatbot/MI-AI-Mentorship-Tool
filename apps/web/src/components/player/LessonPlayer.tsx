@@ -49,7 +49,8 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         setCompleted(new Set(result.progress.filter((item) => item.completedAt).map((item) => item.blockId)));
       })
       .catch((reason: Error & { code?: string }) => {
-        if (reason.code === "diagnostic_required") window.location.assign(`/learn/${course}/diagnostic`);
+        if (reason.code === "project_required") window.location.assign(`/learn/${course}/project-setup`);
+        else if (reason.code === "diagnostic_required") window.location.assign(`/learn/${course}/diagnostic`);
         else setError(reason.message);
       });
     return () => { active = false; };

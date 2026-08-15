@@ -1,6 +1,9 @@
 import { playerRuntimeRepo } from "@/lib/repo/playerRuntimeRepo";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
 import { lessonSchema } from "@/lib/journey-package/journey-package.schema";
+import { programVersionConfigSchema } from "@/lib/journey-package/program-version-config.schema";
+import { learnerProjectSelectionRequired } from "@/lib/player/learnerProject";
+import { courseCodeForCollectionKey } from "./resolver";
 
 export async function resolveLearnerHome(
   socioId: string,
@@ -17,7 +20,7 @@ export async function resolveLearnerHome(
       ...(programVersionId ? { programVersionId } : {}),
     },
     orderBy: { enrolledAt: "desc" },
-    select: { programVersionId: true },
+    select: { id: true, programVersionId: true },
   }) : null;
   const selectedVersionId = programVersionId ?? enrollment?.programVersionId ?? undefined;
   const version = await playerRuntimeRepo.programVersion.findFirst({
@@ -26,7 +29,10 @@ export async function resolveLearnerHome(
       status: selectedVersionId ? { in: ["published", "archived"] } : "published",
       collection: { slug: socio.curriculumCollectionKey },
     },
-    include: { collection: { include: { lessons: { orderBy: { orderIndex: "asc" }, include: { versions: { where: { active: true }, take: 1 } } } } } },
+    include: {
+      program: { select: { organizationId: true } },
+      collection: { include: { lessons: { orderBy: { orderIndex: "asc" }, include: { versions: { where: { active: true }, take: 1 } } } } },
+    },
     orderBy: selectedVersionId ? undefined : { publishedAt: "desc" },
   });
   // AI Essentials is a versioned player course. A curriculum key without a
@@ -39,10 +45,18 @@ export async function resolveLearnerHome(
   if (delivery.surface === "chat") return "/chat";
   if (!enrollment || enrollment.programVersionId !== version?.id) return "/join?error=not-enrolled";
   if (!delivery.supportedChannels.includes(channel)) return "/join?error=channel-not-supported";
-  const courseCode = socio.curriculumCollectionKey === "ai-essentials" ? "AIESS" : socio.curriculumCollectionKey;
   if (!version?.collection) return "/join";
-  const diagnosticRequired = version.config && typeof version.config === "object" && !Array.isArray(version.config)
-    && (version.config as { onboarding?: { mode?: unknown } }).onboarding?.mode === "baseline_quiz";
+  const courseCode = courseCodeForCollectionKey(socio.curriculumCollectionKey);
+  const config = programVersionConfigSchema.parse(version.config);
+  if (await learnerProjectSelectionRequired({
+    organizationId: version.program.organizationId,
+    enrollmentId: enrollment.id,
+    collectionKey: socio.curriculumCollectionKey,
+    config,
+  })) {
+    return `/learn/${encodeURIComponent(courseCode)}/project-setup`;
+  }
+  const diagnosticRequired = config.onboarding?.mode === "baseline_quiz";
   if (diagnosticRequired) {
     const attempts = await playerRuntimeRepo.diagnosticAttempt.count({ where: { socioId, programVersionId: version.id } });
     if (attempts === 0) return `/learn/${courseCode}/diagnostic`;

@@ -59,6 +59,17 @@ export async function getCurrentLearnerProject(access: PlayerAccess): Promise<Le
   return tenantRepo.getCurrentLearnerProject(createTenantContext(access.organizationId), access.enrollmentId);
 }
 
+export async function learnerProjectSelectionRequired(
+  access: Pick<PlayerAccess, "organizationId" | "enrollmentId" | "collectionKey" | "config">,
+): Promise<boolean> {
+  if (!access.config.projectSelection) return false;
+  return tenantRepo.learnerProjectSelectionRequired(
+    createTenantContext(access.organizationId),
+    access.enrollmentId,
+    access.collectionKey,
+  );
+}
+
 export async function putCurrentLearnerProject(
   access: PlayerAccess,
   data: LearnerProjectPutBody,

@@ -149,6 +149,7 @@ function toEnrollment(p: PrismaEnrollment): Enrollment {
     status: p.status as Enrollment['status'],
     enrolledAt: p.enrolledAt,
     completedAt: p.completedAt,
+    projectSelectionGrandfatheredAt: p.projectSelectionGrandfatheredAt,
     metadata: p.metadata as Record<string, unknown> | null,
   };
 }
@@ -637,12 +638,21 @@ async function verifyEnrollmentOwnership(ctx: TenantContext, enrollmentId: strin
 async function verifyLearnerProjectEnrollmentOwnership(
   ctx: TenantContext,
   enrollmentId: string,
-): Promise<{ organizationId: string; socioId: string }> {
+): Promise<{
+  organizationId: string;
+  socioId: string;
+  collectionKey: string | null;
+  enrolledAt: Date;
+  projectSelectionGrandfatheredAt: Date | null;
+}> {
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
     select: {
+      enrolledAt: true,
+      projectSelectionGrandfatheredAt: true,
       participant: { select: { socioId: true } },
       cohort: { select: { program: { select: { organizationId: true } } } },
+      programVersion: { select: { collection: { select: { slug: true } } } },
     },
   });
   if (!enrollment) {
@@ -672,6 +682,9 @@ async function verifyLearnerProjectEnrollmentOwnership(
   return {
     organizationId,
     socioId: enrollment.participant.socioId,
+    collectionKey: enrollment.programVersion?.collection?.slug ?? null,
+    enrolledAt: enrollment.enrolledAt,
+    projectSelectionGrandfatheredAt: enrollment.projectSelectionGrandfatheredAt,
   };
 }
 
@@ -1168,6 +1181,47 @@ export const tenantPrismaRepo: TenantRepo = {
       });
     }
     return toLearnerProject(project);
+  },
+
+  async learnerProjectSelectionRequired(ctx, enrollmentId, collectionKey) {
+    const owner = await verifyLearnerProjectEnrollmentOwnership(ctx, enrollmentId);
+    if (owner.collectionKey !== collectionKey) {
+      throw new TenantIsolationError('Enrollment course does not match project selection course', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: owner.organizationId,
+        resourceType: 'Enrollment',
+        resourceId: enrollmentId,
+      });
+    }
+
+    const active = await prisma.learnerProject.findFirst({
+      where: { enrollmentId, status: { in: ['ACTIVE'] } },
+      select: { id: true },
+    });
+    if (active) return false;
+
+    // Any project history means this learner entered the new flow. DRAFT and
+    // ABANDONED must resume setup; CHANGED cannot become a legacy exemption.
+    const history = await prisma.learnerProject.findFirst({
+      where: { enrollmentId },
+      select: { id: true },
+    });
+    if (history) return true;
+    if (owner.projectSelectionGrandfatheredAt) return false;
+
+    const legacyProgress = await prisma.blockProgress.findFirst({
+      where: { socioId: owner.socioId, collectionKey, completedAt: { gte: owner.enrolledAt } },
+      select: { id: true },
+    });
+    if (!legacyProgress) return true;
+
+    // The collection-scoped progress is consulted only while granting. The
+    // durable decision is enrollment-scoped, so later retakes do not inherit it.
+    await prisma.enrollment.updateMany({
+      where: { id: enrollmentId, projectSelectionGrandfatheredAt: null },
+      data: { projectSelectionGrandfatheredAt: new Date() },
+    });
+    return false;
   },
 
   async saveLearnerProjectInterests(ctx, enrollmentId, interests) {

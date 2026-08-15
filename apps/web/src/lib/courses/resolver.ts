@@ -61,6 +61,11 @@ export function resolveCourseCode(code: string): string | null {
   return COURSE_CODES[normalized] ?? null;
 }
 
+/** Returns the route-facing course code without course-specific branching. */
+export function courseCodeForCollectionKey(collectionKey: string): string {
+  return Object.entries(COURSE_CODES).find(([, key]) => key === collectionKey)?.[0] ?? collectionKey;
+}
+
 /**
  * Checks if a course code is valid.
  */

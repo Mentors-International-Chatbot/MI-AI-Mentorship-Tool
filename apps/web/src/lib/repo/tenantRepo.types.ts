@@ -68,6 +68,7 @@ export type Enrollment = {
   status: 'active' | 'paused' | 'completed' | 'dropped';
   enrolledAt: Date;
   completedAt: Date | null;
+  projectSelectionGrandfatheredAt: Date | null;
   metadata: Record<string, unknown> | null;
 };
 
@@ -393,6 +394,11 @@ export interface TenantRepo {
   // ─── Learner Projects ─────────────────────────────────────────────────────
   /** The one current DRAFT/ACTIVE project for an enrollment, if any. */
   getCurrentLearnerProject(ctx: TenantContext, enrollmentId: string): Promise<LearnerProject | null>;
+  /**
+   * Whether this enrollment must complete project selection. A legacy exemption
+   * is written once onto the enrollment and never inferred again on later reads.
+   */
+  learnerProjectSelectionRequired(ctx: TenantContext, enrollmentId: string, collectionKey: string): Promise<boolean>;
   saveLearnerProjectInterests(ctx: TenantContext, enrollmentId: string, interests: string[]): Promise<LearnerProject>;
   saveLearnerProjectLifeContext(ctx: TenantContext, enrollmentId: string, lifeContext: string): Promise<LearnerProject>;
   stageLearnerProject(ctx: TenantContext, enrollmentId: string, data: StageLearnerProjectInput): Promise<LearnerProject>;
