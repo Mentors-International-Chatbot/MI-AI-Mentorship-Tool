@@ -516,6 +516,17 @@ export const prismaRepo: Repo = {
         return flags.map(toSocioFlag);
     },
 
+    async recordFlagOccurrence(flagId, at = new Date()) {
+        const flag = await prisma.socioFlag.update({
+            where: { id: flagId },
+            data: {
+                occurrenceCount: { increment: 1 },
+                lastOccurredAt: at,
+            },
+        });
+        return toSocioFlag(flag);
+    },
+
     async getAllUnresolvedFlags() {
         const flags = await prisma.socioFlag.findMany({
             where: activeFlagWhere(),

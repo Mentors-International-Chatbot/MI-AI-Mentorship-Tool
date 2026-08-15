@@ -267,6 +267,17 @@ export const inMemoryRepo: Repo = {
         return (flagsBySocio.get(socioId) ?? []).filter(f => isFlagActive(f));
     },
 
+    async recordFlagOccurrence(flagId, at = new Date()) {
+        for (const flags of flagsBySocio.values()) {
+            const flag = flags.find(f => f.id === flagId);
+            if (!flag) continue;
+            flag.occurrenceCount += 1;
+            flag.lastOccurredAt = at;
+            return flag;
+        }
+        throw new Error(`Flag ${flagId} not found`);
+    },
+
     async getAllUnresolvedFlags() {
         const result: (SocioFlag & { socio: Socio })[] = [];
         for (const [socioId, flags] of flagsBySocio) {

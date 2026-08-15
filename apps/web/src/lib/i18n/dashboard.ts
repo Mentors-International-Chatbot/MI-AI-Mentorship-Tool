@@ -224,9 +224,19 @@ export interface DashboardStrings {
   // participants differently.
   signalsTitle: string;
   signalsSubtitle: string;
+  /**
+   * Zone 0 — learners who pressed "request help from a human".
+   *
+   * Worded as *they* asked, never as a severity. Every other zone label is a
+   * verdict this system reached about somebody; this one reports a thing a
+   * person did, and the copy has to keep that distinction visible or the zone
+   * stops being different from the one below it.
+   */
+  tileAskedForYou: string;
   tileNeedsYouNow: string;
   tileWatching: string;
   tileGoodNews: string;
+  zoneAskedForYouTitle: string;
   zoneNeedsYouNowTitle: string;
   /**
    * Zone 2. Never "AI is handling" — the AI does not see these flags at all.
@@ -235,9 +245,18 @@ export interface DashboardStrings {
   zoneWatchingTitle: string;
   zoneGoodNewsTitle: string;
   /** Empty states read as good news, not as a blank panel. */
+  zoneAskedForYouEmpty: string;
   zoneNeedsYouNowEmpty: string;
   zoneWatchingEmpty: string;
   zoneGoodNewsEmpty: string;
+  /** Zone 0 card lines. */
+  helpRequestNoMessage: string;
+  helpRequestAskedAt: (lessonKey: string) => string;
+  helpRequestProject: (title: string) => string;
+  /** Shown when the learner pressed again while the request was still open. */
+  helpRequestRepeated: (count: number) => string;
+  /** No mentor owns this learner; see the HelpRequest docblock in zones.ts. */
+  helpRequestUnassigned: string;
   signalsCount: (count: number) => string;
   signalsLessonProgress: (current: number, total: number) => string;
   signalsLessonProgressNoTotal: (current: number) => string;
@@ -346,6 +365,10 @@ const es: DashboardStrings = {
       p.requestReason
         ? `Contacto con mentor solicitado: «${p.requestReason}»`
         : 'Contacto con mentor solicitado',
+    'help.requested': (p) =>
+      p.requestReason
+        ? `Pidió hablar con una persona: «${p.requestReason}»`
+        : 'Pidió hablar con una persona',
   },
   flagActionAcknowledge: 'Marcar como vista',
   flagActionSnooze: 'Posponer',
@@ -408,15 +431,23 @@ const es: DashboardStrings = {
   assessmentAttempts: (n) => (n === 1 ? '1 intento' : `${n} intentos`),
   signalsTitle: 'Señales',
   signalsSubtitle: 'Quién necesita tu atención hoy, y quién va bien.',
+  tileAskedForYou: 'Te buscaron',
   tileNeedsYouNow: 'Te necesitan ahora',
   tileWatching: 'En observación',
   tileGoodNews: 'Buenas noticias',
+  zoneAskedForYouTitle: 'Pidieron hablar con una persona',
   zoneNeedsYouNowTitle: 'Te necesitan ahora',
   zoneWatchingTitle: 'En observación',
   zoneGoodNewsTitle: 'Buenas noticias',
+  zoneAskedForYouEmpty: 'Nadie ha pedido hablar con una persona.',
   zoneNeedsYouNowEmpty: 'Nadie necesita atención urgente. Todo en orden por ahora.',
   zoneWatchingEmpty: 'Nadie en observación ahora mismo.',
   zoneGoodNewsEmpty: 'Aún no hay avances que destacar esta semana. Aparecerán aquí cuando alguien complete una lección o apruebe una evaluación.',
+  helpRequestNoMessage: 'Pidió ayuda sin escribir un mensaje.',
+  helpRequestAskedAt: (lessonKey) => `Preguntó en ${lessonKey}`,
+  helpRequestProject: (title) => `Proyecto: ${title}`,
+  helpRequestRepeated: (count) => `Lo pidió ${count} veces`,
+  helpRequestUnassigned: 'Sin mentor asignado',
   signalsCount: (count) => (count === 1 ? '1 señal' : `${count} señales`),
   signalsLessonProgress: (current, total) => `Lección ${current} de ${total}`,
   signalsLessonProgressNoTotal: (current) => `Lección ${current}`,
@@ -527,6 +558,10 @@ const en: DashboardStrings = {
       p.requestReason
         ? `Mentor contact requested: “${p.requestReason}”`
         : 'Mentor contact requested',
+    'help.requested': (p) =>
+      p.requestReason
+        ? `Asked to talk to a human: “${p.requestReason}”`
+        : 'Asked to talk to a human',
   },
   flagActionAcknowledge: 'Mark as seen',
   flagActionSnooze: 'Snooze',
@@ -589,15 +624,23 @@ const en: DashboardStrings = {
   assessmentAttempts: (n) => (n === 1 ? '1 attempt' : `${n} attempts`),
   signalsTitle: 'Signals',
   signalsSubtitle: 'Who needs you today, and who is doing well.',
+  tileAskedForYou: 'Asked for you',
   tileNeedsYouNow: 'Needs you now',
   tileWatching: 'Watching',
   tileGoodNews: 'Good news',
+  zoneAskedForYouTitle: 'Asked to talk to a human',
   zoneNeedsYouNowTitle: 'Needs you now',
   zoneWatchingTitle: 'Watching',
   zoneGoodNewsTitle: 'Good news',
+  zoneAskedForYouEmpty: 'Nobody has asked to talk to a human.',
   zoneNeedsYouNowEmpty: 'Nobody needs urgent attention. All clear for now.',
   zoneWatchingEmpty: 'Nobody on the watch list right now.',
   zoneGoodNewsEmpty: 'No wins to report yet this week. They show up here when someone completes a lesson or passes an assessment.',
+  helpRequestNoMessage: 'Asked for help without writing a message.',
+  helpRequestAskedAt: (lessonKey) => `Asked during ${lessonKey}`,
+  helpRequestProject: (title) => `Project: ${title}`,
+  helpRequestRepeated: (count) => `Asked ${count} times`,
+  helpRequestUnassigned: 'No mentor assigned',
   signalsCount: (count) => (count === 1 ? '1 signal' : `${count} signals`),
   signalsLessonProgress: (current, total) => `Lesson ${current} of ${total}`,
   signalsLessonProgressNoTotal: (current) => `Lesson ${current}`,
@@ -708,6 +751,10 @@ const pt: DashboardStrings = {
       p.requestReason
         ? `Contato com mentor solicitado: «${p.requestReason}»`
         : 'Contato com mentor solicitado',
+    'help.requested': (p) =>
+      p.requestReason
+        ? `Pediu para falar com uma pessoa: «${p.requestReason}»`
+        : 'Pediu para falar com uma pessoa',
   },
   flagActionAcknowledge: 'Marcar como vista',
   flagActionSnooze: 'Adiar',
@@ -770,15 +817,23 @@ const pt: DashboardStrings = {
   assessmentAttempts: (n) => (n === 1 ? '1 tentativa' : `${n} tentativas`),
   signalsTitle: 'Sinais',
   signalsSubtitle: 'Quem precisa de você hoje, e quem está indo bem.',
+  tileAskedForYou: 'Procuraram você',
   tileNeedsYouNow: 'Precisam de você agora',
   tileWatching: 'Em observação',
   tileGoodNews: 'Boas notícias',
+  zoneAskedForYouTitle: 'Pediram para falar com uma pessoa',
   zoneNeedsYouNowTitle: 'Precisam de você agora',
   zoneWatchingTitle: 'Em observação',
   zoneGoodNewsTitle: 'Boas notícias',
+  zoneAskedForYouEmpty: 'Ninguém pediu para falar com uma pessoa.',
   zoneNeedsYouNowEmpty: 'Ninguém precisa de atenção urgente. Tudo em ordem por enquanto.',
   zoneWatchingEmpty: 'Ninguém em observação no momento.',
   zoneGoodNewsEmpty: 'Ainda não há avanços para destacar esta semana. Eles aparecem aqui quando alguém conclui uma lição ou é aprovado numa avaliação.',
+  helpRequestNoMessage: 'Pediu ajuda sem escrever uma mensagem.',
+  helpRequestAskedAt: (lessonKey) => `Perguntou em ${lessonKey}`,
+  helpRequestProject: (title) => `Projeto: ${title}`,
+  helpRequestRepeated: (count) => `Pediu ${count} vezes`,
+  helpRequestUnassigned: 'Sem mentor atribuído',
   signalsCount: (count) => (count === 1 ? '1 sinal' : `${count} sinais`),
   signalsLessonProgress: (current, total) => `Lição ${current} de ${total}`,
   signalsLessonProgressNoTotal: (current) => `Lição ${current}`,

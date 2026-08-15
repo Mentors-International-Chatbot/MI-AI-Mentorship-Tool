@@ -7,6 +7,9 @@ import remarkGfm from "remark-gfm";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { playerFetch } from "@/lib/player/client";
+import type { LessonDashboard } from "@/lib/player/dashboard";
+import { HelpRequestPanel } from "./HelpRequestPanel";
+import { PlayerDashboard } from "./PlayerDashboard";
 import { SortableOrderItem } from "./SortableOrderItem";
 import "./player.css";
 
@@ -20,11 +23,28 @@ type LessonDto = {
   lesson: { key: string; title: string; category?: string; keyConcepts: string[]; blocks: Block[] };
   previousLessonKey: string | null; nextLessonKey: string | null;
   hasCapstone: boolean;
+  helpRequestEnabled?: boolean;
+  /** Null for a course without project selection, or a learner without a project. */
+  dashboard?: LessonDashboard | null;
   progress: Array<{ blockId: string; completedAt: string | null; state?: { turnCount?: number } }>;
 };
 type ParentIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
 type TutorMessage = { role: "learner" | "mentor"; text: string; parentIntent?: ParentIntent; blockId?: string };
 
+/**
+ * TECH DEBT: the four `/api/chat` calls below hardcode `courseCode: "AIESS"`
+ * while the component already receives the real course as a route prop.
+ *
+ * It happens to be harmless today only because AI Essentials is the sole course
+ * on the player surface — the moment a second one lands, every tutor turn from
+ * it is labelled as AIESS, and `ValidatedPlayerContext.courseCode` is typed
+ * `"AIESS"` so the compiler will agree with the lie. Fixing it means widening
+ * that type and threading `course` through, which is a change to the tutor
+ * context and therefore out of scope here.
+ *
+ * The help-request call added below uses the `course` prop instead. Route
+ * around this, do not extend it.
+ */
 export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey: string }) {
   const [data, setData] = useState<LessonDto | null>(null);
   const [error, setError] = useState("");
@@ -152,9 +172,27 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     <main className="player-shell">
       <header className="player-header">
         <div><span className="player-eyebrow">{data.lesson.category ?? "AI Essentials"}</span><h1>{data.lesson.title}</h1>{data.hasCapstone && <Link className="player-project-link" href={`/learn/${course}/capstone`}>Open project</Link>}</div>
-        <div className="player-progress" aria-label={`${done} of ${total} blocks complete`}><span style={{ width: `${100 * done / total}%` }} /></div>
+        <div className="player-header-side">
+          <div className="player-progress" aria-label={`${done} of ${total} blocks complete`}><span style={{ width: `${100 * done / total}%` }} /></div>
+          {/*
+            The help button lives in the dashboard when there is one. It falls
+            back to the header otherwise, so a learner with no project never
+            loses the way to reach a person.
+          */}
+          {data.helpRequestEnabled && !data.dashboard && (
+            <HelpRequestPanel course={course} lessonKey={lessonKey} blockId={current?.id} />
+          )}
+        </div>
       </header>
 
+      {/*
+        Two columns when there is a dashboard, one when there is not. The left
+        column holds exactly what the page held before — tutor log, lesson card,
+        Ask AI Mentor — in the same order and at very nearly the same measure,
+        so nothing about the lesson content or the tutor changes.
+      */}
+      <div className={data.dashboard ? "player-body has-dash" : "player-body"}>
+      <div className="player-main">
       {tutorMessages.length > 0 && <aside className="player-tutor-log" aria-label="AI Mentor messages">{tutorMessages.slice(-3).map((message, index, visible) => <div key={`${tutorMessages.length}-${index}`} className={`player-message ${message.role}`}><strong>{message.role === "mentor" ? "AI Mentor" : "You"}</strong><p>{message.text}</p>{message.role === "mentor" && message.parentIntent && index === visible.length - 1 && <button type="button" className="player-chip" disabled={busy} aria-label="Ask AI Mentor to explain the previous reply in more detail" onClick={() => explainMore(message.parentIntent!, message.blockId)}>Explain more</button>}</div>)}</aside>}
 
       {current ? <><section className="player-card" aria-live="polite">
@@ -170,6 +208,17 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         {submittedComplete.has(current.id) && <button onClick={advanceReviewedBlock}>Continue</button>}
         {error && <p className="player-error">{error}</p>}
       </section><aside className="player-card"><h2>Ask AI Mentor</h2><textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} placeholder="Ask about this lesson…" /><button disabled={busy || !question.trim()} onClick={askTutor}>Ask a question</button></aside></> : <section className="player-card player-complete"><span>Lesson complete</span><h2>Nicely done.</h2><p>Your progress is saved.</p>{data.nextLessonKey ? <Link className="player-button" href={`/learn/${course}/${data.nextLessonKey}`}>Continue to next lesson</Link> : <Link className="player-button" href={`/learn/${course}/capstone`}>Open capstone</Link>}</section>}
+      </div>
+      {data.dashboard && (
+        <PlayerDashboard
+          dashboard={data.dashboard}
+          course={course}
+          lessonKey={lessonKey}
+          blockId={current?.id}
+          helpRequestEnabled={data.helpRequestEnabled === true}
+        />
+      )}
+      </div>
     </main>
   );
 }

@@ -132,17 +132,10 @@ LmsUserLink
   instructors), role
 ```
 
-Deployment-specific linkage lives in the DB (it's per-instance), **NOT** in the journey package (which is portable course content). The package can optionally declare grade-sync preferences:
-
-```ts
-meta.lms: z.object({
-  gradeSync: z.object({
-    enabled: z.boolean().default(false),
-    scoreSource: z.enum(["assessment_gate"]).default("assessment_gate"),
-    lineItemPer: z.enum(["lesson","course"]).default("lesson"),
-  }).default({}),
-}).optional()
-```
+Deployment-specific linkage lives in the DB (it's per-instance), **NOT** in the
+journey package (which is portable course content). In the first release,
+`LtiResourceLink` stores the Canvas line-item URL and only the graded capstone
+queues AGS score deliveries; course and lesson links create no line items.
 
 ### Launch flow (what actually happens)
 
@@ -211,3 +204,163 @@ Recording only, no code change.
 Invisible today because the web join flow's language picker `PATCH`es `/api/auth/me` and overwrites both before it matters.
 
 It stops being invisible at **§6 step 5**: LTI auto-provision is a third socio-creation path, and it has no picker in the flow. Whoever builds it has to choose a language deliberately — from the LTI launch claim's locale, most likely — rather than rediscovering that the two existing paths disagree and inheriting whichever they happened to read first.
+
+### 8. Retire the legacy `socio_flags.reason` prose path
+
+`reason` has silently changed shape at least twice with no versioning. Three
+incompatible formats coexisted in 68 rows before the `reasonCode` backfill:
+
+1. `Confusión (8/10) o frustración (2/10) elevada. Temas: other`
+2. `Alto nivel de urgencia detectado (9/10). Sentimiento: distressed. Temas: business`
+3. `Detección automática: urgencia=6, sentimiento=distressed`
+
+`reasonCode` + `reasonParams` is the first version-stable thing that table has
+had. `reason` is still written by the auto sources as a language-free
+`key=value` line, purely as a transition fallback for legacy readers.
+
+**The gate for removing it.** When this returns 0:
+
+```sql
+SELECT count(*) FROM socio_flags WHERE reason_code IS NULL;
+```
+
+then, in one change:
+- stop writing `reason` for `sentiment_auto` and `ai_marker` flags
+  (`apps/web/src/lib/sentiment/pipeline.ts`, `apps/web/src/lib/messaging/handler.ts`)
+- delete `formatLegacyReason` and its four regexes from
+  `apps/web/src/app/dashboard/learners/[id]/FlagsPanel.tsx`
+- drop the fallback arm in `formatReason` so an unknown `reasonCode` fails
+  loudly instead of silently rendering raw prose
+
+Until then the dead path stays, and it will still be there when someone else
+inherits the file — which is the reason this note exists rather than a TODO.
+
+### 9. `repo.getMentorNames` is unscoped
+
+`apps/web/src/lib/repo/prismaRepo.ts` — takes a bare `string[]` and resolves any
+mentor id to a display name with no tenant check. It sits on the legacy `Repo`,
+where nothing is scoped, so it is consistent with its neighbours; the scoped
+layer is `tenantPrismaRepo`. Blast radius today is narrow because the only
+caller feeds it `flag.resolvedBy` values from flags on a socio the caller has
+already passed an ownership check for.
+
+**The precondition is the only thing making it safe, so state it as a rule, not
+as a description of today's caller:**
+
+> Callers of `getMentorNames` MUST have already verified the requester's access
+> to the resource the ids came from. It performs no access check of its own.
+
+The current caller (`apps/web/src/app/dashboard/learners/[id]/page.tsx`) passes
+`flag.resolvedBy` values taken from flags on a socio whose ownership was already
+checked by the page. Any new caller that feeds it ids from a wider source — a
+mentor list, an admin filter, anything user-supplied — turns it into a directory
+lookup across every tenant, and nothing in the signature will warn them.
+
+It is the same shape as `getAllSocios()`: a lookup that feels like a reference
+table rather than data. Move it onto `TenantRepo` with a `TenantContext` when
+the flag reads migrate off the legacy repo — not before, since doing it alone
+means dragging flag reads onto `TenantRepo` mid-stream.
+
+---
+
+## 10. Two sources of truth for "which mentor owns which socio" — DECIDE BEFORE LTI
+
+**This is the highest-priority item in this document.** It is the same defect
+class as §7 (org anchoring) and as the unscoped `getAllSocios`: one fact, two
+storage locations, no reconciliation. Here the fact is mentor↔socio assignment,
+which is what every ownership check and tenant scope is built on.
+
+### The two definitions
+
+| | Reads | Used by |
+|---|---|---|
+| **Legacy** | `Socio.mentorId` (direct FK) | ALL authorization, plus every admin surface |
+| **Tenant** | `ParticipantProfile.organizationId` | `getSociosForMentor` / `getSociosForOrganization` — i.e. every mentor-facing *list* |
+
+`apps/web/src/lib/repo/tenantPrismaRepo.ts:1211` is the whole of it:
+
+```ts
+async getSociosForMentor(organizationId, mentorId) {
+  return prisma.socio.findMany({ where: {
+    status: 'ACTIVE',
+    mentorId,                                  // ← legacy FK
+    participantProfile: { organizationId },    // ← tenant table, as a filter only
+  }});
+}
+```
+
+It reads the legacy column for *who*, and the tenant table only as an org
+filter. `MentoringRelationship` is not consulted at all.
+
+### `MentoringRelationship` is populated but never read
+
+10 rows exist. Zero application readers. The three repo methods that touch it —
+`getMentoringRelationships`, `createMentoringRelationship`,
+`endMentoringRelationship` — have **no callers outside `tenantPrismaRepo.ts`**.
+
+Create, update, or delete any of those rows and no dashboard changes. Anyone
+reading `schema.prisma` will reasonably assume the opposite, because the table
+has a role column, activeFrom/activeUntil, and a unique constraint — it looks
+like the live model.
+
+### This is already producing invisible users
+
+Measured on the dev database, 2026-08-05:
+
+- 45 socios total; 20 have a `ParticipantProfile`, **25 do not**
+- Of those 25: 23 are ACTIVE, and **5 are ACTIVE *and* have a mentor assigned**
+
+Those 5 are authorized-but-invisible:
+
+| Surface | Source | Result |
+|---|---|---|
+| `/dashboard/learners` (list) | `getSociosForMentor` | **absent** |
+| `/dashboard/alerts` | `getSociosForMentor` | **absent** — their flags never reach triage |
+| `/dashboard/learners/[id]` (detail) | `socio.mentorId` (`page.tsx:49`) | **reachable by URL** |
+| `verifyMentorOwnsSocio` (`auth/ownership.ts:38`) | `socio.mentorId` | **authorized** |
+| flag resolve / acknowledge / snooze | `socio.mentorId` | **authorized** |
+
+So authorization is strictly more permissive than display. A mentor can act on a
+socio they cannot see, and the socio's red flags never surface for triage. Today
+that reads as "the dashboard is missing people"; it is really two definitions
+disagreeing.
+
+### The decision to make
+
+**Is `MentoringRelationship` the intended future model with `Socio.mentorId` as
+a legacy shim, or is it vestigial and should be dropped?**
+
+Both are defensible. What is not defensible is leaving a populated,
+schema-blessed, never-read table in place while a third socio-creation path
+gets built.
+
+- **If it is the future model:** `getSociosForMentor` and every ownership check
+  must migrate to it, `Socio.mentorId` becomes derived-or-dropped, and the 25
+  profile-less socios need backfilling first (otherwise migrating *widens* the
+  invisible set from 5 to 25).
+- **If it is vestigial:** delete the table, the three repo methods, and the
+  `MentorProfile.mentorships` relation. Keep `Socio.mentorId` as the single
+  source. Cheapest, and matches what the code actually does today.
+
+### Why before LTI (§6)
+
+§6 step 5 auto-provisions socios from an LTI launch. It is a third
+socio-creation path with no picker and no admin assignment step. If it writes
+`MentoringRelationship` because that is what the schema implies, the socio joins
+the invisible-5 and it will look exactly like the `ParticipantProfile` gap did —
+silent, and only discoverable by someone asking "where did my student go".
+
+Whoever builds §6 must be told which table assigns mentors. Right now the
+schema and the code give different answers.
+
+### Related, same shape, smaller
+
+`resolveOrgWithSource` (`tenantPrismaRepo.ts:657`) walks three tiers:
+ParticipantProfile → curriculum collection slug → `DEFAULT_ORGANIZATION_ID`.
+`getSociosForMentor` implements **tier 1 only**. So a socio whose org resolves
+confidently via tier 2 still does not exist to any mentor list. That is the same
+divergence expressed in org terms, and it is the mechanism behind the 5 above.
+
+`Socio` has no `organizationId` column, so at least there is no third copy of
+*that* fact. The fix is to make list-scoping call the same resolver the rest of
+the codebase calls, rather than reimplementing tier 1 inline.

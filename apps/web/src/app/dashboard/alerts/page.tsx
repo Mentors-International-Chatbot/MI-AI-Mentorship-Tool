@@ -5,6 +5,7 @@ import { repo, tenantRepo } from '@/lib/repo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
 import { computeHealthFromData } from '@/lib/health';
 import { getCourseSummaries } from '@/lib/journey-package/course-summaries';
+import { organizationOffersHelpRequests } from '@/lib/journey-package/help-request-config';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
 import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
@@ -41,6 +42,24 @@ export default async function AlertsPage() {
     ? await tenantRepo.getSociosForMentor(organizationId, session.userId)
     : [];
 
+  // Zone 0 is org-wide where zones 1-3 are caseload-scoped, and that asymmetry
+  // is the point. A learner who pressed "request help from a human" has been
+  // told a person will follow up. Learners provisioned through Canvas have no
+  // `mentorId` — LTI provisioning does not set one — so scoping their request
+  // to an assigned mentor would deliver it to nobody and quietly break that
+  // promise. Reading org-wide means somebody sees it; `unassigned` below tells
+  // the viewer it is not from their own caseload.
+  //
+  // Gated so this costs nothing, and shows nothing, on a program that has not
+  // enabled the feature.
+  const offersHelpRequests = organizationId
+    ? await organizationOffersHelpRequests(organizationId)
+    : false;
+  const helpSocios = offersHelpRequests && organizationId
+    ? await tenantRepo.getSociosForOrganization(organizationId)
+    : [];
+  const assignedToViewer = new Set(socios.map((s) => s.id));
+
   // Zone inputs. Flags are fetched here rather than via `computeSocioHealth` so
   // the exact unresolved counts survive — the health service drops the yellow
   // reason on a socio already RED, and the zone-1 card needs the true total.
@@ -61,6 +80,21 @@ export default async function AlertsPage() {
     }),
   );
 
+  // Zone 0 inputs. Only flags are needed — a help request carries its own
+  // context in `reasonParams` and has no health verdict to compute — so this
+  // deliberately skips the progress read that `zoneInputs` above pays for.
+  const helpZoneInputs: ZoneSocioInput[] = await Promise.all(
+    helpSocios.map(async (socio) => ({
+      socioId: socio.id,
+      name: socio.name ?? null,
+      curriculumCollectionKey: socio.curriculumCollectionKey ?? null,
+      currentLesson: 0,
+      health: { status: 'GREEN' as const, reasons: [{ kind: 'none' as const }] },
+      flags: await repo.getActiveFlags(socio.id),
+      unassigned: !assignedToViewer.has(socio.id),
+    })),
+  );
+
   // Positives are derived, never stored. A socio with no assessment sessions,
   // no completions, no gaps and no sentiment rows simply produces none.
   const positives = organizationId
@@ -72,14 +106,17 @@ export default async function AlertsPage() {
       )
     : [];
 
-  const zones = buildAlertZones(zoneInputs, positives);
+  const zones = buildAlertZones(zoneInputs, positives, helpZoneInputs);
 
   // Course chrome: lesson totals for "lesson X of N", and the participant noun.
   // The noun is resolved per course rather than once for the page — a mentor
   // with socios in two courses cannot have a single correct participant word.
+  // Includes zone 0, whose learners may be in a course nobody on this mentor's
+  // caseload is taking — an unassigned Canvas learner is the whole reason that
+  // zone reads org-wide, so their course name has to resolve too.
   const collectionKeys = [
     ...new Set(
-      zoneInputs
+      [...zoneInputs, ...helpZoneInputs]
         .map((z) => z.curriculumCollectionKey)
         .filter((k): k is string => k !== null),
     ),
@@ -98,7 +135,7 @@ export default async function AlertsPage() {
   );
 
   const decorations: Record<string, AlertSnapshotSocio> = {};
-  for (const input of zoneInputs) {
+  for (const input of [...zoneInputs, ...helpZoneInputs]) {
     const key = input.curriculumCollectionKey;
     decorations[input.socioId] = {
       courseName: key ? courseNames.get(key) ?? null : null,
@@ -120,6 +157,7 @@ export default async function AlertsPage() {
         zones={zones}
         decorations={decorations}
         socioNames={socioNames}
+        showHelpRequests={offersHelpRequests}
         t={t}
       />
     </div>

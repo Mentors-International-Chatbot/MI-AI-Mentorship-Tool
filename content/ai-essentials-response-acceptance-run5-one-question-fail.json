@@ -1,0 +1,561 @@
+{
+  "generatedAt": "2026-08-11T21:18:33.444Z",
+  "runId": "5a929468-1371-483d-bc4c-cd6775f0bd8b",
+  "programVersionId": "d483e511-c02f-49c8-8402-d2c2e63dfe2f",
+  "contentVersion": "1.1.0",
+  "samples": [
+    {
+      "id": "entry-01",
+      "intent": "lesson_entry",
+      "lessonKey": "ai-day-in-the-life",
+      "message": "Introduce this lesson.",
+      "output": "Lesson 1: AI in a GSCM Day\n\nImagine you're in supply chain work and an AI tool summarizes a supplier email, drafts a memo, and pulls action items from a meeting - but you still need to check the facts and make the real decisions. That's what we mean by AI being a workflow amplifier, not a replacement for your judgment. What's one task in your day right now where you think AI could help you work faster?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "57eab28a9f64b6a354d5d5a9c914d28c9d688e0dfa0f34acfc29c5c586a773fc",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 405,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "entry-02",
+      "intent": "lesson_entry",
+      "lessonKey": "ai-prompting-iteration",
+      "message": "Introduce this lesson.",
+      "output": "Lesson 1: AI in a GSCM Day\n\nImagine you're in supply chain work and an AI tool summarizes a supplier email, drafts a memo, and pulls action items from a meeting-but you still need to check the facts and make the real decisions. That's what we mean by AI being a workflow amplifier, not a replacement for your judgment. What's one task in your day right now where you think AI could help you work faster?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "436ed4872c8ff42c3f513170cd44607ed6798c1d8db545beaaf080c7561ff8b3",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 403,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "entry-03",
+      "intent": "lesson_entry",
+      "lessonKey": "ai-pattern-vs-truth",
+      "message": "Introduce this lesson.",
+      "output": "Lesson 1: Patterns Are Not Truth\n\nYou've probably noticed that AI can sound confident even when it's wrong-like when it invents a fact or misreads context. That happens because AI learns patterns from data, not actual truth, and sometimes those patterns mislead it. In supply chain work, this matters: an AI might spot a shipping trend that looks real but isn't, so you still need to verify what it tells you.",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "27264feb937ddaa3dc1d3955623d1861ea6eb010540740e689f89022eac4e58a",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 409,
+        "sentences": 3,
+        "questionCount": 0,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "entry-04",
+      "intent": "lesson_entry",
+      "lessonKey": "ai-tool-shapes",
+      "message": "Introduce this lesson.",
+      "output": "Lesson 1: AI in a GSCM Day\n\nImagine you're in supply chain work and an AI tool summarizes a supplier email, drafts a memo, and pulls action items from a meeting-but you still need to check the facts and make the real decisions. That's what we mean by AI being a workflow amplifier, not a replacement for your judgment. What's one task in your day right now where you think AI could help you work faster?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "b3ddf21640e09a418783a88a9646f371a9201a10a282c4dd06d674666042d9ac",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 403,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "entry-05",
+      "intent": "lesson_entry",
+      "lessonKey": "ai-safety-deploy",
+      "message": "Introduce this lesson.",
+      "output": "Lesson 1: Deploy AI Safely\n\nYou've probably seen AI tools sound completely sure of themselves even when they're wrong-that's because AI learns patterns from data, not actual truth. In supply chain work, this matters: an AI might flag a trend that looks real but isn't, so you need to verify before you act. What's a decision in your work where you'd want to double-check AI's output first?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "1bf3c72a4ce9da7b9180fc74722a19911f072ebff61ce1dcce5e61cf44544021",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 389,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "question-01",
+      "intent": "question",
+      "lessonKey": "ai-prompting-iteration",
+      "message": "Why is adding context better than just making the prompt longer?",
+      "blockId": "aiess-l09-b054",
+      "output": "Good question! Adding context means giving AI the right information it needs, while making a prompt longer just adds extra words that don't help. Think of it like directions: \"Turn left at the corner store\" works better than \"Turn left at the corner store and it's sunny and I like that store\" because the extra details don't guide you anywhere.",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "765695dd838ef37936d015132682375d56e6dcfbebe94e4330ca397789dc911d",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 345,
+        "sentences": 3,
+        "questionCount": 0,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "question-expand-01",
+      "intent": "expand",
+      "parentIntent": "question",
+      "lessonKey": "ai-prompting-iteration",
+      "parentSampleId": "question-01",
+      "blockId": "aiess-l09-b054",
+      "output": "Good question! Adding context means giving AI the right information it needs, while making a prompt longer just adds extra words that don't help. Think of it like directions: \"Turn left at the corner store\" works better than \"Turn left at the corner store and it's sunny and I like that store\" because the extra details don't guide you anywhere. Useful context tells AI who you are, what you're trying to do, and what constraints matter-like your job title, the output format, and length limits. What's one piece of context you'd definitely want to include if you were asking AI to help with something in your work?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "97cd68119d3815f8a2fbeeab31a776e79b689d9e9799f6330b3d3b54244274e5",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 615,
+        "sentences": 5,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": true,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "question-02",
+      "intent": "question",
+      "lessonKey": "ai-pattern-vs-truth",
+      "message": "I don't understand how a fluent answer can still be wrong.",
+      "blockId": "aiess-l07-b042",
+      "output": "That's a really important question to ask. AI is trained to predict the next word that sounds natural, not to check if what it's saying is actually true, so it can sound confident and smooth while saying something completely false. Does that help clarify how fluent speech and wrong facts can happen at the same time?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "65ad7122fb504baebc8a2fa4c803feb0a4072353645d59760a6e98013bdcf3ea",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 317,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "question-expand-02",
+      "intent": "expand",
+      "parentIntent": "question",
+      "lessonKey": "ai-pattern-vs-truth",
+      "parentSampleId": "question-02",
+      "blockId": "aiess-l07-b042",
+      "output": "That's a really important question to ask. AI is trained to predict the next word that sounds natural, not to check if what it's saying is actually true, so it can sound confident and smooth while saying something completely false. Think of it like autocomplete on your phone - it guesses what word comes next based on patterns it learned, but your phone doesn't fact-check whether that suggestion makes sense in the real world. In supply chain work, this matters because AI might draft a memo that reads perfectly but cites a supplier price that doesn't exist or a delivery date that was never confirmed. You still need to verify the facts yourself because AI is a thinking partner, not a truth-checker. Does that make sense?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "0fb7a52b35ad3c72bdfea93b80f6a4216caf860e69299aef174a97729e2f6187",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 726,
+        "sentences": 6,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": true,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "question-03",
+      "intent": "question",
+      "lessonKey": "ai-model-landscape",
+      "message": "When would a smaller model be the better choice?",
+      "blockId": "aiess-l12-b072",
+      "output": "A smaller model is often the better choice when you need a fast answer, have a tight budget, or don't need the extra power of a large model-like summarizing an email or categorizing supplier messages. In supply chain work, you might use a smaller model to quickly flag urgent orders but a larger one for detailed demand forecasting. What kind of task in your work do you think could run fast and cheap with a smaller model?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "50483f0bad62d2344db7bf515cb5b3b3f72cda8acc1f981e782677292c29bb88",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 423,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "teachback-01",
+      "intent": "teach_back",
+      "lessonKey": "ai-day-in-the-life",
+      "message": "AI can draft and summarize routine work, while the person remains responsible for checking evidence and making the decision.",
+      "blockId": "aiess-l01-b006",
+      "output": "That's exactly right-you've nailed the core idea. AI amplifies what you do, but you keep ownership of the facts and the final call.\n\nHere's a quick follow-up: can you think of one specific task in supply chain or planning work where you'd use AI to draft or summarize, and what's the one thing you'd definitely verify before acting on it?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "b828c74e6b3edd9a511caf8d345e4ba8ca2cf080c457ba87ca1e8562f5f4022e",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 338,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "teachback-expand-01",
+      "intent": "expand",
+      "parentIntent": "teach_back",
+      "lessonKey": "ai-day-in-the-life",
+      "parentSampleId": "teachback-01",
+      "blockId": "aiess-l01-b006",
+      "output": "That's exactly right-you've nailed the core idea. AI amplifies what you do, but you keep ownership of the facts and the final call.\n\nThink of it like this: if you ask AI to summarize supplier feedback from ten emails, it saves you hours of reading. But you still need to spot if it missed a price change or misread a delivery date, because those details matter for your decision. AI is fast at spotting patterns and drafting; you're the one who knows what actually matters in your business. Here's a quick follow-up: can you think of one specific task in supply chain or planning work where you'd use AI to draft or summarize, and what's the one thing you'd definitely verify before acting on it?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "d007b9e95c6308a88d3bde34c62d11dd8eab9ecbe79dd44c449de4d225d7de7e",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 696,
+        "sentences": 6,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": true,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "teachback-02",
+      "intent": "teach_back",
+      "lessonKey": "ai-reasoning-context-tools",
+      "message": "Reasoning organizes steps, context supplies the facts and constraints, and tools let the system retrieve data or take a controlled action.",
+      "blockId": "aiess-l10-b065",
+      "output": "That's a clear and accurate summary-you've connected all three pieces correctly. Reasoning is the logic flow, context is the information fuel, and tools are the actions AI can actually take in the real world.\n\nHere's one more thing to test your understanding: if you were asking AI to help prioritize urgent supplier issues, which of these three-reasoning, context, or tools-would be most critical to get right first?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "67e95f1a9ca10aee0b030b268fc99ea3f77e1c843b23bd3342a101a13e890475",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 417,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "teachback-03",
+      "intent": "teach_back",
+      "lessonKey": "ai-safety-deploy",
+      "message": "A safe deployment uses representative tests, permissions, human review, monitoring, and a clear response when the system fails.",
+      "blockId": "aiess-l17-b112",
+      "output": "That's a complete and accurate answer-you've identified all five pillars of safe deployment. You clearly understand how guardrails work together to keep AI systems reliable and accountable.\n\nHere's my question: if monitoring detects something wrong during a deployment, what's the most important thing that needs to happen next?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "672369453165c5bf242e341b2b84f864b6975f3eeb1637d5f89c8ac17b688e21",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 328,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "teachback-expand-02",
+      "intent": "expand",
+      "parentIntent": "teach_back",
+      "lessonKey": "ai-safety-deploy",
+      "parentSampleId": "teachback-03",
+      "blockId": "aiess-l17-b112",
+      "output": "That's a complete and accurate answer-you've identified all five pillars of safe deployment. You clearly understand how guardrails work together to keep AI systems reliable and accountable. When monitoring detects a problem, the most important thing is to stop and investigate before things get worse. Think of it like a factory floor: if a machine starts making bad parts, you pause production to find out why, not keep running and hope it fixes itself. In AI deployment, that pause gives your team time to understand what went wrong and fix it safely. If monitoring detects something wrong during a deployment, what's the most important thing that needs to happen next?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "be73056564e7ce52ebaa9364b6df2cb673d3c7d03e8d8194572a23e5c65f1fcb",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 671,
+        "sentences": 6,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": true,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "capstone-01",
+      "intent": "capstone",
+      "lessonKey": "capstone",
+      "message": "My use case is a weekly supplier-delay brief for an operations manager, and success means saving an hour without missing any verified delays.",
+      "output": "That's a strong use case-clear user, real time savings, and a safety constraint that matters. You're thinking like someone who understands what \"good\" actually looks like in operations.\n\nHere's the key question: where does the verified delay data come from right now, and how would you make sure AI doesn't miss or misread it when it pulls that information?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "58e7940340ab858af7218886b9bc88b99d5ef704d37ecf6e23a75e9fe0e07499",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 357,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "capstone-expand-01",
+      "intent": "expand",
+      "parentIntent": "capstone",
+      "lessonKey": "capstone",
+      "parentSampleId": "capstone-01",
+      "output": "You're asking a really practical question: how do you make sure the AI is reading the right data and not making mistakes with it? In supply chain work, delay data usually lives in your TMS, carrier portals, or ops logs, and the risk is that AI might pull outdated records or misread dates. The solution is to specify exactly where the AI should look and what it should flag as uncertain rather than guess. You also build in a human checkpoint so someone on your team reviews what the AI pulled before it becomes a recommendation. That way the AI amplifies your workflow, but you stay in control of the facts. What does your current process look like-do you have one system where delay data lives, or is it scattered across different tools?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "1098169f688a8d992c7b00c3bf735f6faae7e0abf71378995ebe3a03f610ef37",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 739,
+        "sentences": 6,
+        "questionCount": 2,
+        "markdown": false
+      },
+      "progressUnchanged": true,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": false,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "capstone-02",
+      "intent": "capstone",
+      "lessonKey": "capstone",
+      "message": "My workflow retrieves the approved shipment report, drafts the brief, checks every date against the source, and requires manager approval before sending.",
+      "output": "Excellent-you've designed a workflow with real checkpoints and human ownership built in. That's exactly the structure that makes AI deployment safe and trustworthy.\n\nOne focused question: in that date-checking step, how will you know if the AI draft missed a delay that was actually in the source report?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "48a059c520141c0f7fed49e85bd49587c318c1e50afbd8e19bb851073070f638",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 304,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "capstone-03",
+      "intent": "capstone",
+      "lessonKey": "capstone",
+      "message": "My evaluation uses ten past reports, checks factual accuracy and omissions, and stops deployment if any invented shipment date appears.",
+      "output": "That's a rigorous evaluation plan-you're testing for both false negatives (missed delays) and false positives (invented dates), and you have a hard stop rule. That's exactly the discipline a production system needs.\n\nOne sharp question: of those three risks you're testing for, which one would hurt your operations manager most if it slipped through to the final brief?",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "30e7f19009018fa6396376c2c830908f79a96e556333978b2818dd07e9370dd1",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 369,
+        "sentences": 3,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": null,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    },
+    {
+      "id": "capstone-expand-02",
+      "intent": "expand",
+      "parentIntent": "capstone",
+      "lessonKey": "capstone",
+      "parentSampleId": "capstone-03",
+      "output": "I appreciate you asking me to expand, but I need to be honest: I don't have the conversation history you're referring to, so I can't see the prior capstone reply or the three risks you mentioned.\n\nTo give you a useful expansion, I'd need you to share what those three risks were. Could you paste the earlier message or tell me which risks your evaluation plan is testing for?\n\nOnce I see that, I can explain in more depth why one might be more damaging to slip through than the others.",
+      "model": "anthropic/claude-haiku-4.5",
+      "promptHash": "be7606257a794b465d367a07f049c6a5033eead0e84f3282e7d26915afff6e2f",
+      "finishReason": "stop",
+      "generationStatus": "success",
+      "metrics": {
+        "characters": 485,
+        "sentences": 4,
+        "questionCount": 1,
+        "markdown": false
+      },
+      "progressUnchanged": true,
+      "acceptance": {
+        "sentenceLimit": true,
+        "questionLimit": true,
+        "noMarkdown": true,
+        "completeEnding": true,
+        "noLengthFinish": true,
+        "noExpansionProgress": true
+      }
+    }
+  ],
+  "automatedAcceptance": {
+    "passed": false,
+    "failedSampleIds": [
+      "capstone-expand-01"
+    ]
+  },
+  "professorReview": {
+    "required": true,
+    "completed": false,
+    "rubric": [
+      "conversational tone",
+      "clarity",
+      "usefulness",
+      "concision"
+    ],
+    "passingRule": "At least 18/20 score 4+ on every dimension; no score may be 1 or 2."
+  }
+}

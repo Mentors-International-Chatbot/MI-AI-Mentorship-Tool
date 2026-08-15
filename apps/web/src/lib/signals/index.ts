@@ -13,7 +13,11 @@ export {
 export {
   assignZone,
   buildAlertZones,
+  collectHelpRequests,
+  isHelpRequest,
+  HELP_REQUEST_REASON_CODE,
   type AlertZones,
+  type HelpRequest,
   type ZoneKey,
   type ZoneSocio,
   type ZoneSocioInput,

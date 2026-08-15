@@ -32,7 +32,14 @@
       "Bash(npx tsx *)",
       "Read(//tmp/**)",
       "Bash(rm -f scripts/tmp/probe.ts scripts/tmp/hello.ts /tmp/probe.out)",
-      "Bash(sort -u -t: -k2)"
+      "Bash(sort -u -t: -k2)",
+      "Bash(git checkout *)",
+      "Read(//Users/michaelbertoldo/Desktop/OCI winter 2026/content/**)",
+      "Read(//Users/michaelbertoldo/Desktop/OCI winter 2026/**)",
+      "Bash(git fsck *)",
+      "Bash(tmutil listlocalsnapshots *)",
+      "Bash(git hash-object *)",
+      "Bash(command -v neonctl neon)"
     ]
   }
 }

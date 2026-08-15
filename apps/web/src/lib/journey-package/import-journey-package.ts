@@ -239,6 +239,7 @@ export async function importJourneyPackage(
     aiBehavior: pkg.config.aiBehavior,
     responseStyle: pkg.config.responseStyle,
     projectSelection: pkg.config.projectSelection,
+    helpRequest: pkg.config.helpRequest,
     onboarding: pkg.config.onboarding,
     trackedDimensions: pkg.config.trackedDimensions,
     alertRules: pkg.config.alertRules,

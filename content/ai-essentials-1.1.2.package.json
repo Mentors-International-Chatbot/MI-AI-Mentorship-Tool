@@ -1,0 +1,2960 @@
+{
+  "schemaVersion": "1.2",
+  "metadata": {
+    "packageId": "ai-essentials",
+    "title": "AI Essentials",
+    "description": "AI literacy for GSCM undergraduates: how models work, how to use them, and how to choose tools.",
+    "languages": [
+      "en"
+    ],
+    "version": "1.1.2",
+    "author": {
+      "name": "Learn Machine"
+    },
+    "identity": {
+      "mentorName": "AI Mentor",
+      "displayName": "AI Essentials"
+    },
+    "terminology": {
+      "participant": {
+        "en": "learner"
+      }
+    },
+    "delivery": {
+      "surface": "player",
+      "supportedChannels": [
+        "web",
+        "canvas"
+      ]
+    }
+  },
+  "config": {
+    "aiBehavior": {
+      "tone": "clear, practical, and encouraging",
+      "teachingStyle": "Socratic coaching with concise feedback",
+      "languageInstruction": "Respond in English."
+    },
+    "responseStyle": {
+      "maxSentences": 3,
+      "maxOutputTokens": 240,
+      "markdown": "none",
+      "maxQuestions": 1,
+      "expanded": {
+        "maxSentences": 6,
+        "maxOutputTokens": 480
+      }
+    },
+    "projectSelection": {
+      "presets": [
+        {
+          "key": "morning-brief",
+          "family": "routine",
+          "label": "A daily brief with your schedule and what's due",
+          "defaultLevel": "L3",
+          "exampleContexts": [
+            "a full class load plus a job",
+            "commuting and needing the day up front"
+          ]
+        },
+        {
+          "key": "notes-to-summary",
+          "family": "messy-input",
+          "label": "Turn class or meeting notes into a clean summary and action items",
+          "defaultLevel": "L2",
+          "exampleContexts": [
+            "a club officer who takes meeting notes",
+            "long lectures you record"
+          ]
+        },
+        {
+          "key": "social-posts",
+          "family": "routine",
+          "label": "Draft social posts for a club, team, or small business",
+          "defaultLevel": "L2",
+          "exampleContexts": [
+            "running a club's Instagram",
+            "a family business that never posts"
+          ]
+        },
+        {
+          "key": "job-tailoring",
+          "family": "routine",
+          "label": "Tailor your resume and cover letter to a real job posting",
+          "defaultLevel": "L1",
+          "exampleContexts": [
+            "applying to internships this semester"
+          ]
+        },
+        {
+          "key": "weekly-recap",
+          "family": "routine",
+          "label": "A weekly recap email built from a form or sheet",
+          "defaultLevel": "L2",
+          "exampleContexts": [
+            "a team lead who sends updates",
+            "an intramural team"
+          ]
+        },
+        {
+          "key": "study-guide",
+          "family": "messy-input",
+          "label": "Turn readings or slides into a study guide and practice questions",
+          "defaultLevel": "L1",
+          "exampleContexts": [
+            "your hardest class this term"
+          ]
+        },
+        {
+          "key": "sheet-cleaner",
+          "family": "messy-input",
+          "label": "Clean up a messy spreadsheet automatically",
+          "defaultLevel": "L2",
+          "exampleContexts": [
+            "a club budget nobody maintains",
+            "sign-up data from a form"
+          ]
+        },
+        {
+          "key": "inbox-triage",
+          "family": "routine",
+          "label": "Sort your inbox and get one daily digest",
+          "defaultLevel": "L2",
+          "exampleContexts": [
+            "an inbox you have stopped reading"
+          ]
+        },
+        {
+          "key": "faq-responder",
+          "family": "handoff",
+          "label": "Draft replies to the questions a business gets over and over",
+          "defaultLevel": "L2",
+          "exampleContexts": [
+            "a family business answering the same five questions",
+            "a club inbox with repeat questions"
+          ]
+        },
+        {
+          "key": "scheduler",
+          "family": "handoff",
+          "label": "Build a shift or roster scheduler for a job or club",
+          "defaultLevel": "L2",
+          "exampleContexts": [
+            "a manager who builds the schedule by hand every week"
+          ]
+        },
+        {
+          "key": "expense-logger",
+          "family": "messy-input",
+          "label": "Photo or text of a receipt in, a categorized row out",
+          "defaultLevel": "L2",
+          "exampleContexts": [
+            "tracking spending for a club or a job"
+          ]
+        },
+        {
+          "key": "reading-digest",
+          "family": "messy-input",
+          "label": "Sources in, short summaries out",
+          "defaultLevel": "L1",
+          "exampleContexts": [
+            "following an industry for a class or an internship"
+          ]
+        }
+      ],
+      "interestTopics": [
+        {
+          "key": "stop-repeating-myself",
+          "label": "Stop doing the same boring task every week",
+          "dimensions": [
+            "ai_impact_adaptation",
+            "working_with_ai"
+          ],
+          "presetAffinity": [
+            "morning-brief",
+            "weekly-recap",
+            "inbox-triage",
+            "social-posts"
+          ]
+        },
+        {
+          "key": "better-answers",
+          "label": "Get much better answers out of AI than I do now",
+          "dimensions": [
+            "working_with_ai"
+          ],
+          "presetAffinity": [
+            "study-guide",
+            "job-tailoring",
+            "notes-to-summary"
+          ]
+        },
+        {
+          "key": "spot-made-up",
+          "label": "Know when AI is making things up",
+          "dimensions": [
+            "how_ai_works"
+          ],
+          "presetAffinity": [
+            "sheet-cleaner",
+            "expense-logger",
+            "reading-digest"
+          ]
+        },
+        {
+          "key": "under-the-hood",
+          "label": "Understand what's actually happening under the hood",
+          "dimensions": [
+            "how_ai_works"
+          ],
+          "presetAffinity": [
+            "reading-digest",
+            "notes-to-summary"
+          ]
+        },
+        {
+          "key": "pick-right-tool",
+          "label": "Pick the right AI tool instead of guessing",
+          "dimensions": [
+            "model_choice"
+          ],
+          "presetAffinity": [
+            "expense-logger",
+            "inbox-triage",
+            "sheet-cleaner"
+          ]
+        },
+        {
+          "key": "build-for-others",
+          "label": "Build something other people can actually use",
+          "dimensions": [
+            "tools_and_safety",
+            "working_with_ai"
+          ],
+          "presetAffinity": [
+            "scheduler",
+            "faq-responder",
+            "weekly-recap",
+            "social-posts"
+          ]
+        },
+        {
+          "key": "not-fooled-by-hype",
+          "label": "Not get fooled by AI hype",
+          "dimensions": [
+            "ai_impact_adaptation",
+            "how_ai_works"
+          ],
+          "presetAffinity": [
+            "reading-digest",
+            "study-guide"
+          ]
+        },
+        {
+          "key": "career-impact",
+          "label": "Figure out what AI means for the career I want",
+          "dimensions": [
+            "ai_impact_adaptation"
+          ],
+          "presetAffinity": [
+            "job-tailoring",
+            "reading-digest"
+          ]
+        },
+        {
+          "key": "connect-real-data",
+          "label": "Connect AI to real data and tools, not just a chat box",
+          "dimensions": [
+            "tools_and_safety",
+            "working_with_ai"
+          ],
+          "presetAffinity": [
+            "morning-brief",
+            "sheet-cleaner",
+            "expense-logger"
+          ]
+        },
+        {
+          "key": "catch-failures",
+          "label": "Catch AI failures before they cause damage",
+          "dimensions": [
+            "tools_and_safety",
+            "how_ai_works"
+          ],
+          "presetAffinity": [
+            "faq-responder",
+            "scheduler",
+            "expense-logger"
+          ]
+        },
+        {
+          "key": "business-case",
+          "label": "Make a case my boss or professor would actually accept",
+          "dimensions": [
+            "model_choice",
+            "ai_impact_adaptation"
+          ],
+          "presetAffinity": [
+            "weekly-recap",
+            "faq-responder"
+          ]
+        },
+        {
+          "key": "what-it-costs",
+          "label": "Understand what running this stuff actually costs",
+          "dimensions": [
+            "model_choice"
+          ],
+          "presetAffinity": [
+            "morning-brief",
+            "inbox-triage"
+          ]
+        }
+      ]
+    },
+    "helpRequest": {
+      "enabled": true,
+      "maxMessageLength": 1000
+    },
+    "onboarding": {
+      "mode": "baseline_quiz",
+      "steps": [],
+      "diagnostic": {
+        "id": "ai-placement-diagnostic",
+        "title": "AI Essentials Placement Diagnostic",
+        "description": "Quick check across practical AI fundamentals. Score at least 75% to place out of concepts you already know.",
+        "threshold": 0.75,
+        "questions": [
+          {
+            "id": "diagnostic-01",
+            "prompt": "Which is the best measure of value from an AI-assisted weekly operations report?",
+            "format": "multiple_choice",
+            "options": [
+              "Number of prompts used",
+              "Time saved while verified report quality is maintained",
+              "Length of the generated report",
+              "How human the writing sounds"
+            ],
+            "answerKey": "Time saved while verified report quality is maintained",
+            "explanation": "Measure an operational outcome with a quality check, not activity or novelty.",
+            "dimensionKey": "ai_impact"
+          },
+          {
+            "id": "diagnostic-02",
+            "prompt": "What does a machine-learning model primarily do?",
+            "format": "multiple_choice",
+            "options": [
+              "Applies only fixed rules written by a person",
+              "Learns patterns from examples to produce likely outputs",
+              "Guarantees every future prediction",
+              "Takes responsibility for decisions"
+            ],
+            "answerKey": "Learns patterns from examples to produce likely outputs",
+            "explanation": "Machine learning learns patterns from data; outputs remain estimates that need appropriate evaluation.",
+            "dimensionKey": "machine_learning"
+          },
+          {
+            "id": "diagnostic-03",
+            "prompt": "A model invents a shipment date that is not in any provided source. What is this?",
+            "format": "multiple_choice",
+            "options": [
+              "A context window",
+              "A hallucination",
+              "A deterministic calculation",
+              "A guardrail"
+            ],
+            "answerKey": "A hallucination",
+            "explanation": "A hallucination is a plausible but unsupported or false generated claim.",
+            "dimensionKey": "hallucinations"
+          },
+          {
+            "id": "diagnostic-04",
+            "prompt": "Which prompt is most likely to produce a useful supplier update?",
+            "format": "multiple_choice",
+            "options": [
+              "Make this better",
+              "Summarize logistics",
+              "Using the attached approved update, draft a 120-word note for the operations team with verified delays and next actions",
+              "Write anything about suppliers"
+            ],
+            "answerKey": "Using the attached approved update, draft a 120-word note for the operations team with verified delays and next actions",
+            "explanation": "Useful prompts specify the source, task, audience, format, and factual constraints.",
+            "dimensionKey": "prompting"
+          },
+          {
+            "id": "diagnostic-05",
+            "prompt": "What should guide model selection for a high-volume document classification task?",
+            "format": "multiple_choice",
+            "options": [
+              "The largest model available",
+              "Quality on representative cases, latency, cost, and security requirements",
+              "The newest marketing announcement",
+              "Whether the model can produce long poems"
+            ],
+            "answerKey": "Quality on representative cases, latency, cost, and security requirements",
+            "explanation": "Choose against the real task and operational constraints, not a general leaderboard.",
+            "dimensionKey": "model_selection"
+          },
+          {
+            "id": "diagnostic-06",
+            "prompt": "Which is a concrete guardrail for an AI purchasing assistant?",
+            "format": "multiple_choice",
+            "options": [
+              "Tell it to be careful",
+              "Allow it to send orders without review",
+              "Use read-only data access and require approval before an external message",
+              "Remove audit logs"
+            ],
+            "answerKey": "Use read-only data access and require approval before an external message",
+            "explanation": "Least-privilege access and approval gates directly limit risky actions and make them reviewable.",
+            "dimensionKey": "guardrails"
+          },
+          {
+            "id": "diagnostic-07",
+            "prompt": "Why connect a model to an approved inventory system instead of asking it to guess stock levels?",
+            "format": "multiple_choice",
+            "options": [
+              "It makes the response more creative",
+              "The system can retrieve current records that can be checked",
+              "It removes the need for human review",
+              "It guarantees the business decision is correct"
+            ],
+            "answerKey": "The system can retrieve current records that can be checked",
+            "explanation": "Grounding a response in an authorized system improves factual support, though decision review may still be required.",
+            "dimensionKey": "tools_harness"
+          }
+        ]
+      }
+    },
+    "trackedDimensions": [
+      {
+        "key": "ai_impact",
+        "label": "AI impact on work and life",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "ai_productivity",
+        "label": "Productivity and Jevons paradox",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "expert_systems",
+        "label": "Expert systems",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "machine_learning",
+        "label": "Machine learning basics",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "hallucinations",
+        "label": "Hallucinations vs truth",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "prompting",
+        "label": "Prompting and iteration",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "reasoning",
+        "label": "Reasoning and context",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "tools_harness",
+        "label": "Tools, skills, and harnesses",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "model_selection",
+        "label": "Choosing AI models",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "ai_systems",
+        "label": "AI systems beyond chatbots",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      },
+      {
+        "key": "guardrails",
+        "label": "Safety and guardrails",
+        "category": "comprehension",
+        "primary": true,
+        "scale": {
+          "min": 0,
+          "max": 1
+        },
+        "calibrationMode": "zero_start"
+      }
+    ],
+    "alertRules": [],
+    "dashboard": {
+      "panels": [
+        {
+          "type": "lesson_progress"
+        },
+        {
+          "type": "assessment_scores"
+        },
+        {
+          "type": "weekly_summary"
+        }
+      ]
+    }
+  },
+  "curriculum": {
+    "collectionKey": "ai-essentials",
+    "lessons": [
+      {
+        "key": "ai-day-in-the-life",
+        "title": "AI in a GSCM Day",
+        "category": "Track 0",
+        "keyConcepts": [
+          "AI impact on work and life",
+          "Productivity and Jevons paradox"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l01-b001",
+            "order": 1,
+            "concepts": [
+              "ai_impact",
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "**AI is a workflow amplifier, not a substitute for judgment.** In supply chain work, it can summarize a supplier update, draft a demand-planning memo, and turn a meeting transcript into action items. You still own the facts, trade-offs, and decision.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l01-b006",
+            "order": 2,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain AI impact on work and life. Use one practical example.",
+            "evaluatesConcepts": [
+              "AI impact on work and life",
+              "Productivity and Jevons paradox"
+            ],
+            "dimensionKey": "ai_impact",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l01-b002",
+            "order": 3,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Put a responsible AI-assisted task workflow in order:",
+            "items": [
+              "Define the business question and audience",
+              "Give the model relevant source material and constraints",
+              "Review claims against source data",
+              "Edit, approve, and send the deliverable"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l01-b003",
+            "order": 4,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l01-b003-q1",
+                "prompt": "Which task is the strongest first use of AI for a buyer?",
+                "format": "multiple_choice",
+                "options": [
+                  "Approve a supplier contract without reading it",
+                  "Draft a comparison table from approved supplier quotes",
+                  "Invent a new vendor score from no data",
+                  "Replace the final negotiation decision"
+                ],
+                "answerKey": "Draft a comparison table from approved supplier quotes",
+                "explanation": "AI can speed up structuring known information. Contract approval and negotiation accountability remain human responsibilities.",
+                "dimensionKey": "ai_impact"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l01-b004",
+            "order": 5,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l01-b004-q1",
+                "prompt": "A model summarizes a late-shipment report. What is the best next step?",
+                "format": "multiple_choice",
+                "options": [
+                  "Forward it immediately",
+                  "Check the cited shipments and dates against the report",
+                  "Assume the summary is correct because it is concise",
+                  "Delete the original report"
+                ],
+                "answerKey": "Check the cited shipments and dates against the report",
+                "explanation": "A useful output is a starting point. Verify important claims against the source before acting.",
+                "dimensionKey": "ai_productivity"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l01-b005",
+            "order": 6,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Practical habit: keep the original spreadsheet, email, or policy next to the draft. Ask AI to reduce clerical work; use your domain knowledge to make the call.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-magic-examples",
+        "title": "When AI Looks Like Magic",
+        "category": "Track 0",
+        "keyConcepts": [
+          "AI impact on work and life",
+          "Machine learning basics",
+          "Hallucinations vs truth"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l02-b007",
+            "order": 1,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Modern AI can generate fluent text, images, code, and classifications because it learns patterns from large datasets. That capability can feel magical, but it does not guarantee understanding or accuracy.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l02-b012",
+            "order": 2,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain AI impact on work and life. Use one practical example.",
+            "evaluatesConcepts": [
+              "AI impact on work and life",
+              "Machine learning basics",
+              "Hallucinations vs truth"
+            ],
+            "dimensionKey": "ai_impact",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l02-b008",
+            "order": 3,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order this demonstration from input to useful result:",
+            "items": [
+              "Provide a clean inventory exception list",
+              "Ask for a manager-ready summary with defined columns",
+              "Receive a draft prioritized by stated rules",
+              "Validate the priority and share with the manager"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l02-b009",
+            "order": 4,
+            "concepts": [
+              "hallucinations"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l02-b009-q1",
+                "prompt": "Why can a polished AI answer still be unsafe to use?",
+                "format": "multiple_choice",
+                "options": [
+                  "Fluent wording proves the model is correct",
+                  "The model may generate plausible details not supported by evidence",
+                  "AI can only repeat exact training sentences",
+                  "Grammar errors are the only risk"
+                ],
+                "answerKey": "The model may generate plausible details not supported by evidence",
+                "explanation": "Generative models can hallucinate: they may state unsupported or incorrect details confidently.",
+                "dimensionKey": "hallucinations"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l02-b010",
+            "order": 5,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l02-b010-q1",
+                "prompt": "What does pattern learning help a model do?",
+                "format": "multiple_choice",
+                "options": [
+                  "Guarantee the next quarter's demand",
+                  "Recognize relationships in examples and generate likely outputs",
+                  "Know facts it was never given",
+                  "Accept legal responsibility for recommendations"
+                ],
+                "answerKey": "Recognize relationships in examples and generate likely outputs",
+                "explanation": "Models estimate likely outputs from patterns. They do not guarantee future outcomes or take accountability.",
+                "dimensionKey": "machine_learning"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l02-b011",
+            "order": 6,
+            "concepts": [
+              "hallucinations"
+            ],
+            "contentVersion": 2,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "The useful question is not \"Is AI magic?\" It is \"What evidence would make this output trustworthy enough for this decision?\"",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-revolution-vs-past",
+        "title": "Why This AI Wave Matters",
+        "category": "Track 0",
+        "keyConcepts": [
+          "AI impact on work and life",
+          "Machine learning basics"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l03-b013",
+            "order": 1,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Spreadsheets made calculation cheaper; the web made information easier to reach. Generative AI makes drafting, transforming, and interacting with information cheaper. The change matters when it reshapes a whole workflow, not when it creates a clever demo.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l03-b014",
+            "order": 2,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Past industrial revolutions lowered the cost of physical work, transportation, and calculation. This wave lowers the cost of some mental tasks. The comparison has limits: AI does not understand a workplace the way a colleague does, and adoption depends on data, process changes, trust, and accountability.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l03-b019",
+            "order": 3,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain AI impact on work and life. Use one practical example.",
+            "evaluatesConcepts": [
+              "AI impact on work and life",
+              "Machine learning basics"
+            ],
+            "dimensionKey": "ai_impact",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l03-b015",
+            "order": 4,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order these technology shifts from older to newer:",
+            "items": [
+              "Spreadsheets automate calculations",
+              "The web broadens access to information",
+              "Cloud software connects shared workflows",
+              "Generative AI creates and transforms content from instructions"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l03-b016",
+            "order": 5,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l03-b016-q1",
+                "prompt": "Which statement best distinguishes generative AI from a traditional spreadsheet formula?",
+                "format": "multiple_choice",
+                "options": [
+                  "Generative AI never needs inputs",
+                  "A formula follows fixed logic; a generative model produces probabilistic output from instructions and context",
+                  "Spreadsheets cannot support business decisions",
+                  "Generative AI is always more accurate"
+                ],
+                "answerKey": "A formula follows fixed logic; a generative model produces probabilistic output from instructions and context",
+                "explanation": "Formulas are deterministic when inputs are fixed. Generative outputs are probabilistic and require review.",
+                "dimensionKey": "ai_impact"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l03-b017",
+            "order": 6,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l03-b017-q1",
+                "prompt": "Where is the current AI wave most likely to create value?",
+                "format": "multiple_choice",
+                "options": [
+                  "Only in jobs that never use language",
+                  "In workflows with repeated interpretation, drafting, search, or classification work",
+                  "Only in tasks with no human owner",
+                  "Only where errors have no cost"
+                ],
+                "answerKey": "In workflows with repeated interpretation, drafting, search, or classification work",
+                "explanation": "AI is especially useful where teams repeatedly transform information, provided controls match the risk.",
+                "dimensionKey": "machine_learning"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l03-b018",
+            "order": 7,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "For GSCM, look for bottlenecks: reading exceptions, compiling updates, translating requirements, and preparing decisions. Measure time saved and error rate, not novelty.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-prospering-gameplan",
+        "title": "Your AI Career Game Plan",
+        "category": "Track 0",
+        "keyConcepts": [
+          "AI impact on work and life",
+          "Productivity and Jevons paradox",
+          "Safety and guardrails"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l04-b020",
+            "order": 1,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "AI raises the value of people who can frame a problem, supply context, test an answer, and coordinate action. Build a portfolio of repeatable workflows rather than collecting prompt tricks.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l04-b021",
+            "order": 2,
+            "concepts": [
+              "ai_productivity",
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Efficiency can increase demand instead of reducing it. This is the Jevons paradox: when a resource becomes cheaper to use, people may use more of it. Cheaper analysis can mean more scenarios, more frequent forecasts, and higher expectations. Your advantage comes from deciding which extra work is worth doing.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l04-b027",
+            "order": 3,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain AI impact on work and life. Use one practical example.",
+            "evaluatesConcepts": [
+              "AI impact on work and life",
+              "Productivity and Jevons paradox",
+              "Safety and guardrails"
+            ],
+            "dimensionKey": "ai_impact",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l04-b022",
+            "order": 4,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l04-b022-q1",
+                "prompt": "A team uses AI to cut forecast preparation from two days to two hours, then starts updating forecasts weekly instead of monthly. What idea does this illustrate?",
+                "format": "multiple_choice",
+                "options": [
+                  "Lower cost can increase total use of a capability",
+                  "Automation always reduces demand for work",
+                  "Models become accurate when used more often",
+                  "Forecasting no longer needs an owner"
+                ],
+                "answerKey": "Lower cost can increase total use of a capability",
+                "explanation": "The cheaper workflow encouraged more frequent forecasting. That is the Jevons-style rebound effect.",
+                "dimensionKey": "ai_productivity"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l04-b023",
+            "order": 5,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Build an AI-ready work habit in order:",
+            "items": [
+              "Choose one recurring low-risk task",
+              "Document the current time and quality baseline",
+              "Design and test an AI-assisted workflow",
+              "Keep the version that improves results with review"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l04-b024",
+            "order": 6,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l04-b024-q1",
+                "prompt": "Which is a safe student practice?",
+                "format": "multiple_choice",
+                "options": [
+                  "Paste confidential supplier pricing into a public tool",
+                  "Use a course-approved tool with fictional or authorized data",
+                  "Ask AI to fabricate citations",
+                  "Submit AI output without reading it"
+                ],
+                "answerKey": "Use a course-approved tool with fictional or authorized data",
+                "explanation": "Use approved tools and authorized data. Treat outputs as drafts you must understand and verify.",
+                "dimensionKey": "guardrails"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l04-b025",
+            "order": 7,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l04-b025-q1",
+                "prompt": "Which skill remains most durable as AI tools change?",
+                "format": "multiple_choice",
+                "options": [
+                  "Memorizing one tool's button locations",
+                  "Framing a business problem and evaluating evidence",
+                  "Avoiding all automation",
+                  "Copying the longest prompt online"
+                ],
+                "answerKey": "Framing a business problem and evaluating evidence",
+                "explanation": "Problem framing and evidence-based judgment transfer across tools and models.",
+                "dimensionKey": "ai_impact"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l04-b026",
+            "order": 8,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Start small: turn one weekly logistics update into a reviewed template. Record what AI did, what you checked, and where it failed. Keep practicing the underlying skill, too. If you outsource every calculation, summary, or first draft, your judgment can get rusty just as an unused muscle does.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-ceo-explain-models",
+        "title": "Explain AI Models to a CEO",
+        "category": "Track 1",
+        "keyConcepts": [
+          "Machine learning basics",
+          "Choosing AI models",
+          "AI impact on work and life"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l05-b028",
+            "order": 1,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 2,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "A model is a trained system that maps inputs to likely outputs. Explain it to a CEO as a capability with boundaries: \"It can summarize approved documents and draft options, but it needs source access and human review for decisions.\"",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l05-b029",
+            "order": 2,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "During training, the model sees a corpus of examples and adjusts many numeric parameters to reduce prediction error. Backpropagation is the accounting mechanism for those adjustments: it traces how much each parameter contributed to an error, then nudges the parameters. It does not install a database of verified facts.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l05-b035",
+            "order": 3,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Machine learning basics. Use one practical example.",
+            "evaluatesConcepts": [
+              "Machine learning basics",
+              "Choosing AI models",
+              "AI impact on work and life"
+            ],
+            "dimensionKey": "machine_learning",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l05-b030",
+            "order": 4,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l05-b030-q1",
+                "prompt": "What does backpropagation do during model training?",
+                "format": "multiple_choice",
+                "options": [
+                  "Checks every statement against a trusted source",
+                  "Adjusts parameters based on how they contributed to prediction error",
+                  "Stores the training corpus as a searchable spreadsheet",
+                  "Lets the model approve its own output"
+                ],
+                "answerKey": "Adjusts parameters based on how they contributed to prediction error",
+                "explanation": "Backpropagation helps optimize parameters. Source quality and factual verification require separate controls.",
+                "dimensionKey": "machine_learning"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l05-b031",
+            "order": 5,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order the model lifecycle at a high level:",
+            "items": [
+              "Collect and prepare training data",
+              "Train a model to learn patterns",
+              "Deploy the trained model for inference",
+              "Monitor output quality and update controls"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l05-b032",
+            "order": 6,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l05-b032-q1",
+                "prompt": "Which CEO explanation is most accurate?",
+                "format": "multiple_choice",
+                "options": [
+                  "The model knows everything on the internet",
+                  "The model predicts useful outputs from patterns and supplied context",
+                  "The model replaces every analyst",
+                  "The model guarantees factual answers"
+                ],
+                "answerKey": "The model predicts useful outputs from patterns and supplied context",
+                "explanation": "A model generates or classifies based on learned patterns and the context it receives; it is not a guaranteed source of truth.",
+                "dimensionKey": "model_selection"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l05-b033",
+            "order": 7,
+            "concepts": [
+              "ai_impact"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l05-b033-q1",
+                "prompt": "What business metric best supports an AI pilot?",
+                "format": "multiple_choice",
+                "options": [
+                  "Number of prompts written",
+                  "Reduction in report-preparation time while maintaining verified accuracy",
+                  "How impressive the demo sounds",
+                  "Number of models purchased"
+                ],
+                "answerKey": "Reduction in report-preparation time while maintaining verified accuracy",
+                "explanation": "A pilot should demonstrate an operational outcome with a quality control, not merely activity.",
+                "dimensionKey": "ai_impact"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l05-b034",
+            "order": 8,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Good executive communication names the task, the data boundary, the owner, the expected benefit, and the failure mode.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-expert-vs-ml",
+        "title": "Expert Systems vs. Machine Learning",
+        "category": "Track 1",
+        "keyConcepts": [
+          "Expert systems",
+          "Machine learning basics"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l06-b036",
+            "order": 1,
+            "concepts": [
+              "expert_systems",
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "An expert system applies explicit rules written by people: IF temperature is below a threshold, flag a cold-chain exception. Machine learning learns a pattern from examples: given past shipments, estimate which are likely to arrive late.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l06-b041",
+            "order": 2,
+            "concepts": [
+              "expert_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Expert systems. Use one practical example.",
+            "evaluatesConcepts": [
+              "Expert systems",
+              "Machine learning basics"
+            ],
+            "dimensionKey": "expert_systems",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l06-b037",
+            "order": 3,
+            "concepts": [
+              "expert_systems",
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Classify the development sequence for a rule-based system:",
+            "items": [
+              "Interview subject-matter experts",
+              "Write explicit if/then rules",
+              "Test edge cases",
+              "Deploy and revise rules when policy changes"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l06-b038",
+            "order": 4,
+            "concepts": [
+              "expert_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l06-b038-q1",
+                "prompt": "Which task is a strong fit for an expert system?",
+                "format": "multiple_choice",
+                "options": [
+                  "Apply a published compliance rule to every order",
+                  "Write a nuanced supplier relationship summary",
+                  "Generate several creative campaign ideas",
+                  "Predict an unknown demand pattern from history"
+                ],
+                "answerKey": "Apply a published compliance rule to every order",
+                "explanation": "Explicit, stable rules are transparent and auditable, which suits policy and compliance checks.",
+                "dimensionKey": "expert_systems"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l06-b039",
+            "order": 5,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l06-b039-q1",
+                "prompt": "Which task is a strong fit for machine learning?",
+                "format": "multiple_choice",
+                "options": [
+                  "Enforce a fixed minimum-order policy",
+                  "Estimate delivery-delay risk from historical shipment features",
+                  "Guarantee a factual policy answer",
+                  "Replace a formal approval workflow"
+                ],
+                "answerKey": "Estimate delivery-delay risk from historical shipment features",
+                "explanation": "Machine learning is valuable when examples contain predictive patterns that are difficult to hand-code.",
+                "dimensionKey": "machine_learning"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l06-b040",
+            "order": 6,
+            "concepts": [
+              "expert_systems",
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Use rules when requirements are clear and traceability matters. Use ML when patterns are complex and you have representative data plus monitoring.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-pattern-vs-truth",
+        "title": "Patterns Are Not Truth",
+        "category": "Track 1",
+        "keyConcepts": [
+          "Machine learning basics",
+          "Hallucinations vs truth",
+          "Safety and guardrails"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l07-b042",
+            "order": 1,
+            "concepts": [
+              "hallucinations"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "A language model generates the next likely token, not a signed statement of fact. It can help synthesize evidence, but it cannot turn missing, stale, or conflicting evidence into truth.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l07-b047",
+            "order": 2,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Machine learning basics. Use one practical example.",
+            "evaluatesConcepts": [
+              "Machine learning basics",
+              "Hallucinations vs truth",
+              "Safety and guardrails"
+            ],
+            "dimensionKey": "machine_learning",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l07-b043",
+            "order": 3,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a fact-check loop for an AI-generated supplier brief:",
+            "items": [
+              "Mark the claims that drive a decision",
+              "Open the source documents or system records",
+              "Correct unsupported claims and add citations",
+              "Approve the brief only after review"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l07-b044",
+            "order": 4,
+            "concepts": [
+              "hallucinations"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l07-b044-q1",
+                "prompt": "What is a hallucination?",
+                "format": "multiple_choice",
+                "options": [
+                  "A verified answer with a citation",
+                  "A plausible but unsupported or false generated claim",
+                  "A faster search result",
+                  "A rule-based validation"
+                ],
+                "answerKey": "A plausible but unsupported or false generated claim",
+                "explanation": "Hallucinations are generated content that sounds credible but is not grounded in reliable evidence.",
+                "dimensionKey": "hallucinations"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l07-b045",
+            "order": 5,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l07-b045-q1",
+                "prompt": "A model gives different wording when asked the same question twice. What does that indicate?",
+                "format": "multiple_choice",
+                "options": [
+                  "It is necessarily broken",
+                  "Generative outputs can vary because they are probabilistic",
+                  "The source data changed automatically",
+                  "All answers are false"
+                ],
+                "answerKey": "Generative outputs can vary because they are probabilistic",
+                "explanation": "Variation is normal for generative models. Control it with clear constraints, grounding, and review.",
+                "dimensionKey": "machine_learning"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l07-b046",
+            "order": 6,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "For high-stakes claims, require a source, a reviewer, and a path to correct the record. Confidence in tone is not evidence.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-train-infer-failures",
+        "title": "Training, Inference, and Failure Modes",
+        "category": "Track 1",
+        "keyConcepts": [
+          "Machine learning basics",
+          "Hallucinations vs truth",
+          "Safety and guardrails"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l08-b048",
+            "order": 1,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Training is the expensive process of learning parameters from examples. Inference is using the trained model to answer a new request. A model can fail because training data was weak, the prompt lacked context, or the task exceeds its capability.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l08-b053",
+            "order": 2,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Machine learning basics. Use one practical example.",
+            "evaluatesConcepts": [
+              "Machine learning basics",
+              "Hallucinations vs truth",
+              "Safety and guardrails"
+            ],
+            "dimensionKey": "machine_learning",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l08-b049",
+            "order": 3,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Put these stages in order:",
+            "items": [
+              "Examples are collected and prepared",
+              "The model is trained on patterns",
+              "A user submits a new request",
+              "The deployed model generates an inference"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l08-b050",
+            "order": 4,
+            "concepts": [
+              "machine_learning"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l08-b050-q1",
+                "prompt": "Which is inference?",
+                "format": "multiple_choice",
+                "options": [
+                  "Adjusting model parameters using training examples",
+                  "A planner asking a deployed model to summarize today's exception report",
+                  "Writing the original labeling guidelines",
+                  "Removing a biased training record"
+                ],
+                "answerKey": "A planner asking a deployed model to summarize today's exception report",
+                "explanation": "Inference is the live use of a trained model on a new input.",
+                "dimensionKey": "machine_learning"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l08-b051",
+            "order": 5,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l08-b051-q1",
+                "prompt": "Which control most directly reduces damage from an uncertain model output?",
+                "format": "multiple_choice",
+                "options": [
+                  "Let the model take irreversible action automatically",
+                  "Set review and escalation rules based on decision risk",
+                  "Hide the output from users",
+                  "Use a longer model name"
+                ],
+                "answerKey": "Set review and escalation rules based on decision risk",
+                "explanation": "Risk-based human review and escalation limit the effect of errors before an action is taken.",
+                "dimensionKey": "guardrails"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l08-b052",
+            "order": 6,
+            "concepts": [
+              "hallucinations"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Diagnose failures before switching models. Ask: was the source available, was the instruction clear, did the model have the right capability, and was there a review gate?",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-prompting-iteration",
+        "title": "Prompting as Iteration",
+        "category": "Track 2",
+        "keyConcepts": [
+          "Prompting and iteration",
+          "Productivity and Jevons paradox",
+          "Hallucinations vs truth"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l09-b054",
+            "order": 1,
+            "concepts": [
+              "prompting"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "A strong prompt is a work brief: role, task, context, constraints, and output format. Start with a small real example, inspect the output, then revise one variable at a time.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l09-b059",
+            "order": 2,
+            "concepts": [
+              "prompting"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Prompting and iteration. Use one practical example.",
+            "evaluatesConcepts": [
+              "Prompting and iteration",
+              "Productivity and Jevons paradox",
+              "Hallucinations vs truth"
+            ],
+            "dimensionKey": "prompting",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l09-b055",
+            "order": 3,
+            "concepts": [
+              "prompting"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a practical prompt iteration:",
+            "items": [
+              "State the task and success criteria",
+              "Add the relevant context and constraints",
+              "Review the first output against the criteria",
+              "Revise the instruction or example and retest"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l09-b056",
+            "order": 4,
+            "concepts": [
+              "prompting"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l09-b056-q1",
+                "prompt": "Which prompt is most likely to produce a usable shipment update?",
+                "format": "multiple_choice",
+                "options": [
+                  "Tell me about logistics",
+                  "Write an update",
+                  "Using the attached exception list, draft a 100-word update for operations leaders: group by root cause, list only verified counts, and end with two actions",
+                  "Make it better"
+                ],
+                "answerKey": "Using the attached exception list, draft a 100-word update for operations leaders: group by root cause, list only verified counts, and end with two actions",
+                "explanation": "It defines source context, audience, length, structure, and a factual constraint.",
+                "dimensionKey": "prompting"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l09-b057",
+            "order": 5,
+            "concepts": [
+              "hallucinations"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l09-b057-q1",
+                "prompt": "What should you do when a model lacks a needed fact?",
+                "format": "multiple_choice",
+                "options": [
+                  "Tell it to be more confident",
+                  "Provide the approved source or ask it to state what information is missing",
+                  "Ask it to invent a reasonable value",
+                  "Remove all constraints"
+                ],
+                "answerKey": "Provide the approved source or ask it to state what information is missing",
+                "explanation": "Grounding the task in source material or acknowledging missing information is safer than inviting invention.",
+                "dimensionKey": "hallucinations"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l09-b058",
+            "order": 6,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Save prompts that work as templates, but keep the review checklist with them. A reusable prompt is a small process, not a magic phrase.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-reasoning-context-tools",
+        "title": "Reasoning, Context, and Tools",
+        "category": "Track 2",
+        "keyConcepts": [
+          "Reasoning and context",
+          "Tools, skills, and harnesses",
+          "Prompting and iteration"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l10-b060",
+            "order": 1,
+            "concepts": [
+              "reasoning",
+              "tools_harness"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "For a complex task, a model may need context and access to tools such as a document search, calculator, or inventory system. The model coordinates steps; tools retrieve data or perform reliable operations.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l10-b065",
+            "order": 2,
+            "concepts": [
+              "reasoning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Reasoning and context. Use one practical example.",
+            "evaluatesConcepts": [
+              "Reasoning and context",
+              "Tools, skills, and harnesses",
+              "Prompting and iteration"
+            ],
+            "dimensionKey": "reasoning",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l10-b061",
+            "order": 3,
+            "concepts": [
+              "tools_harness"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a grounded analysis workflow:",
+            "items": [
+              "Receive the business question",
+              "Retrieve relevant approved records",
+              "Use a calculator or system tool for exact values",
+              "Draft an answer tied to the retrieved evidence"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l10-b062",
+            "order": 4,
+            "concepts": [
+              "tools_harness"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l10-b062-q1",
+                "prompt": "Why give a model a calculator tool for a cost calculation?",
+                "format": "multiple_choice",
+                "options": [
+                  "It makes the model more creative",
+                  "It reduces arithmetic errors and makes a deterministic operation reliable",
+                  "It removes the need for inputs",
+                  "It guarantees the right business assumption"
+                ],
+                "answerKey": "It reduces arithmetic errors and makes a deterministic operation reliable",
+                "explanation": "A calculator can reliably execute arithmetic, but the user still must provide valid inputs and assumptions.",
+                "dimensionKey": "tools_harness"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l10-b063",
+            "order": 5,
+            "concepts": [
+              "reasoning"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l10-b063-q1",
+                "prompt": "What is the best use of context in a prompt?",
+                "format": "multiple_choice",
+                "options": [
+                  "Add unrelated text until the prompt is long",
+                  "Supply the relevant policies, data, definitions, and audience needs",
+                  "Hide the decision criteria",
+                  "Replace verification"
+                ],
+                "answerKey": "Supply the relevant policies, data, definitions, and audience needs",
+                "explanation": "Relevant context lets the model tailor the output; unrelated context can distract it and increase cost.",
+                "dimensionKey": "reasoning"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l10-b064",
+            "order": 6,
+            "concepts": [
+              "reasoning"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Separate thinking from authority: a model can propose a plan, but a system of record and a human owner should confirm facts and authorize changes.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-harness-control",
+        "title": "Harnessing AI with Controls",
+        "category": "Track 2",
+        "keyConcepts": [
+          "Tools, skills, and harnesses",
+          "Safety and guardrails",
+          "AI systems beyond chatbots"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l11-b066",
+            "order": 1,
+            "concepts": [
+              "tools_harness",
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "A harness is the surrounding system that gives a model instructions, tools, memory, permissions, and checks. The model is only one component. Reliable outcomes come from the full workflow design.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l11-b071",
+            "order": 2,
+            "concepts": [
+              "tools_harness"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Tools, skills, and harnesses. Use one practical example.",
+            "evaluatesConcepts": [
+              "Tools, skills, and harnesses",
+              "Safety and guardrails",
+              "AI systems beyond chatbots"
+            ],
+            "dimensionKey": "tools_harness",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l11-b067",
+            "order": 3,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a controlled purchase-order exception workflow:",
+            "items": [
+              "Classify the exception from authorized data",
+              "Retrieve the relevant policy",
+              "Draft a recommended next step",
+              "Route high-risk cases to a human approver"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l11-b068",
+            "order": 4,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 2,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l11-b068-q1",
+                "prompt": "Which is a guardrail in an AI workflow?",
+                "format": "multiple_choice",
+                "options": [
+                  "A vague instruction to \"be careful\"",
+                  "Restricting the model to read-only access and requiring approval before sending a supplier message",
+                  "Giving it more unrelated documents",
+                  "Removing audit logs"
+                ],
+                "answerKey": "Restricting the model to read-only access and requiring approval before sending a supplier message",
+                "explanation": "Permissions and approval gates are concrete controls that limit what the system can do and make actions reviewable.",
+                "dimensionKey": "guardrails"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l11-b069",
+            "order": 5,
+            "concepts": [
+              "tools_harness"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l11-b069-q1",
+                "prompt": "What is the main purpose of tool permissions?",
+                "format": "multiple_choice",
+                "options": [
+                  "Make outputs sound more natural",
+                  "Limit what data and actions the AI can access to what the task requires",
+                  "Ensure every recommendation is correct",
+                  "Avoid documenting the workflow"
+                ],
+                "answerKey": "Limit what data and actions the AI can access to what the task requires",
+                "explanation": "Least-privilege access reduces exposure and the impact of tool misuse or model error.",
+                "dimensionKey": "tools_harness"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l11-b070",
+            "order": 6,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Design the harness first: define the user, inputs, allowed tools, escalation path, audit trail, and owner. Then choose the model.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-model-landscape",
+        "title": "The AI Model Landscape",
+        "category": "Track 3",
+        "keyConcepts": [
+          "Choosing AI models",
+          "Machine learning basics",
+          "AI systems beyond chatbots"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l12-b072",
+            "order": 1,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Model selection is not a leaderboard contest. Compare models by the task: quality, latency, cost, context capacity, tool use, privacy, and deployment constraints. A smaller model may be the best business choice.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l12-b073",
+            "order": 2,
+            "concepts": [
+              "model_selection",
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "The model zoo includes text-only and multimodal systems, open-weight models you can run yourself, and proprietary models accessed through a vendor. Aggregators provide one interface to several vendors. That can make switching easier, but it adds another provider to the security, reliability, and cost review.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l12-b079",
+            "order": 3,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Choosing AI models. Use one practical example.",
+            "evaluatesConcepts": [
+              "Choosing AI models",
+              "Machine learning basics",
+              "AI systems beyond chatbots"
+            ],
+            "dimensionKey": "model_selection",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l12-b074",
+            "order": 4,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l12-b074-q1",
+                "prompt": "A warehouse team needs a model to interpret photos of damaged cartons alongside written notes. Which capability is required?",
+                "format": "multiple_choice",
+                "options": [
+                  "Text-only generation",
+                  "Multimodal image and text input",
+                  "A larger context window only",
+                  "Speech synthesis"
+                ],
+                "answerKey": "Multimodal image and text input",
+                "explanation": "The task combines images and text, so the evaluated model must support both modalities.",
+                "dimensionKey": "model_selection"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l12-b075",
+            "order": 5,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a model selection process:",
+            "items": [
+              "Define the task and acceptance test",
+              "Shortlist models that meet security and deployment needs",
+              "Evaluate quality, speed, and cost on representative cases",
+              "Choose and monitor the model for the workflow"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l12-b076",
+            "order": 6,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l12-b076-q1",
+                "prompt": "A team needs fast classification of standard invoice fields at high volume. Which consideration is most important?",
+                "format": "multiple_choice",
+                "options": [
+                  "Only the largest model's benchmark score",
+                  "Accuracy on representative invoices, latency, and cost per document",
+                  "The model's marketing tagline",
+                  "Whether it can write poetry"
+                ],
+                "answerKey": "Accuracy on representative invoices, latency, and cost per document",
+                "explanation": "The selected model must meet the workflow's real quality, throughput, and cost requirements.",
+                "dimensionKey": "model_selection"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l12-b077",
+            "order": 7,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l12-b077-q1",
+                "prompt": "When might a general model be a poor fit?",
+                "format": "multiple_choice",
+                "options": [
+                  "The task uses ordinary language",
+                  "A specialized system already performs a narrow, regulated task more accurately and transparently",
+                  "The team needs an API",
+                  "A human will review the result"
+                ],
+                "answerKey": "A specialized system already performs a narrow, regulated task more accurately and transparently",
+                "explanation": "Use the simplest system that meets the requirement. Specialized approaches can be better for narrow or regulated work.",
+                "dimensionKey": "ai_systems"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l12-b078",
+            "order": 8,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Build a small evaluation set from realistic, authorized cases. Test before launch and keep it for regression checks when prompts or models change.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-cost-context-windows",
+        "title": "Cost and Context Windows",
+        "category": "Track 3",
+        "keyConcepts": [
+          "Choosing AI models",
+          "Prompting and iteration",
+          "Productivity and Jevons paradox"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l13-b080",
+            "order": 1,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "A context window is the amount of input and output a model can consider in one request. More context can help, but it also raises cost, latency, and distraction risk. Send the relevant slice, not every document.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l13-b085",
+            "order": 2,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Choosing AI models. Use one practical example.",
+            "evaluatesConcepts": [
+              "Choosing AI models",
+              "Prompting and iteration",
+              "Productivity and Jevons paradox"
+            ],
+            "dimensionKey": "model_selection",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l13-b081",
+            "order": 3,
+            "concepts": [
+              "prompting"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a cost-conscious document workflow:",
+            "items": [
+              "Identify the question to answer",
+              "Retrieve only relevant sections and metadata",
+              "Send the selected context with a structured instruction",
+              "Log quality, latency, and cost for review"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l13-b082",
+            "order": 4,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l13-b082-q1",
+                "prompt": "What is the most direct effect of sending much more text to a model?",
+                "format": "multiple_choice",
+                "options": [
+                  "It always improves accuracy",
+                  "It can increase token cost and latency, and irrelevant material can distract the model",
+                  "It eliminates the need for retrieval",
+                  "It guarantees no hallucinations"
+                ],
+                "answerKey": "It can increase token cost and latency, and irrelevant material can distract the model",
+                "explanation": "Longer inputs consume more tokens and can bury the evidence that matters.",
+                "dimensionKey": "model_selection"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l13-b083",
+            "order": 5,
+            "concepts": [
+              "prompting"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l13-b083-q1",
+                "prompt": "A 200-page supplier contract must be checked for one delivery clause. What is the best first step?",
+                "format": "multiple_choice",
+                "options": [
+                  "Paste the entire contract into every prompt",
+                  "Retrieve the relevant clause and its surrounding definitions",
+                  "Ask the model to guess the clause",
+                  "Ignore the contract"
+                ],
+                "answerKey": "Retrieve the relevant clause and its surrounding definitions",
+                "explanation": "Targeted retrieval gives the model the relevant evidence while controlling cost and attention.",
+                "dimensionKey": "prompting"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l13-b084",
+            "order": 6,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Track cost per successful task, not only cost per token. An inexpensive answer that needs extensive rework is not economical.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-specialize-and-route",
+        "title": "Specialize and Route Requests",
+        "category": "Track 3",
+        "keyConcepts": [
+          "Choosing AI models",
+          "AI systems beyond chatbots",
+          "Tools, skills, and harnesses"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l14-b086",
+            "order": 1,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "A routing system directs each request to the right model, tool, or human queue. For example, a low-risk translation can use a fast model, while a contract exception goes to a stronger model and legal review.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l14-b087",
+            "order": 2,
+            "concepts": [
+              "model_selection",
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Specialization has several forms. A system prompt sets behavior for the current application. Fine-tuning changes model weights using examples. Distillation trains a smaller model to imitate a stronger one, while quantization stores weights with less precision to reduce memory and compute. Start with prompting and retrieval; change the model only when evaluation shows a real gap.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l14-b093",
+            "order": 3,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Choosing AI models. Use one practical example.",
+            "evaluatesConcepts": [
+              "Choosing AI models",
+              "AI systems beyond chatbots",
+              "Tools, skills, and harnesses"
+            ],
+            "dimensionKey": "model_selection",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l14-b088",
+            "order": 4,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l14-b088-q1",
+                "prompt": "A team wants consistent answer structure but the base model already handles the task accurately. What should it try first?",
+                "format": "multiple_choice",
+                "options": [
+                  "A clear system prompt and evaluated examples",
+                  "Training a foundation model from scratch",
+                  "Quantization to change the writing style",
+                  "Removing the evaluation set"
+                ],
+                "answerKey": "A clear system prompt and evaluated examples",
+                "explanation": "Prompt-level controls are cheaper and easier to change. Fine-tuning is justified only when simpler controls fail an evaluated requirement.",
+                "dimensionKey": "model_selection"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l14-b089",
+            "order": 5,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a request-routing workflow:",
+            "items": [
+              "Classify the request and risk level",
+              "Select the approved model, tool, or human queue",
+              "Process with the required controls",
+              "Log the result and route failures for review"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l14-b090",
+            "order": 6,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l14-b090-q1",
+                "prompt": "Why route simple tasks to a smaller model?",
+                "format": "multiple_choice",
+                "options": [
+                  "Smaller models are always more accurate",
+                  "It can reduce cost and latency when the quality target is still met",
+                  "It removes the need to test outputs",
+                  "It makes policies unnecessary"
+                ],
+                "answerKey": "It can reduce cost and latency when the quality target is still met",
+                "explanation": "Right-sizing models can preserve quality while reducing the operating cost of routine work.",
+                "dimensionKey": "model_selection"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l14-b091",
+            "order": 7,
+            "concepts": [
+              "tools_harness"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l14-b091-q1",
+                "prompt": "Which request should be routed to a human by default?",
+                "format": "multiple_choice",
+                "options": [
+                  "Formatting a public meeting agenda",
+                  "Taking an irreversible action with significant financial or safety consequences",
+                  "Summarizing an approved internal memo",
+                  "Translating a non-sensitive draft"
+                ],
+                "answerKey": "Taking an irreversible action with significant financial or safety consequences",
+                "explanation": "High-impact or irreversible decisions need human authority, even if AI prepares analysis.",
+                "dimensionKey": "tools_harness"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l14-b092",
+            "order": 8,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Routing rules should be visible and testable: task category, sensitivity, risk, performance target, fallback, and accountable owner.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-tool-shapes",
+        "title": "Common AI Tool Shapes",
+        "category": "Track 4",
+        "keyConcepts": [
+          "AI systems beyond chatbots",
+          "Tools, skills, and harnesses",
+          "Productivity and Jevons paradox"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l15-b094",
+            "order": 1,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "AI appears in several shapes: chat assistants, embedded copilots, search-and-answer systems, workflow automations, and agents that coordinate tools. Choose the shape that fits the job, not the flashiest interface.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l15-b095",
+            "order": 2,
+            "concepts": [
+              "ai_systems",
+              "tools_harness"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "The same feature can run in a vendor platform, inside an existing business application, in your cloud account, or on infrastructure you operate. The choice affects data residency, integration effort, updates, observability, and who responds when it fails. Put the feature where the required data and controls can be managed.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l15-b100",
+            "order": 3,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain AI systems beyond chatbots. Use one practical example.",
+            "evaluatesConcepts": [
+              "AI systems beyond chatbots",
+              "Tools, skills, and harnesses",
+              "Productivity and Jevons paradox"
+            ],
+            "dimensionKey": "ai_systems",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l15-b096",
+            "order": 4,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order these solutions from least to most workflow autonomy:",
+            "items": [
+              "Chat assistant drafts a response",
+              "Copilot suggests text inside an application",
+              "Automation processes a defined trigger",
+              "Agent coordinates multiple tools within approved limits"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l15-b097",
+            "order": 5,
+            "concepts": [
+              "tools_harness"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l15-b097-q1",
+                "prompt": "Which tool shape best fits a recurring weekly report assembled from the same approved systems?",
+                "format": "multiple_choice",
+                "options": [
+                  "A one-off image generator",
+                  "A workflow automation with defined inputs, output template, and review step",
+                  "An unrestricted agent with payment access",
+                  "A manual copy-and-paste process only"
+                ],
+                "answerKey": "A workflow automation with defined inputs, output template, and review step",
+                "explanation": "A repeatable process with stable inputs benefits from automation and an explicit review step.",
+                "dimensionKey": "tools_harness"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l15-b098",
+            "order": 6,
+            "concepts": [
+              "ai_productivity"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l15-b098-q1",
+                "prompt": "When is a chat assistant a good fit?",
+                "format": "multiple_choice",
+                "options": [
+                  "Exploring a question or drafting a first-pass outline with human review",
+                  "Executing a supplier payment without approval",
+                  "Replacing the system of record",
+                  "Making a final legal interpretation"
+                ],
+                "answerKey": "Exploring a question or drafting a first-pass outline with human review",
+                "explanation": "Chat is useful for interactive exploration and drafting, where the user can supply context and evaluate the response.",
+                "dimensionKey": "ai_productivity"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l15-b099",
+            "order": 7,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "A useful design question: does this task need conversation, embedded assistance, deterministic automation, or controlled tool coordination?",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-build-vs-buy",
+        "title": "Build vs. Buy for AI",
+        "category": "Track 4",
+        "keyConcepts": [
+          "AI systems beyond chatbots",
+          "Choosing AI models",
+          "Safety and guardrails"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l16-b101",
+            "order": 1,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Buy when a vendor product meets the need with acceptable security, integration, and total cost. Build when the workflow is distinctive enough to justify ongoing ownership of data pipelines, evaluation, monitoring, and support.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l16-b106",
+            "order": 2,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain AI systems beyond chatbots. Use one practical example.",
+            "evaluatesConcepts": [
+              "AI systems beyond chatbots",
+              "Choosing AI models",
+              "Safety and guardrails"
+            ],
+            "dimensionKey": "ai_systems",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l16-b102",
+            "order": 3,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a build-vs-buy decision:",
+            "items": [
+              "Define the business outcome and constraints",
+              "Evaluate existing products against the requirements",
+              "Estimate integration and ongoing operating costs",
+              "Choose the option with the best total value and accountability"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l16-b103",
+            "order": 4,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l16-b103-q1",
+                "prompt": "Which cost is often missed when a team decides to build?",
+                "format": "multiple_choice",
+                "options": [
+                  "The ongoing cost of evaluation, monitoring, integration maintenance, and support",
+                  "The color of the prototype",
+                  "The number of prompt examples alone",
+                  "The model name"
+                ],
+                "answerKey": "The ongoing cost of evaluation, monitoring, integration maintenance, and support",
+                "explanation": "A custom AI system requires continuing work after launch: data quality, monitoring, security, support, and changes to models or policies.",
+                "dimensionKey": "ai_systems"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l16-b104",
+            "order": 5,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l16-b104-q1",
+                "prompt": "What should be checked before buying an AI vendor for sensitive operations data?",
+                "format": "multiple_choice",
+                "options": [
+                  "Only the product demo",
+                  "Data handling, access controls, retention, contractual terms, integration, and audit needs",
+                  "Whether the interface has animations",
+                  "Whether it is the newest product"
+                ],
+                "answerKey": "Data handling, access controls, retention, contractual terms, integration, and audit needs",
+                "explanation": "Sensitive data requires a complete risk and governance review, not just a feature comparison.",
+                "dimensionKey": "guardrails"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l16-b105",
+            "order": 6,
+            "concepts": [
+              "model_selection"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Do not build because AI is exciting. Build only where it creates differentiated value and you can own the operational responsibilities.",
+            "presentation": "rendered"
+          }
+        ]
+      },
+      {
+        "key": "ai-safety-deploy",
+        "title": "Deploy AI Safely",
+        "category": "Track 4",
+        "keyConcepts": [
+          "Safety and guardrails",
+          "AI systems beyond chatbots",
+          "Hallucinations vs truth"
+        ],
+        "selfCheckQuestions": [],
+        "blocks": [
+          {
+            "id": "aiess-l17-b107",
+            "order": 1,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Safe deployment starts with a narrow use case, defined owner, authorized data, and measurable acceptance criteria. Expand only after testing real failure modes and documenting how users escalate problems.",
+            "presentation": "rendered"
+          },
+          {
+            "id": "aiess-l17-b112",
+            "order": 2,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach_back",
+            "prompt": "In your own words, explain Safety and guardrails. Use one practical example.",
+            "evaluatesConcepts": [
+              "Safety and guardrails",
+              "AI systems beyond chatbots",
+              "Hallucinations vs truth"
+            ],
+            "dimensionKey": "guardrails",
+            "delivery": "inline"
+          },
+          {
+            "id": "aiess-l17-b108",
+            "order": 3,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "drag_order",
+            "prompt": "Order a safe AI deployment:",
+            "items": [
+              "Define scope, risk, owner, and success metric",
+              "Test representative cases and known failure modes",
+              "Launch with permissions, review gates, and monitoring",
+              "Review incidents and improve or limit the system"
+            ],
+            "correctOrder": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "id": "aiess-l17-b109",
+            "order": 4,
+            "concepts": [
+              "hallucinations"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l17-b109-q1",
+                "prompt": "A deployed assistant gives a confident but incorrect inventory policy answer. What should the system do?",
+                "format": "multiple_choice",
+                "options": [
+                  "Keep the answer because it sounded professional",
+                  "Show the governing source, enable correction, and route the issue for review",
+                  "Hide the incident from the owner",
+                  "Automatically change the policy"
+                ],
+                "answerKey": "Show the governing source, enable correction, and route the issue for review",
+                "explanation": "Grounding, correction paths, and incident review help contain and learn from incorrect outputs.",
+                "dimensionKey": "hallucinations"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l17-b110",
+            "order": 5,
+            "concepts": [
+              "guardrails"
+            ],
+            "contentVersion": 1,
+            "blockType": "quiz_checkpoint",
+            "questions": [
+              {
+                "id": "aiess-l17-b110-q1",
+                "prompt": "Which deployment metric is most meaningful?",
+                "format": "multiple_choice",
+                "options": [
+                  "Total messages sent",
+                  "Verified task success rate, error rate, escalation rate, and time saved",
+                  "Number of emojis in outputs",
+                  "Length of the system prompt"
+                ],
+                "answerKey": "Verified task success rate, error rate, escalation rate, and time saved",
+                "explanation": "Operational metrics connect the deployment to quality, risk, and business value.",
+                "dimensionKey": "guardrails"
+              }
+            ]
+          },
+          {
+            "id": "aiess-l17-b111",
+            "order": 6,
+            "concepts": [
+              "ai_systems"
+            ],
+            "contentVersion": 1,
+            "blockType": "teach",
+            "role": "explanation",
+            "content": "Treat deployment as a managed process. Monitor what the system does in practice, preserve an audit trail, and retain a human path for exceptions.",
+            "presentation": "rendered"
+          }
+        ]
+      }
+    ]
+  },
+  "outcome": {
+    "project": {
+      "title": "Build a trustworthy AI decision-support workflow",
+      "description": "Design an AI-assisted workflow that turns a messy operational request into a reliable, evidence-backed recommendation. Show how a person frames the task, supplies context, uses tools, checks the output, handles failure, and makes the final decision.",
+      "deliverables": [
+        {
+          "name": "A one-paragraph use case, user, decision, and success definition"
+        },
+        {
+          "name": "A reusable prompt with context, constraints, output format, and one documented iteration"
+        },
+        {
+          "name": "A tool/harness plan showing inputs, steps, human checkpoints, and model choice"
+        },
+        {
+          "name": "A guardrail and evaluation plan with at least three tests and a failure-response path"
+        },
+        {
+          "name": "A final operating brief that explains what AI does, what the human owns, and why"
+        }
+      ]
+    },
+    "milestones": [
+      {
+        "key": "capstone-1",
+        "name": "Frame the decision and success criteria",
+        "availability": {
+          "type": "after_lesson",
+          "lessonKey": "ai-prospering-gameplan"
+        },
+        "checkDescription": "Frame the decision and success criteria"
+      },
+      {
+        "key": "capstone-2",
+        "name": "Draft and improve the prompt",
+        "availability": {
+          "type": "after_lesson",
+          "lessonKey": "ai-prompting-iteration"
+        },
+        "checkDescription": "Draft and improve the prompt"
+      },
+      {
+        "key": "capstone-3",
+        "name": "Design the tools and harness",
+        "availability": {
+          "type": "after_lesson",
+          "lessonKey": "ai-tool-shapes"
+        },
+        "checkDescription": "Design the tools and harness"
+      },
+      {
+        "key": "capstone-4",
+        "name": "Build guardrails and evaluation tests",
+        "availability": {
+          "type": "after_lesson",
+          "lessonKey": "ai-safety-deploy"
+        },
+        "checkDescription": "Build guardrails and evaluation tests"
+      },
+      {
+        "key": "capstone-5",
+        "name": "Synthesize the final operating brief",
+        "availability": {
+          "type": "after_lesson",
+          "lessonKey": "ai-safety-deploy"
+        },
+        "checkDescription": "Synthesize the final operating brief"
+      }
+    ],
+    "mentorResources": []
+  }
+}

@@ -5,6 +5,7 @@ import {
   formatPositiveSignal,
   positiveSignalIcon,
   type AlertZones,
+  type HelpRequest,
   type ZoneSocio,
 } from '@/lib/signals';
 import { TakeOverButton } from './TakeOverButton';
@@ -23,20 +24,63 @@ export function AlertSnapshot({
   zones,
   decorations,
   socioNames,
+  showHelpRequests,
   t,
 }: {
   zones: AlertZones;
   decorations: Record<string, AlertSnapshotSocio>;
   socioNames: Record<string, string | null>;
+  /**
+   * Whether this organization offers help requests at all.
+   *
+   * Not `zones.askedForYou.length > 0` — an empty zone is meaningful ("nobody
+   * has asked") only where somebody *could* ask. On a program with no button
+   * the same empty state would report a silence that was never measured, so the
+   * zone is absent rather than reassuring. This is also what keeps the page
+   * unchanged for programs that have not enabled the feature.
+   */
+  showHelpRequests: boolean;
   t: DashboardStrings;
 }) {
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${showHelpRequests ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+        {showHelpRequests && (
+          <CountTile label={t.tileAskedForYou} count={zones.askedForYou.length} role="request" />
+        )}
         <CountTile label={t.tileNeedsYouNow} count={zones.needsYouNow.length} role="danger" />
         <CountTile label={t.tileWatching} count={zones.watching.length} role="warning" />
         <CountTile label={t.tileGoodNews} count={zones.goodNews.length} role="success" />
       </div>
+
+      {/*
+        Zone 0 sits above "Needs you now" deliberately. Everything below it is
+        this system's inference about a person; this is the person themselves.
+        When both are populated the self-report is the one to read first.
+      */}
+      {showHelpRequests && (
+        <section>
+          <ZoneHeading
+            title={t.zoneAskedForYouTitle}
+            count={zones.askedForYou.length}
+            role="request"
+          />
+          {zones.askedForYou.length === 0 ? (
+            <EmptyState message={t.zoneAskedForYouEmpty} role="neutral" />
+          ) : (
+            <div className="space-y-4">
+              {zones.askedForYou.map((request) => (
+                <HelpRequestCard
+                  key={`${request.socioId}-${request.askedAt.getTime()}`}
+                  request={request}
+                  decoration={decorations[request.socioId]}
+                  t={t}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section>
         <ZoneHeading title={t.zoneNeedsYouNowTitle} count={zones.needsYouNow.length} role="danger" />
@@ -101,9 +145,19 @@ export function AlertSnapshot({
 
 // ── Pieces ───────────────────────────────────────────────────────────────────
 
-type Role = 'danger' | 'warning' | 'success' | 'neutral';
+/**
+ * `request` is intentionally not another shade of red.
+ *
+ * The red/amber/emerald ramp encodes severity, which is a judgement this system
+ * made. A help request is not a severity — it is a person raising their hand,
+ * and colouring it as the most severe red would put it back into exactly the
+ * comparison the separate zone exists to avoid. Indigo reads as "different
+ * kind", not "worse".
+ */
+type Role = 'request' | 'danger' | 'warning' | 'success' | 'neutral';
 
 const TILE_ROLE: Record<Role, string> = {
+  request: 'border-indigo-200 bg-indigo-50 text-indigo-900',
   danger: 'border-red-200 bg-red-50 text-red-900',
   warning: 'border-amber-200 bg-amber-50 text-amber-900',
   success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
@@ -111,6 +165,7 @@ const TILE_ROLE: Record<Role, string> = {
 };
 
 const DOT_ROLE: Record<Role, string> = {
+  request: 'bg-indigo-500',
   danger: 'bg-red-500',
   warning: 'bg-amber-500',
   success: 'bg-emerald-500',
@@ -160,6 +215,75 @@ function courseLine(
     : t.signalsLessonProgressNoTotal(socio.currentLesson);
   const course = decoration?.courseName ?? t.signalsNoCourse;
   return `${course} · ${lesson}`;
+}
+
+/**
+ * One learner who asked to talk to a human.
+ *
+ * Their own words lead, set as a quotation and rendered verbatim — this is the
+ * only card on the page whose primary content the learner wrote, and
+ * paraphrasing it into a summary line would defeat the point of asking them
+ * what they need. Everything else is the context they were standing in.
+ */
+function HelpRequestCard({
+  request,
+  decoration,
+  t,
+}: {
+  request: HelpRequest;
+  decoration: AlertSnapshotSocio | undefined;
+  t: DashboardStrings;
+}) {
+  const course = decoration?.courseName ?? t.signalsNoCourse;
+
+  return (
+    <div className="rounded-lg border border-indigo-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <span className="font-semibold text-gray-900">{request.name ?? t.noName}</span>
+          {decoration?.participantNoun && (
+            <span className="ml-2 text-xs text-gray-500">{decoration.participantNoun}</span>
+          )}
+          {request.unassigned && (
+            <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+              {t.helpRequestUnassigned}
+            </span>
+          )}
+        </div>
+        {request.occurrenceCount > 1 && (
+          <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-800 tabular-nums">
+            {t.helpRequestRepeated(request.occurrenceCount)}
+          </span>
+        )}
+      </div>
+
+      {request.message ? (
+        <blockquote className="mt-3 border-l-2 border-indigo-300 pl-3 text-sm text-gray-900">
+          {request.message}
+        </blockquote>
+      ) : (
+        <p className="mt-3 text-sm italic text-gray-500">{t.helpRequestNoMessage}</p>
+      )}
+
+      <p className="mt-2 text-xs text-gray-500">
+        {course}
+        {request.lessonKey && <> · {t.helpRequestAskedAt(request.lessonKey)}</>}
+      </p>
+      {request.projectTitle && (
+        <p className="mt-0.5 text-xs text-gray-500">{t.helpRequestProject(request.projectTitle)}</p>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <TakeOverButton socioId={request.socioId} label={t.actionTakeOverChat} />
+        <Link
+          href={`/dashboard/learners/${request.socioId}`}
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          {t.actionReadTranscript}
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 function NeedsYouNowCard({

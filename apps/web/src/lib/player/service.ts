@@ -4,7 +4,8 @@ import { resolveCourseCode } from "@/lib/courses/resolver";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
 import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
 import { programVersionConfigSchema, type ProgramVersionConfig } from "@/lib/journey-package/program-version-config.schema";
-import { learnerProjectSelectionRequired } from "./learnerProject";
+import { getCurrentLearnerProject, learnerProjectSelectionRequired } from "./learnerProject";
+import { buildLessonDashboard, type LessonDashboard } from "./dashboard";
 
 export class PlayerError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -276,6 +277,79 @@ export async function recordPlayerTutorSuccess(socioId: string, context: Validat
   }
 }
 
+/**
+ * The project dashboard for the lesson player, or null when it must not render.
+ *
+ * Composed here rather than behind a fourth endpoint. The player already awaits
+ * the lesson DTO, and the two reads this adds are cheap next to what that call
+ * already does — `rows` is threaded in from the caller precisely so this does
+ * not re-run `lessonRows`, which is the expensive part and which
+ * `getCourseProgress` would otherwise repeat.
+ *
+ * Fails open to null, never throws. A dashboard is decoration around the thing
+ * the learner came for; a broken project read must not cost them the lesson.
+ */
+async function getLessonDashboard(
+  access: PlayerAccess,
+  rows: Awaited<ReturnType<typeof lessonRows>>,
+): Promise<LessonDashboard | null> {
+  // Courses that do not configure project selection have no project to show.
+  // This is the branch that leaves MI and PB&J untouched — no course code is
+  // consulted anywhere in this path.
+  if (!access.config.projectSelection) return null;
+
+  try {
+    const project = await getCurrentLearnerProject(access);
+    if (!project) return null;
+
+    const blockProgress = await playerRuntimeRepo.blockProgress.findMany({
+      where: { socioId: access.socioId, collectionKey: access.collectionKey },
+    });
+    const lessons = rows.map((row) => {
+      const parsed = row.versions[0] ? lessonSchema.safeParse(row.versions[0].body) : null;
+      const body = parsed?.success ? parsed.data : null;
+      return {
+        lessonKey: row.slug,
+        title: body?.title ?? row.slug,
+        complete: body
+          ? body.blocks.every((block) => blockProgress.some((item) =>
+              item.lessonKey === row.slug
+              && item.blockId === block.id
+              && item.contentVersion === block.contentVersion
+              && item.completedAt))
+          : false,
+      };
+    });
+
+    const outcome = access.config.outcome;
+    let milestones: ReturnType<typeof milestoneStates> = [];
+    let graduated = false;
+    if (outcome) {
+      const reached = new Set(
+        (await playerRuntimeRepo.milestoneProgress.findMany({
+          where: { socioId: access.socioId, collectionKey: access.collectionKey },
+          select: { milestoneKey: true },
+        })).map((item) => item.milestoneKey),
+      );
+      const completedLessonKeys = new Set(
+        lessons.filter((lesson) => lesson.complete).map((lesson) => lesson.lessonKey),
+      );
+      milestones = milestoneStates(
+        outcome.milestones.map(normalizeMilestoneAvailability),
+        completedLessonKeys,
+        reached,
+      );
+      graduated = outcome.milestones.length > 0
+        && outcome.milestones.every((milestone) => reached.has(milestone.key));
+    }
+
+    return buildLessonDashboard({ project, milestones, lessons, graduated });
+  } catch (error) {
+    console.warn("[PlayerDashboard] build failed; rendering the lesson without it", error);
+    return null;
+  }
+}
+
 export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
   if (await learnerProjectSelectionRequired(access)) {
     throw new PlayerError(403, "project_required", "Choose your project before starting the course");
@@ -293,11 +367,18 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
     where: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey },
   });
   const progressById = new Map(progress.map((item) => [item.blockId, item]));
+  const dashboard = await getLessonDashboard(access, rows);
   return {
+    dashboard,
     lesson: { ...lesson, blocks: lesson.blocks.map(sanitizePlayerBlock) },
     previousLessonKey: rows[index - 1]?.slug ?? null,
     nextLessonKey: rows[index + 1]?.slug ?? null,
     hasCapstone: !!access.config.outcome,
+    /**
+     * Whether to render "request help from a human". Config-driven rather than
+     * course-driven: the player must never ask which course it is showing.
+     */
+    helpRequestEnabled: access.config.helpRequest?.enabled === true,
     progress: lesson.blocks.map((block) => {
       const item = progressById.get(block.id);
       const current = item?.contentVersion === block.contentVersion;

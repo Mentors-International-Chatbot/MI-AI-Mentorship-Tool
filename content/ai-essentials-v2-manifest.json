@@ -183,6 +183,7 @@
       }
     ]
   },
+  "helpRequest": { "enabled": true, "maxMessageLength": 1000 },
   "dimensions": [
     {
       "key": "ai_impact_adaptation",

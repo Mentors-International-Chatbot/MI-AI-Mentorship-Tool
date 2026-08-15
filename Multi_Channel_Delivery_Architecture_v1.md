@@ -69,17 +69,14 @@ Engine behaviors keyed to capabilities, not channels:
 Courses declare where they can run and how they adapt. All optional; defaults preserve current behavior.
 
 ```ts
-meta.delivery: z.object({
-  supportedChannels: z.array(z.enum(["whatsapp","web","canvas"]))
-    .default(["web"]),
-  perChannel: z.record(z.enum(["whatsapp","web","canvas"]), z.object({
-    // narrow, additive overrides — e.g. WhatsApp-specific pacing or a
-    // shorter welcome; NOT a fork of the course
-    conciseness: z.enum(["very_brief","brief","standard"]).optional(),
-    disabledBlockTypes: z.array(z.string()).optional(), // e.g. media-heavy
-  })).optional(),
+metadata.delivery: z.object({
+  surface: z.enum(["chat", "player"]),
+  supportedChannels: z.array(z.enum(["whatsapp", "web", "canvas"])).min(1),
 }).optional()
 ```
+
+Absent delivery metadata resolves centrally to the legacy chat surface with
+web and WhatsApp support.
 
 - **Import-time validation:** a course whose blocks require a capability a declared channel lacks → warning (degradation defined) or error (no defined degradation). E.g., interactive/quiz segments (future) on WhatsApp.
 - **Enrollment/launch guard:** a socio can only enter a course via a channel the course supports. MI declares `["whatsapp","web"]`; BYU declares `["web","canvas"]`; PB&J everything.
@@ -103,7 +100,7 @@ The split: **Canvas embed = monitoring (read). OCI standalone = configuration (r
 | Cross-course / cross-cohort org views | ✗ (course-scoped by launch) | ✓ |
 
 - The embedded dashboard is the **same React dashboard**, course-scoped by the LTI launch context, rendered in the iframe (`frame-ancestors` + token-auth constraints per the Canvas plan). Instructor launches land here.
-- Panels are per-course config (`meta.dashboard.panels`, backlog item 5) in BOTH placements — one panel renderer, two shells.
+- Panels are per-course config (`config.dashboard.panels`, backlog item 5) in BOTH placements — one panel renderer, two shells.
 - Both placements respect the viewer's language (`preferredLanguage`, backlog item 4).
 
 ## 7. Ownership split: Canvas People vs OCI web (proposed resolution)
@@ -138,7 +135,7 @@ Consequences worth naming:
 Nothing here is a new project — it re-frames planned work:
 
 1. **Capability model** — introduce the typed capability object when the next channel-branching change happens (likely LTI-A); migrate the existing WhatsApp assessment degradation to it opportunistically.
-2. **`meta.delivery` schema** — add alongside the next journey-package schema change (small, additive).
+2. **`metadata.delivery` schema** — shipped in journey-package schema v1.1.
 3. **Dashboard panels + i18n** (backlog items 4/5) — build the panel renderer once, both shells use it.
 4. **LTI-A** delivers the Canvas adapter + identity source; the embedded dashboard shell follows as LTI-B/C work.
 5. Update `Platform_Architecture_Briefing.docx` for Brad with §2's diagram and §7's ownership table — this is the multi-tenancy + delivery story in one page, and it supersedes the RLS-era framing.

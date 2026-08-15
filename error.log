@@ -1,0 +1,120 @@
+[2026-08-12T20:39:38.927998+00:00] startup: base_url=https://chatgpt.com/backend-api path_style=wham
+[2026-08-12T20:39:38.928334+00:00] auth: mode=ChatGPT account_id=117e977c-885a-47df-b471-805656aaa754
+[2026-08-12T20:39:38.928517+00:00] auth: set ChatGPT-Account-Id header: 117e977c-885a-47df-b471-805656aaa754
+[2026-08-12T20:39:38.929490+00:00] startup: wham_force_internal=false ua=codex_cli_rs/0.146.0 (Mac OS 15.6.1; arm64) vscode/1.98.2 (codex_cloud_tasks_tui)
+[2026-08-12T20:39:38.944427+00:00] env: git origins: ["https://github.com/Mentors-International-Chatbot/MI-AI-Mentorship-Tool.git"]
+[2026-08-12T20:39:38.944497+00:00] env: parsed HTTP GitHub origin => Mentors-International-Chatbot/MI-AI-Mentorship-Tool
+[2026-08-12T20:39:38.944682+00:00] env: GET https://chatgpt.com/backend-api/wham/environments/by-repo/github/Mentors-International-Chatbot/MI-AI-Mentorship-Tool
+[2026-08-12T20:39:38.945262+00:00] env: parsed HTTP GitHub origin => Mentors-International-Chatbot/MI-AI-Mentorship-Tool
+[2026-08-12T20:39:39.133014+00:00] http.list_tasks: env=<all> limit=20 cursor_in=<none> cursor_out=<none> items=1
+[2026-08-12T20:39:39.133134+00:00] refresh.apply: env=<all> count=1
+[2026-08-12T20:39:40.255087+00:00] env: status=403 Forbidden content-type=application/json
+[2026-08-12T20:39:40.415048+00:00] env: status=200 OK content-type=application/json
+[2026-08-12T20:39:41.063454+00:00] env: status=403 Forbidden content-type=application/json
+[2026-08-12T20:39:41.063968+00:00] env: by-repo fetch failed for Mentors-International-Chatbot/MI-AI-Mentorship-Tool: GET https://chatgpt.com/backend-api/wham/environments/by-repo/github/Mentors-International-Chatbot/MI-AI-Mentorship-Tool failed: 403 Forbidden; content-type=application/json; body={"detail":{"type":"repo_not_accessible","message":"Repository is not accessible"}}
+[2026-08-12T20:39:41.064055+00:00] env: GET https://chatgpt.com/backend-api/wham/environments
+[2026-08-12T20:39:41.219218+00:00] env: status=200 OK content-type=application/json
+[2026-08-12T20:39:41.222162+00:00] env: /environments JSON (pretty):
+[
+  {
+    "id": "69c90eea3ee48191a0ed672c0c6fec4a",
+    "machine_id": "wham-public/wham-universal",
+    "label": "learning",
+    "is_pinned": false,
+    "description": "",
+    "workspace_dir": "/workspace",
+    "agent_network_access": {
+      "mode": "off",
+      "preset_allowlist": null,
+      "allowlist_domains": null,
+      "allowlist_rules": null,
+      "denylist_domains": null,
+      "safe_methods_only": null
+    },
+    "codex_github_direct": null,
+    "github_connector_id": null,
+    "enable_gitlab_webhooks": false,
+    "repos": [
+      "github-959451763"
+    ],
+    "setup": "",
+    "maintenance_setup": "",
+    "repo_map": {
+      "github-959451763": {
+        "id": "959451763",
+        "name": "learning",
+        "owner": {
+          "login": "michaelbertoldo",
+          "id": 205225662,
+          "type": "User",
+          "avatar_url": "https://avatars.githubusercontent.com/u/205225662?v=4",
+          "url": "https://api.github.com/users/michaelbertoldo"
+        },
+        "repository_full_name": "michaelbertoldo/learning",
+        "clone_url": "https://github.com/michaelbertoldo/learning.git",
+        "default_branch": "main",
+        "git_commits_url": "https://api.github.com/repos/michaelbertoldo/learning/git/commits{/sha}",
+        "git_refs_url": "https://api.github.com/repos/michaelbertoldo/learning/git/refs{/sha}",
+        "git_url": "git://github.com/michaelbertoldo/learning.git",
+        "visibility": "private",
+        "archived": null,
+        "allow_auto_merge": false,
+        "allow_merge_commit": true,
+        "allow_rebase_merge": true,
+        "allow_squash_merge": true,
+        "allow_update_branch": false,
+        "language": null,
+        "size": 36,
+        "master_branch": null,
+        "permissions": {
+          "admin": true,
+          "maintain": false,
+          "push": true,
+          "pull": true
+        }
+      }
+    },
+    "env_vars": {},
+    "secrets": {},
+    "secrets_with_domains": null,
+    "task_count": 0,
+    "creator_id": "user-0HASxznBO8HiBB22MpSR5CaD",
+    "share_settings": "workspace",
+    "share_targets": [],
+    "permissions": {
+      "can_write": true,
+      "can_delete": true
+    },
+    "created_at": 1774784234.756099,
+    "auto_setup_settings": {
+      "use_auto_setup": true
+    },
+    "cache_settings": {
+      "post_setup_cache_enabled": true,
+      "cache_invalidation_key": ""
+    },
+    "etag": "\"6a02833e-0000-0200-0000-69c90eed0000\"",
+    "enable_authtranslator": false,
+    "enable_docker_in_docker": false
+  }
+]
+[2026-08-12T20:39:41.224291+00:00] env: single environment available; selecting it
+[2026-08-12T20:39:41.224821+00:00] env.select: autodetected id=69c90eea3ee48191a0ed672c0c6fec4a label=learning
+[2026-08-12T20:39:41.241775+00:00] env: parsed HTTP GitHub origin => Mentors-International-Chatbot/MI-AI-Mentorship-Tool
+[2026-08-12T20:39:41.377495+00:00] http.list_tasks: env=69c90eea3ee48191a0ed672c0c6fec4a limit=20 cursor_in=<none> cursor_out=<none> items=1
+[2026-08-12T20:39:41.377781+00:00] refresh.apply: env=69c90eea3ee48191a0ed672c0c6fec4a count=1
+[2026-08-12T20:39:41.743612+00:00] env: status=403 Forbidden content-type=application/json
+[2026-08-12T20:39:41.889501+00:00] env: status=200 OK content-type=application/json
+[2026-08-12T20:41:13.169661+00:00] startup: base_url=https://chatgpt.com/backend-api path_style=wham
+[2026-08-12T20:41:13.169997+00:00] auth: mode=ChatGPT account_id=117e977c-885a-47df-b471-805656aaa754
+[2026-08-12T20:41:13.170049+00:00] auth: set ChatGPT-Account-Id header: 117e977c-885a-47df-b471-805656aaa754
+[2026-08-12T20:41:13.178235+00:00] env: parsed HTTP GitHub origin => Mentors-International-Chatbot/MI-AI-Mentorship-Tool
+[2026-08-12T20:41:13.761084+00:00] env: status=403 Forbidden content-type=application/json
+[2026-08-12T20:41:13.888008+00:00] env: status=200 OK content-type=application/json
+[2026-08-12T20:41:16.024939+00:00] new_task: created id=task_e_6a7cda6aa31c832fb94971ccc0fd8324 env=69c90eea3ee48191a0ed672c0c6fec4a prompt_chars=2186
+[2026-08-12T21:03:15.639355+00:00] startup: base_url=https://chatgpt.com/backend-api path_style=wham
+[2026-08-12T21:03:15.639934+00:00] auth: mode=ChatGPT account_id=117e977c-885a-47df-b471-805656aaa754
+[2026-08-12T21:03:15.640747+00:00] auth: set ChatGPT-Account-Id header: 117e977c-885a-47df-b471-805656aaa754
+[2026-08-12T21:03:20.879442+00:00] startup: base_url=https://chatgpt.com/backend-api path_style=wham
+[2026-08-12T21:03:20.879612+00:00] auth: mode=ChatGPT account_id=117e977c-885a-47df-b471-805656aaa754
+[2026-08-12T21:03:20.879656+00:00] auth: set ChatGPT-Account-Id header: 117e977c-885a-47df-b471-805656aaa754

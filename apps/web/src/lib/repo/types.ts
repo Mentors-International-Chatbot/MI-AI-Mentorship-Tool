@@ -59,7 +59,15 @@ export interface LessonScores {
     implementation?: number;
 }
 
-export type FlagSource = 'ai_marker' | 'sentiment_auto' | 'mentor_manual';
+/**
+ * Who or what wrote the flag row.
+ *
+ * `learner_request` is the only one that is not an inference. The other three
+ * are a model or a threshold deciding something *about* a learner; this one is
+ * the learner pressing a button and saying it. That distinction is why it gets
+ * its own zone on `/dashboard/alerts` rather than competing with sentiment.
+ */
+export type FlagSource = 'ai_marker' | 'sentiment_auto' | 'mentor_manual' | 'learner_request';
 
 export type FlagStatus =
     | 'OPEN'
@@ -107,7 +115,13 @@ export type FlagReasonCode =
     | 'sentiment.distressed'
     | 'sentiment.confusion_elevated'
     | 'sentiment.frustration_elevated'
-    | 'escalation.requested';
+    | 'escalation.requested'
+    /**
+     * The learner pressed "request help from a human" on the player. Distinct
+     * from `escalation.requested`, which is the *model* deciding that something
+     * a learner typed in chat prose amounted to asking for a mentor.
+     */
+    | 'help.requested';
 
 /**
  * Payload stored in `SocioFlag.reasonParams`. Every field is optional: which
@@ -123,8 +137,25 @@ export type FlagReasonParams = {
     /** The configured threshold the signal crossed. Stored for audit, not rendered. */
     threshold?: number;
     topics?: string[];
-    /** escalation.requested — the socio's own words, verbatim and untranslated. */
+    /**
+     * escalation.requested / help.requested — the socio's own words, verbatim
+     * and untranslated. Optional on `help.requested`: pressing the button with
+     * an empty box is a complete request, and an absent reason renders as the
+     * bare "asked to talk to a human" line rather than an empty quotation.
+     */
     requestReason?: string;
+    /**
+     * help.requested — where the learner was standing when they asked.
+     *
+     * `SocioFlag` has no course column, so `collectionKey` is also what makes
+     * "one open request per learner per course" expressible; see
+     * `findOpenHelpRequest`. The rest is context a mentor needs before calling
+     * back, captured at press time because none of it is recoverable later.
+     */
+    collectionKey?: string;
+    lessonKey?: string;
+    blockId?: string;
+    projectTitle?: string;
 };
 
 export type MilestoneProgressRecord = {
@@ -326,6 +357,17 @@ export interface Repo {
     createFlag(data: { socioId: string; level: string; reason: string; source?: string; messageId?: string; reasonCode?: FlagReasonCode; reasonParams?: FlagReasonParams }): Promise<SocioFlag>;
     getFlags(socioId: string): Promise<SocioFlag[]>;
     getActiveFlags(socioId: string): Promise<SocioFlag[]>;
+    /**
+     * Records that an already-open flag fired again: `occurrenceCount += 1` and
+     * `lastOccurredAt = now`. Does not touch status, level or reason.
+     *
+     * These two columns shipped with the flag lifecycle and nothing wrote them
+     * until this method — every row read `occurrenceCount: 1, lastOccurredAt:
+     * null` regardless of how many times the underlying thing happened. Four
+     * presses of "I need help" is a materially stronger signal than one, and
+     * collapsing them to a single undated row threw that away.
+     */
+    recordFlagOccurrence(flagId: string, at?: Date): Promise<SocioFlag>;
     getAllUnresolvedFlags(): Promise<(SocioFlag & { socio: Socio })[]>;
     getUnresolvedFlagsByMentor(mentorId: string): Promise<(SocioFlag & { socio: Socio })[]>;
     /**

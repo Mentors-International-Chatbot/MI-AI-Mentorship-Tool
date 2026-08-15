@@ -468,6 +468,28 @@ export const projectSelectionSchema = z.object({
 });
 export type ProjectSelectionConfig = z.infer<typeof projectSelectionSchema>;
 
+/**
+ * "Request help from a human" on the delivery surface.
+ *
+ * Opt-in, and deliberately so. A course that turns this on is promising a
+ * learner that a person will follow up, and that promise is only keepable where
+ * somebody is actually reading `/dashboard/alerts` for this organization.
+ * Absent config means the button does not render and the endpoint refuses —
+ * which is the correct default for a course that has not made that promise.
+ */
+export const helpRequestSchema = z.object({
+  enabled: z.boolean(),
+  /**
+   * Cap on the learner's optional free text. Generous: someone asking for help
+   * should not be fighting a counter, and the value is stored in a Json column
+   * with no width limit. The cap exists to bound the request body, not to
+   * discipline the learner.
+   */
+  maxMessageLength: z.number().int().positive().max(4_000).default(1_000),
+});
+
+export type HelpRequestConfig = z.infer<typeof helpRequestSchema>;
+
 // ── Config (-> ProgramVersion.config) ────────────────────────────────────────
 
 export const configSchema = z.object({
@@ -485,6 +507,8 @@ export const configSchema = z.object({
   responseStyle: responseStyleSchema.optional(),
   /** Optional authored inputs for per-enrollment learner project selection. */
   projectSelection: projectSelectionSchema.optional(),
+  /** Learner-initiated "request help from a human". Omission leaves it off. */
+  helpRequest: helpRequestSchema.optional(),
   onboarding: z
     .object({
       mode: z.enum(["survey", "baseline_quiz", "skip"]),

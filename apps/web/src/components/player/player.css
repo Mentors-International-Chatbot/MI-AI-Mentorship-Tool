@@ -5,6 +5,62 @@
 .player-eyebrow, .player-step { color: var(--player-accent); font-size: .76rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
 .player-progress { width: 180px; height: 8px; border-radius: 99px; background: #d6e4e1; overflow: hidden; flex: 0 0 auto; }
 .player-progress span { display: block; height: 100%; background: var(--player-accent); transition: width .25s ease; }
+/* Help request. Quiet by default — present, not shouting — because a learner
+   who needs it will be looking for it, and one who doesn't should not be
+   nudged toward it by visual weight. */
+.player-header-side { display: flex; flex-direction: column; align-items: flex-end; gap: .7rem; flex: 0 0 auto; }
+.player-help { max-width: 320px; text-align: right; }
+.player-help-trigger { background: none; border: 1px solid var(--player-line); border-radius: 10px; color: var(--player-muted); cursor: pointer; font-size: .82rem; font-weight: 700; padding: .45rem .8rem; }
+.player-help-trigger:hover { border-color: var(--player-accent); color: var(--player-accent); }
+.player-help-panel { background: rgba(255,255,255,.96); border: 1px solid var(--player-line); border-radius: 14px; margin-top: .6rem; padding: .9rem; text-align: left; }
+.player-help-panel label { color: var(--player-muted); display: block; font-size: .8rem; font-weight: 700; margin-bottom: .4rem; }
+.player-help-panel textarea { border: 1px solid var(--player-line); border-radius: 10px; font: inherit; font-size: .9rem; padding: .5rem; resize: vertical; width: 100%; }
+.player-help-actions { display: flex; gap: .5rem; margin-top: .6rem; }
+.player-help-actions button { background: var(--player-accent); border: 0; border-radius: 10px; color: white; cursor: pointer; font-size: .85rem; font-weight: 750; padding: .5rem .9rem; }
+.player-help-actions .player-help-cancel { background: none; border: 1px solid var(--player-line); color: var(--player-muted); }
+.player-help-status { color: var(--player-accent); font-size: .84rem; font-weight: 700; margin: 0; max-width: 320px; }
+/* ── Project dashboard rail ────────────────────────────────────────────────
+   The shell widens from 860 to 1240 only when a dashboard is present, and the
+   left column lands at ~876px — within 2% of the old single-column measure, so
+   the lesson content area is effectively unchanged. Without a dashboard the
+   `.player-body` grid is a single column and the page is exactly as it was.
+
+   Collapses at 1100px rather than the 760 used elsewhere: this rail carries
+   running text, not cards, and gets unreadable well before the narrower
+   breakpoints would fire. Below it the dashboard moves *above* the lesson so it
+   is still the first thing seen. */
+/* Widen the shell only when a dashboard is actually rendered. `:has()` is
+   already relied on in this stylesheet (`.player-option:has(input:checked)`),
+   and scoping the width this way means a course with no project selection gets
+   the original 860px shell with no override to reason about. */
+.player-shell:has(.player-body.has-dash) { padding-inline: max(1rem, calc((100vw - 1240px) / 2)); }
+.player-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.player-body.has-dash { grid-template-columns: minmax(0, 1fr) 340px; }
+.player-main { min-width: 0; }
+.player-dash { display: grid; gap: 1rem; align-content: start; position: sticky; top: 1.5rem; }
+.player-dash-card { background: rgba(255,255,255,.94); border: 1px solid var(--player-line); border-radius: 18px; box-shadow: 0 12px 36px rgba(16,42,67,.07); padding: 1.1rem 1.2rem; }
+.player-dash-project h2 { font-family: Georgia, serif; font-size: 1.25rem; line-height: 1.25; margin: .3rem 0 0; }
+.player-dash-oneliner { color: var(--player-muted); font-size: .9rem; line-height: 1.5; margin: .45rem 0 0; }
+.player-dash-next { display: grid; gap: .15rem; font-size: .92rem; font-weight: 700; margin: .9rem 0 0; padding-top: .8rem; border-top: 1px solid var(--player-line); }
+.player-dash-label { color: var(--player-accent); font-size: .7rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.player-dash-unlock { color: var(--player-muted); font-size: .8rem; font-weight: 500; }
+.player-dash-graduated { color: var(--player-accent); }
+.player-dash-count { font-size: .95rem; margin: .4rem 0 .55rem; }
+.player-dash-count strong { font-size: 1.6rem; font-family: Georgia, serif; }
+.player-dash-bar { height: 8px; border-radius: 99px; background: #d6e4e1; overflow: hidden; }
+.player-dash-bar span { display: block; height: 100%; background: var(--player-accent); transition: width .25s ease; }
+.player-dash-sub { color: var(--player-muted); font-size: .8rem; font-weight: 700; margin: .9rem 0 .4rem; }
+.player-dash-milestones { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.player-dash-ms { display: grid; grid-template-columns: 1.1rem 1fr; gap: .5rem; font-size: .85rem; line-height: 1.35; }
+.player-dash-ms-mark { color: var(--player-muted); font-weight: 800; }
+.player-dash-ms.is-reached .player-dash-ms-mark { color: var(--player-accent); }
+.player-dash-ms.is-current { font-weight: 750; }
+.player-dash-ms.is-current .player-dash-ms-mark { color: var(--player-accent); }
+.player-dash-ms.is-locked { color: var(--player-muted); }
+@media (max-width: 1100px) {
+  .player-body.has-dash { grid-template-columns: minmax(0, 1fr); }
+  .player-dash { position: static; order: -1; }
+}
 .player-card { background: rgba(255,255,255,.94); border: 1px solid var(--player-line); border-radius: 22px; box-shadow: 0 20px 60px rgba(16,42,67,.09); padding: clamp(1.3rem, 4vw, 2.6rem); font-size: 1.05rem; line-height: 1.7; }
 .player-card h2 { font-family: Georgia, serif; line-height: 1.2; }
 .player-card button, .player-button { display: inline-block; background: var(--player-accent); color: white; border: 0; border-radius: 12px; padding: .8rem 1.2rem; font-weight: 750; text-decoration: none; cursor: pointer; margin-top: 1rem; }
@@ -27,7 +83,7 @@
 .player-complete { text-align: center; padding-block: 4rem; }
 .diagnostic-card fieldset { padding-bottom: 1.25rem; border-bottom: 1px solid var(--player-line); }
 .diagnostic-card legend span { display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--player-accent); color: white; margin-right: .7rem; }
-@media (max-width: 700px) { .player-shell { padding-top: 1.4rem; } .player-header { align-items: stretch; flex-direction: column; } .player-progress { width: 100%; } .player-card { border-radius: 16px; } }
+@media (max-width: 700px) { .player-shell { padding-top: 1.4rem; } .player-header { align-items: stretch; flex-direction: column; } .player-progress { width: 100%; } .player-header-side { align-items: stretch; } .player-help, .player-help-status { max-width: none; text-align: left; } .player-card { border-radius: 16px; } }
 .capstone-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 1rem; align-items: start; }
 .capstone-grid li { margin: .8rem 0; }
 .capstone-locked { color: var(--player-muted); }

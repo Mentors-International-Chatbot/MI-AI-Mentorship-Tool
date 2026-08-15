@@ -28,6 +28,7 @@ import {
   baselineDiagnosticSchema,
   responseStyleSchema,
   projectSelectionSchema,
+  helpRequestSchema,
   outcomeSchema,
 } from "./journey-package.schema";
 
@@ -114,6 +115,12 @@ export const programVersionConfigSchema = z.object({
 
   /** Authored project presets and interest signals. Absent for legacy programs. */
   projectSelection: projectSelectionSchema.optional(),
+
+  /**
+   * Learner-initiated "request help from a human" on the delivery surface.
+   * Opt-in; absent means the button does not render and the endpoint refuses.
+   */
+  helpRequest: helpRequestSchema.optional(),
 
   /** Onboarding flow configuration. */
   onboarding: z
