@@ -94,7 +94,9 @@ describe("POST /api/auth/curriculum — AI Essentials tenant isolation", () => {
 
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
-      error: "AI Essentials is not currently published for your organization",
+      // Course-neutral copy: the same refusal now serves every player course,
+      // so it must not name one of them.
+      error: "This course is not currently published for your organization",
     });
     expect(mocks.setSocioCurriculum).not.toHaveBeenCalled();
     expect(mocks.createParticipant).not.toHaveBeenCalled();

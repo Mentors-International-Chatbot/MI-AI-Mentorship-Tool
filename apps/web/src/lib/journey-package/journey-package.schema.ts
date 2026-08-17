@@ -135,6 +135,23 @@ export const quizQuestionSchema = z
     explanation: z.string().min(1).optional(),
     /** Ties this question to a tracked dimension for auto-assessment. */
     dimensionKey: key.optional(),
+    /**
+     * False for an opinion question — one with options but no correct answer
+     * ("What do you know about X? A lot / Some / No clue"). It still renders as
+     * a selectable MCQ and still records the choice; it just has no verdict.
+     *
+     * Defaults to true, so every question authored before this existed keeps
+     * requiring an answer key and an explanation. Never author `false` on a
+     * diagnostic question: diagnostics score dimensions against a threshold,
+     * and that is enforced separately in the package cross-validation.
+     *
+     * The flag lives on the question rather than the block on purpose. The
+     * answerKey rule is enforced in this schema's own `superRefine`, which
+     * cannot see a parent block — moving the rule up to read a block-level flag
+     * would relocate the check that currently protects
+     * `baselineDiagnosticSchema.questions`, which shares this schema.
+     */
+    graded: z.boolean().default(true),
   })
   .refine(
     (q) => q.format !== "multiple_choice" || (q.options?.length ?? 0) >= 2,
@@ -151,10 +168,21 @@ export const quizQuestionSchema = z
         path: ["options"],
       });
     }
-    if (typeof q.answerKey !== "string" || options.filter((o) => o === q.answerKey).length !== 1) {
+    // Graded questions keep the original requirement, unconditionally. An
+    // ungraded question must not carry a key at all — a stray one would look
+    // authoritative to a later reader and to any future grader.
+    if (q.graded) {
+      if (typeof q.answerKey !== "string" || options.filter((o) => o === q.answerKey).length !== 1) {
+        ctx.addIssue({
+          code: "custom",
+          message: "multiple_choice answerKey must equal exactly one raw option",
+          path: ["answerKey"],
+        });
+      }
+    } else if (q.answerKey !== undefined) {
       ctx.addIssue({
         code: "custom",
-        message: "multiple_choice answerKey must equal exactly one raw option",
+        message: "an ungraded question must not declare an answerKey",
         path: ["answerKey"],
       });
     }
@@ -756,7 +784,10 @@ export const journeyPackageSchema = z
         }
         if (b.blockType === "quiz_checkpoint") {
           for (const q of b.questions) {
-            if (pkg.schemaVersion !== LEGACY_SCHEMA_VERSION && !q.explanation) {
+            // An explanation explains why an answer was right. An ungraded
+            // question has no right answer, so requiring one would force the
+            // author to invent the very thing `graded: false` says is absent.
+            if (q.graded && pkg.schemaVersion !== LEGACY_SCHEMA_VERSION && !q.explanation) {
               ctx.addIssue({
                 code: "custom",
                 message: `quiz question "${q.id}" requires an explanation in schema ${SCHEMA_VERSION}`,
@@ -787,6 +818,15 @@ export const journeyPackageSchema = z
           ctx.addIssue({
             code: "custom",
             message: `diagnostic question "${question.id}" must be multiple_choice`,
+          });
+        }
+        // A diagnostic scores dimensions against a threshold, so an ungraded
+        // question in one is meaningless. Stated here rather than left implicit
+        // because `graded` lives on the shared question schema.
+        if (!question.graded) {
+          ctx.addIssue({
+            code: "custom",
+            message: `diagnostic question "${question.id}" must be graded`,
           });
         }
         if (!question.explanation) {

@@ -24,7 +24,7 @@ export function CapstonePlayer({ course }: { course: string }) {
     if (!message.trim()) return;
     const content = message.trim(); setBusy(true); setError("");
     try {
-      const result = await playerFetch<{ response: string; isError?: boolean }>("/api/chat", { method: "POST", body: JSON.stringify({ message: content, context: { surface: "player", courseCode: "AIESS", lessonKey: "capstone", intent: "capstone" } }) });
+      const result = await playerFetch<{ response: string; isError?: boolean }>("/api/chat", { method: "POST", body: JSON.stringify({ message: content, context: { surface: "player", courseCode: course, lessonKey: "capstone", intent: "capstone" } }) });
       setMessages((value) => [...value, { role: "You", content }, { role: "AI Mentor", content: result.response, expandable: !result.isError }]); setMessage("");
       setData(await playerFetch<Capstone>(`/api/learn/${course}/capstone`));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to reach AI Mentor"); }
@@ -33,7 +33,7 @@ export function CapstonePlayer({ course }: { course: string }) {
   async function explainMore() {
     setBusy(true); setError("");
     try {
-      const result = await playerFetch<{ response: string }>("/api/chat", { method: "POST", body: JSON.stringify({ context: { surface: "player", courseCode: "AIESS", lessonKey: "capstone", intent: "expand", parentIntent: "capstone" } }) });
+      const result = await playerFetch<{ response: string }>("/api/chat", { method: "POST", body: JSON.stringify({ context: { surface: "player", courseCode: course, lessonKey: "capstone", intent: "expand", parentIntent: "capstone" } }) });
       setMessages((value) => [...value, { role: "AI Mentor", content: result.response }]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to expand the reply"); }
     finally { setBusy(false); }

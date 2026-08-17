@@ -462,9 +462,15 @@ export const prismaRepo: Repo = {
     },
 
     async touchInteraction(socioId) {
-        const progress = await prisma.socioProgress.update({
+        // Upsert, not update. A learner who signed up and joined a player
+        // course has no SocioProgress row yet — that row is created lazily by
+        // `getSocioProgress`, and this call runs before anything reaches it. A
+        // bare `update` threw P2025 and turned every first tutor turn into a
+        // 500, which is exactly what a fresh focus-group account looks like.
+        const progress = await prisma.socioProgress.upsert({
             where: { socioId },
-            data: { lastInteractionAt: new Date() },
+            create: { socioId, lastInteractionAt: new Date() },
+            update: { lastInteractionAt: new Date() },
         });
         return toSocioProgress(progress);
     },

@@ -15,6 +15,8 @@ export class PlayerError extends Error {
 
 export type PlayerAccess = {
   socioId: string;
+  /** Route-facing course code, normalized. The player surface is no longer single-course. */
+  courseCode: string;
   collectionKey: string;
   organizationId: string;
   programVersionId: string;
@@ -27,7 +29,12 @@ export type PlayerParentIntent = "question" | "teach_back" | "lesson_entry" | "c
 export type PlayerIntent = PlayerParentIntent | "expand";
 export type ValidatedPlayerContext = {
   surface: "player";
-  courseCode: "AIESS";
+  /**
+   * The course this turn belongs to. Was the literal `"AIESS"` while AI
+   * Essentials was the only player course, which made the compiler agree with
+   * a hardcoded value in every caller. Widened when the second course landed.
+   */
+  courseCode: string;
   lessonKey: string;
   blockId?: string;
   intent: PlayerIntent;
@@ -42,12 +49,12 @@ export type ValidatedPlayerContext = {
 };
 
 export function matchesExpansionParent(metadata: unknown, params: {
-  collectionKey: string; programVersionId: string; lessonKey: string; blockId?: string; parentIntent: PlayerParentIntent;
+  courseCode: string; collectionKey: string; programVersionId: string; lessonKey: string; blockId?: string; parentIntent: PlayerParentIntent;
 }): boolean {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
   const value = metadata as Record<string, unknown>;
   return value.surface === "player"
-    && value.courseCode === "AIESS"
+    && value.courseCode === params.courseCode
     && value.collectionKey === params.collectionKey
     && value.programVersionId === params.programVersionId
     && value.lessonKey === params.lessonKey
@@ -107,7 +114,8 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
   const enrollment = socio.participantProfile?.enrollments.find((item) => item.id === selectedEnrollmentId);
   if (!enrollment) throw new PlayerError(403, "not_enrolled", "An active enrollment in this course is required");
   return {
-    socioId: socio.id, collectionKey, organizationId: programVersion.program.organizationId,
+    socioId: socio.id, courseCode: courseCode.trim().toUpperCase(), collectionKey,
+    organizationId: programVersion.program.organizationId,
     programVersionId: programVersion.id, programVersion: programVersion.version,
     config: programVersionConfigSchema.parse(programVersion.config), enrollmentId: enrollment.id,
   };
@@ -220,6 +228,7 @@ export async function preparePlayerContext(
       select: { id: true, metadata: true },
     });
     const prior = recent.find((row) => matchesExpansionParent(row.metadata, {
+      courseCode: access.courseCode,
       collectionKey: access.collectionKey,
       programVersionId: access.programVersionId,
       lessonKey: input.lessonKey,
@@ -230,13 +239,13 @@ export async function preparePlayerContext(
     parentAssistantMessageId = prior.id;
   }
   if (input.intent === "capstone" || (input.intent === "expand" && input.parentIntent === "capstone")) {
-    return { surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, parentAssistantMessageId, ltiContextId };
+    return { surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, parentAssistantMessageId, ltiContextId };
   }
   const rows = await lessonRows(access);
   const row = rows.find((item) => item.slug === input.lessonKey);
   if (!row?.versions[0]) throw new PlayerError(404, "lesson_not_found", "Lesson not found");
   const lesson = lessonSchema.parse(row.versions[0].body);
-  if (!input.blockId) return { surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, parentAssistantMessageId, ltiContextId };
+  if (!input.blockId) return { surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, parentAssistantMessageId, ltiContextId };
   const block = lesson.blocks.find((item) => item.id === input.blockId);
   if (!block) throw new PlayerError(404, "block_not_found", "Block not found");
   if (input.intent === "teach_back" && block.blockType !== "teach_back") throw new PlayerError(400, "invalid_context", "The selected block is not a teach-back");
@@ -247,7 +256,7 @@ export async function preparePlayerContext(
     ? existing.state as { turnCount?: unknown } : {};
   const turnCount = typeof state.turnCount === "number" ? state.turnCount : 0;
   return {
-    surface: "player", courseCode: "AIESS", ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId,
+    surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId,
     contentVersion: block.contentVersion, teachBackTurn: input.intent === "teach_back" ? (turnCount >= 1 ? 2 : 1) : undefined,
     parentAssistantMessageId, ltiContextId,
   };
@@ -350,6 +359,36 @@ async function getLessonDashboard(
   }
 }
 
+/**
+ * The learner's persisted tutor turns for one lesson, oldest first.
+ *
+ * Scoped by the metadata the handler already writes on both the user and the
+ * assistant row (`surface`, `collectionKey`, `lessonKey`). `/api/chat/history`
+ * cannot serve this: it returns the socio's last 50 messages across every
+ * context, so a learner who ever used the chat surface would find MI turns
+ * inside a player lesson — and it authenticates with a cookie session only,
+ * which locks out Canvas learners whose identity is a bearer token.
+ *
+ * The socioId predicate is what makes the JSON filters cheap: `messages` is
+ * indexed on `[socioId, createdAt]`, so the path comparisons only ever run over
+ * one learner's rows.
+ */
+export async function getLessonThread(access: PlayerAccess, lessonKey: string) {
+  return playerRuntimeRepo.message.findMany({
+    where: {
+      socioId: access.socioId,
+      assessmentSessionId: null,
+      AND: [
+        { metadata: { path: ["surface"], equals: "player" } },
+        { metadata: { path: ["collectionKey"], equals: access.collectionKey } },
+        { metadata: { path: ["lessonKey"], equals: lessonKey } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, role: true, content: true, senderType: true, createdAt: true, metadata: true },
+  });
+}
+
 export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
   if (await learnerProjectSelectionRequired(access)) {
     throw new PlayerError(403, "project_required", "Choose your project before starting the course");
@@ -397,11 +436,24 @@ export function gradePlayerBlock(block: LessonBlock, response: unknown) {
     const answers = response as Record<string, unknown>;
     if (block.questions.some((question) => typeof answers[question.id] !== "string")) throw new PlayerError(400, "incomplete_response", "Submit an answer for every question");
     if (block.questions.some((question) => question.format === "multiple_choice" && !question.options?.includes(answers[question.id] as string))) throw new PlayerError(400, "invalid_response", "Every answer must be one of the question options");
-    const results = block.questions.map((question) => ({
+    // Ungraded questions are recorded, never judged. Scoring runs over the
+    // graded ones only, and a block with none scores null rather than zero —
+    // "no opinion was wrong" and "every answer was wrong" must not look alike
+    // in BlockProgress.score.
+    const graded = block.questions.filter((question) => question.graded);
+    const results = graded.map((question) => ({
       questionId: question.id, correct: answers[question.id] === question.answerKey,
       correctAnswer: question.answerKey, explanation: question.explanation,
     }));
-    return { complete: true, score: results.filter((item) => item.correct).length / results.length, response: answers, feedback: { questions: results } };
+    return {
+      complete: true,
+      score: results.length > 0 ? results.filter((item) => item.correct).length / results.length : null,
+      response: answers,
+      // No graded questions means no verdict to show, which also lets the
+      // player advance straight past an opinion poll instead of pausing on a
+      // feedback panel that would have nothing in it.
+      feedback: results.length > 0 ? { questions: results } : null,
+    };
   }
   if (block.blockType === "drag_order") {
     if (!Array.isArray(response) || !response.every(Number.isInteger)) throw new PlayerError(400, "invalid_response", "Submit an item-index order");

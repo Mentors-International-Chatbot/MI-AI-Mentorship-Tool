@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   preloadCollection: vi.fn(),
   resolveCourseCode: vi.fn(),
   logEvent: vi.fn(),
+  programVersionFindMany: vi.fn(),
 }));
 
 vi.mock('@/lib/logging/logger', () => ({
@@ -56,6 +57,19 @@ vi.mock('@/lib/courses/resolver', () => ({
   resolveCourseCode: mocks.resolveCourseCode,
   getAvailableCourseCodes: () => ['MI2026'],
   getAvailableCourses: () => [],
+}));
+
+// The route now reads published versions for every collection to decide, from
+// delivery metadata rather than the collection key, whether this is a player
+// course that needs a cohort and enrollment. MI is chat: no candidates, so the
+// enrollment path stays skipped exactly as it was.
+vi.mock('@/lib/db', () => ({
+  prisma: {
+    programVersion: { findMany: mocks.programVersionFindMany },
+    participantProfile: { findUnique: vi.fn() },
+    cohort: { upsert: vi.fn() },
+    enrollment: { upsert: vi.fn() },
+  },
 }));
 
 import { POST } from '../route';
@@ -103,6 +117,8 @@ beforeEach(() => {
   mocks.preloadCollection.mockResolvedValue(undefined);
   mocks.createParticipant.mockResolvedValue({ id: 'participant-1' });
   mocks.logEvent.mockResolvedValue(undefined);
+  // MI has no player-surface published version, so the enrollment path is skipped.
+  mocks.programVersionFindMany.mockResolvedValue([]);
 });
 
 /** The single logEvent call matching a level, or undefined. */

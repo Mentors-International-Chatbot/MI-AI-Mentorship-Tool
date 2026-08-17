@@ -219,7 +219,12 @@ export async function POST(req: NextRequest) {
             const candidate = body.context;
             const intents: PlayerIntent[] = ['question', 'teach_back', 'lesson_entry', 'capstone', 'expand'];
             const parentIntents: PlayerParentIntent[] = ['question', 'teach_back', 'lesson_entry', 'capstone'];
-            if (candidate.surface !== 'player' || candidate.courseCode !== 'AIESS' || typeof candidate.lessonKey !== 'string' || !intents.includes(candidate.intent as PlayerIntent)) {
+            // The course is no longer checked against a literal. `resolvePlayerAccess`
+            // below is the real authority: it rejects an unknown code, an inactive
+            // enrollment, and any course whose delivery surface is not the player.
+            // Checking a hardcoded code here only made the tutor single-course.
+            if (candidate.surface !== 'player' || typeof candidate.courseCode !== 'string' || !candidate.courseCode
+                || typeof candidate.lessonKey !== 'string' || !intents.includes(candidate.intent as PlayerIntent)) {
                 return NextResponse.json({ error: 'Invalid player context' }, { status: 400 });
             }
             if (candidate.intent === 'expand' && !parentIntents.includes(candidate.parentIntent as PlayerParentIntent)) {

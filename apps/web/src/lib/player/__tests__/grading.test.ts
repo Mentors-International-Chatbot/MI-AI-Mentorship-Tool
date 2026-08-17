@@ -72,14 +72,16 @@ describe("diagnostic dimension aggregation", () => {
 });
 
 describe("expansion parent validation", () => {
-  const params = { collectionKey: "ai-essentials", programVersionId: "pv-1", lessonKey: "lesson-1", blockId: "block-1", parentIntent: "teach_back" as const };
-  const metadata = { surface: "player", courseCode: "AIESS", ...params, intent: "teach_back" };
+  const params = { courseCode: "AIESS", collectionKey: "ai-essentials", programVersionId: "pv-1", lessonKey: "lesson-1", blockId: "block-1", parentIntent: "teach_back" as const };
+  const metadata = { surface: "player", ...params, intent: "teach_back" };
 
   it("requires the same released course, lesson, block, and parent intent", () => {
     expect(matchesExpansionParent(metadata, params)).toBe(true);
     expect(matchesExpansionParent({ ...metadata, programVersionId: "pv-2" }, params)).toBe(false);
     expect(matchesExpansionParent({ ...metadata, blockId: "other" }, params)).toBe(false);
     expect(matchesExpansionParent({ ...metadata, intent: "question" }, params)).toBe(false);
+    // courseCode is compared against the caller's course now, not a literal.
+    expect(matchesExpansionParent({ ...metadata, courseCode: "SKILLS" }, params)).toBe(false);
   });
 });
 const drag = lessonBlockSchema.parse({

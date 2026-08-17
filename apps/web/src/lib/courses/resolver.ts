@@ -26,6 +26,7 @@ export const COURSE_CODES: Record<string, string> = {
   MI2024: "mi-colombia-curriculum",
   PBJ: "pbj-basics",
   AIESS: "ai-essentials",
+  SKILLS: "skills-tool-calls",
 };
 
 /**
@@ -46,6 +47,11 @@ export const COURSE_INFO: Record<string, Omit<CourseInfo, 'code'>> = {
     collectionKey: "ai-essentials",
     name: "AI Essentials",
     description: "17-lesson practical AI literacy course",
+  },
+  SKILLS: {
+    collectionKey: "skills-tool-calls",
+    name: "Skills & Tool Calls",
+    description: "One-lesson focus-group course on AI skills and tool calls",
   },
 };
 

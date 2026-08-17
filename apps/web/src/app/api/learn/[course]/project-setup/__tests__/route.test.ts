@@ -35,13 +35,17 @@ vi.mock("@/lib/player/learnerProject", async (importOriginal) => {
     confirmProjectSetup: mocks.confirmProjectSetup,
   };
 });
-vi.mock("@/lib/ai/project-selection/service", () => ({
+vi.mock("@/lib/ai/project-selection/service", async (importOriginal) => ({
+  // The error class is a real export the route does `instanceof` against, so it
+  // has to come from the module rather than be stubbed.
+  ProjectSelectionOutputError: (await importOriginal<typeof import("@/lib/ai/project-selection/service")>()).ProjectSelectionOutputError,
   generateProjectProposals: mocks.generateProjectProposals,
   generateProjectScope: mocks.generateProjectScope,
   finalizeProjectScope: mocks.finalizeProjectScope,
 }));
 
 import { LearnerProjectInputError } from "@/lib/player/learnerProject";
+import { ProjectSelectionOutputError } from "@/lib/ai/project-selection/service";
 import { GET, POST, PUT } from "../route";
 
 const params = { params: Promise.resolve({ course: "AIESS" }) };
@@ -104,6 +108,24 @@ describe("/api/learn/[course]/project-setup", () => {
     expect(response.status).toBe(200);
     expect(mocks.confirmProjectSetup).toHaveBeenCalledWith(access, "My weekly club update");
     await expect(response.json()).resolves.toMatchObject({ project: { status: "ACTIVE" } });
+  });
+
+  it("separates a bad request body from a bad model response", async () => {
+    // Request body: the caller's fault, 400.
+    const badRequest = await POST(request("POST", { action: "proposals", lifeContext: "" }), params);
+    expect(badRequest.status).toBe(400);
+    await expect(badRequest.json()).resolves.toMatchObject({ code: "invalid_project_setup" });
+
+    // Model output: not the caller's fault. These were the same 400 with the
+    // same message, which is what made the failure take a full investigation.
+    mocks.generateProjectProposals.mockRejectedValueOnce(new ProjectSelectionOutputError(
+      "proposals",
+      [{ code: "custom", path: ["message"], message: "must end with exactly one question" }] as never,
+      '{"message":"Here are three ideas."}',
+    ));
+    const badOutput = await POST(request("POST", { action: "proposals", lifeContext: draft.lifeContext }), params);
+    expect(badOutput.status).toBe(502);
+    await expect(badOutput.json()).resolves.toMatchObject({ code: "invalid_model_output", phase: "proposals" });
   });
 
   it("returns 403 when enrollment resolution rejects cross-organization access", async () => {

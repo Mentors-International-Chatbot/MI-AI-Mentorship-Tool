@@ -18,11 +18,23 @@ import {
   finalizeProjectScope,
   generateProjectProposals,
   generateProjectScope,
+  ProjectSelectionOutputError,
 } from "@/lib/ai/project-selection/service";
 
 function setupError(error: unknown, operation: string) {
   if (error instanceof PlayerError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+  }
+  // Ordered before the ZodError branch: a bad model response is not a bad
+  // request, and reporting it as one sent the last investigation to the wrong
+  // half of the system. 502 says the upstream model failed, not the caller.
+  if (error instanceof ProjectSelectionOutputError) {
+    return NextResponse.json({
+      error: "The project assistant returned an unusable response. Please try again.",
+      code: "invalid_model_output",
+      phase: error.phase,
+      issues: error.issues,
+    }, { status: 502 });
   }
   if (error instanceof ZodError) {
     return NextResponse.json({ error: "Invalid project setup request", code: "invalid_project_setup", issues: error.issues }, { status: 400 });

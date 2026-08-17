@@ -62,12 +62,20 @@ export async function resolveLearnerHome(
     if (attempts === 0) return `/learn/${courseCode}/diagnostic`;
   }
   const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId, collectionKey: socio.curriculumCollectionKey, completedAt: { not: null } } });
+  let lastLessonSlug: string | undefined;
   for (const row of version.collection.lessons) {
     if (!row.versions[0]) continue;
     const lesson = lessonSchema.safeParse(row.versions[0].body);
     if (!lesson.success) continue;
+    lastLessonSlug = row.slug;
     const complete = lesson.data.blocks.every((block) => progress.some((item) => item.lessonKey === row.slug && item.blockId === block.id && item.contentVersion === block.contentVersion));
     if (!complete) return `/learn/${courseCode}/${row.slug}`;
   }
+  // Everything is done. A course without an `outcome` has no capstone — the
+  // endpoint 404s — so sending a returning learner there is a dead end with no
+  // way forward. Land them on the last lesson instead, which still renders its
+  // completion card. With no lesson to return to there is nothing better to
+  // offer, so that case keeps the original route.
+  if (!config.outcome && lastLessonSlug) return `/learn/${courseCode}/${lastLessonSlug}`;
   return `/learn/${courseCode}/capstone`;
 }

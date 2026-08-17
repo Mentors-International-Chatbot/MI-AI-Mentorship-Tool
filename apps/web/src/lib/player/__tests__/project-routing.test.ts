@@ -24,6 +24,7 @@ import { programVersionConfigSchema } from "@/lib/journey-package/program-versio
 
 const access = {
   socioId: "learner-1",
+  courseCode: "AIESS",
   collectionKey: "ai-essentials",
   organizationId: "org-1",
   programVersionId: "version-1",

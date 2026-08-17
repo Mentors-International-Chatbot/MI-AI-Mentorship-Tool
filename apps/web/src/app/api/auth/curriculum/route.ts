@@ -126,31 +126,38 @@ export async function POST(req: NextRequest) {
         }, { status: 409 });
     }
 
-    // AI Essentials is tenant-owned. A published version in a synthetic test
+    // Player courses are tenant-owned. A published version in a synthetic test
     // organization must never make the course globally joinable, and a learner
     // already anchored to one organization must not be enrolled into another.
     // Unanchored direct-web learners may select the sole non-synthetic published
     // version; its collection then establishes their tenant in the normal
     // anchorParticipantProfile path below.
+    //
+    // Which courses this applies to is decided by the published versions'
+    // delivery metadata, never by the collection key. Gating on the key made
+    // self-serve enrollment work for exactly one course: every other player
+    // course set the curriculum, skipped the cohort and enrollment writes, and
+    // sent the learner to a chat surface it does not use.
+    const candidates = await prisma.programVersion.findMany({
+        where: { status: 'published', collection: { slug: collectionKey } },
+        include: { program: { include: { organization: { select: { settings: true } } } } },
+        orderBy: { publishedAt: 'desc' },
+    });
+    const isPlayerCourse = candidates.some((candidate) => resolveDelivery(candidate.metadata).surface === 'player');
     let published: Awaited<ReturnType<typeof prisma.programVersion.findFirst>> & {
         program: { organizationId: string; organization: { settings: unknown } };
     } | null = null;
-    let participant = collectionKey === 'ai-essentials'
+    let participant = isPlayerCourse
         ? await prisma.participantProfile.findUnique({
             where: { socioId: socio.id },
             select: { id: true, organizationId: true },
         })
         : null;
-    if (collectionKey === 'ai-essentials') {
-        const candidates = await prisma.programVersion.findMany({
-            where: { status: 'published', collection: { slug: collectionKey } },
-            include: { program: { include: { organization: { select: { settings: true } } } } },
-            orderBy: { publishedAt: 'desc' },
-        });
+    if (isPlayerCourse) {
         published = selectPublishedPlayerVersion(candidates, participant?.organizationId);
         if (!published) {
             return NextResponse.json(
-                { error: 'AI Essentials is not currently published for your organization' },
+                { error: 'This course is not currently published for your organization' },
                 { status: 409 },
             );
         }
@@ -197,7 +204,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
         success: true,
         collectionKey,
-        homePath: collectionKey === 'ai-essentials' ? await resolveLearnerHome(socio.id) : '/chat',
+        // `published` is set only for player courses, so this follows the same
+        // delivery-driven decision the enrollment write above does.
+        homePath: published ? await resolveLearnerHome(socio.id) : '/chat',
         message: `Curriculum set to ${collectionKey}`,
     });
 }

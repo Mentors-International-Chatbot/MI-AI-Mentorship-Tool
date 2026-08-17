@@ -1,5 +1,5 @@
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import type { PlayerAccess } from "@/lib/player/service";
 import type { ProjectSelectionConfig } from "@/lib/journey-package/journey-package.schema";
 import { createOpenRouterChat, resolveOpenRouterModel } from "@/lib/ai/openrouter";
@@ -17,8 +17,22 @@ export type ProjectSelectionModel = {
   invoke(messages: Array<SystemMessage | HumanMessage | AIMessage>): Promise<{ content: unknown }>;
 };
 
+/**
+ * The single place the trailing-question rule is written down. The schema
+ * enforces it and the repair prompt quotes the same string, so a repair
+ * instruction can no longer permit output the schema rejects.
+ *
+ * That is precisely how this broke: the shared tutor repair builder asks for
+ * "at most 1 question", which zero questions satisfies, while this refinement
+ * requires the message to *end* in one. The repair then talked the model out of
+ * the question the schema demanded.
+ */
+const TRAILING_QUESTION_PATTERN = /\?(?:["')\]]|\s)*$/u;
+const TRAILING_QUESTION_REQUIREMENT =
+  "The learner-visible message must end with exactly one question, and must contain no other question.";
+
 const learnerMessageSchema = z.string().trim().min(1)
-  .refine((message) => /\?(?:["')\]]|\s)*$/u.test(message), "Learner-visible setup messages must end with one question");
+  .refine((message) => TRAILING_QUESTION_PATTERN.test(message), TRAILING_QUESTION_REQUIREMENT);
 
 const proposalSchema = z.object({
   message: learnerMessageSchema,
@@ -54,6 +68,40 @@ function contentToText(content: unknown): string {
     return "";
   }).join("");
   return String(content ?? "");
+}
+
+/**
+ * The model returned JSON that did not satisfy the output schema.
+ *
+ * A distinct type from the request-body `ZodError` on purpose: both used to
+ * surface as a 400 "Invalid project setup request", which pointed every
+ * investigation at the learner's request when the fault was upstream.
+ */
+export class ProjectSelectionOutputError extends Error {
+  constructor(
+    public readonly phase: string,
+    public readonly issues: ZodError["issues"],
+    public readonly responseText: string,
+  ) {
+    super(`Project selection ${phase} output failed validation`);
+    this.name = "ProjectSelectionOutputError";
+  }
+}
+
+function describeIssues(error: ZodError): string {
+  return error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ");
+}
+
+/**
+ * The response body is logged in full. It is the thing you need to read to tell
+ * a dropped trailing question apart from an invented preset key, and nothing
+ * else records it — `AiInvocation` stores only a length and a prompt hash.
+ */
+function logOutputFailure(mode: string, text: string, error: ZodError): void {
+  console.error(
+    `[ProjectSelection] ${mode} output failed validation: ${describeIssues(error)}`,
+    `\nModel response:\n${text}`,
+  );
 }
 
 function parseJsonObject(text: string): unknown {
@@ -109,8 +157,41 @@ async function invokeStructured<T>(params: {
     ]),
   });
 
-  let response = await run(params.userPrompt, phase);
-  let parsed = schema.parse(parseJsonObject(contentToText(response.content)));
+  /**
+   * Run the model and validate its JSON, retrying once on a schema failure
+   * before giving up. The retry quotes the specific validation errors back,
+   * which is a far better prompt than the original contract alone — the model
+   * usually misses one field, not the whole shape.
+   *
+   * Only `ZodError` is retried. A response that is not JSON at all is a
+   * different failure and still surfaces as-is.
+   */
+  const runAndParse = async (userPrompt: string, mode: string): Promise<T> => {
+    const attempt = await run(userPrompt, mode);
+    const text = contentToText(attempt.content);
+    try {
+      return schema.parse(parseJsonObject(text));
+    } catch (error) {
+      if (!(error instanceof ZodError)) throw error;
+      logOutputFailure(mode, text, error);
+
+      const retry = await run([
+        userPrompt,
+        `The previous response failed output validation (${describeIssues(error)}).`,
+        `Return corrected JSON only, matching: ${outputContract}`,
+      ].join("\n\n"), `${mode}_retry`);
+      const retryText = contentToText(retry.content);
+      try {
+        return schema.parse(parseJsonObject(retryText));
+      } catch (retryError) {
+        if (!(retryError instanceof ZodError)) throw retryError;
+        logOutputFailure(`${mode}_retry`, retryText, retryError);
+        throw new ProjectSelectionOutputError(mode, retryError.issues, retryText);
+      }
+    }
+  };
+
+  let parsed = await runAndParse(params.userPrompt, phase);
   const firstMessage = (parsed as { message?: unknown }).message;
   if (typeof firstMessage !== "string") throw new Error("Project selection response has no learner-visible message");
   const violations = visibleViolations(firstMessage, access);
@@ -124,13 +205,15 @@ async function invokeStructured<T>(params: {
   const repairInstruction = style
     ? buildResponseStyleRepairInstruction(style, false, violations.filter((item) => item !== "self_reference") as Parameters<typeof buildResponseStyleRepairInstruction>[2], true, firstMessage.length)
     : "Rewrite the message as short conversational prose with one focused final question.";
-  response = await run([
+  parsed = await runAndParse([
     "Repair only the learner-visible message while preserving every other JSON field exactly.",
     repairInstruction,
+    // Restated because `repairInstruction` comes from the shared tutor rules,
+    // which cap questions but never require one.
+    TRAILING_QUESTION_REQUIREMENT,
     "Use no first-person self-reference.",
     `JSON TO REPAIR:\n${JSON.stringify(parsed)}`,
   ].join("\n\n"), `${phase}_repair`);
-  parsed = schema.parse(parseJsonObject(contentToText(response.content)));
   const repairedMessage = (parsed as { message?: unknown }).message;
   const repairedStableFields = JSON.stringify(Object.fromEntries(
     Object.entries(parsed as Record<string, unknown>).filter(([key]) => key !== "message"),
