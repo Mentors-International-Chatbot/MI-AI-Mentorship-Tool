@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import { repo } from '@/lib/repo';
 import { Socio, Message, SocioProgress as RepoSocioProgress } from '@/lib/repo/types';
 import {
+    buildAuthoritativePlayerPrompt,
     buildSystemPrompt,
     determineMode,
     parseMarkers,
     InteractionMode,
     type ParsedMarkers,
+    type ChatDelivery,
     type DetermineModeResult,
     type StanceDecision,
 } from './prompts';
@@ -37,9 +39,11 @@ import { CONTEXT_PROMPT_VERSION } from './prompts/layers/context';
 import { TASK_PROMPT_VERSION } from './prompts/layers/task';
 import { getContentIdentity } from './prompts/layers/content';
 import type { PromptVersionSink } from './prompts/loadPrompt';
-import { playerTutorGrounding, type ValidatedPlayerContext } from '@/lib/player/service';
+import { playerTutorGrounding, type PlayerIntent, type ValidatedPlayerContext } from '@/lib/player/service';
 import { playerRuntimeRepo } from '@/lib/repo/playerRuntimeRepo';
 import { programVersionConfigSchema } from '@/lib/journey-package/program-version-config.schema';
+import { resolveDelivery } from '@/lib/journey-package/delivery';
+import { resolveLearnerDelivery } from '@/lib/courses/deliverySurface';
 import type { ResponseStyle } from '@/lib/journey-package/journey-package.schema';
 import {
     buildResponseStyleInstruction,
@@ -247,6 +251,12 @@ export async function invokeStyledPlayerResponse(
         // path; the acceptance runner may retry the logical sample, while a
         // real learner receives the normal recoverable error message.
         if (repair === MAX_STYLE_REPAIRS) {
+            // Lesson entry is framing, not an assessed conversational turn. A
+            // usable, non-empty intro that misses a style preference must not
+            // turn into the generic generation-error message. Other player
+            // intents remain fail-closed because their shape can control the
+            // next learner action.
+            if (intent === 'lesson_entry' && delivered.trim().length > 0) return response;
             throw new Error(`Player response style contract failed after ${MAX_STYLE_REPAIRS} repair: ${violations.join(', ')}`);
         }
         // Repair is copy-editing, not a second teaching turn. Re-sending the
@@ -435,8 +445,10 @@ export function buildLessonPromptVersion(params: {
 export interface AIResponse {
     text: string;
     markers: ParsedMarkers;
-    mode: InteractionMode;
-    determineModeResult: DetermineModeResult;
+    /** Legacy chat mode, or the server-validated intent on the player surface. */
+    mode: InteractionMode | PlayerIntent;
+    /** Present only on the chat surface, whose legacy router produced it. */
+    determineModeResult?: DetermineModeResult;
     dimensionState?: DimensionStateMap;
     /**
      * Which passive analysis this turn earned. Resolved here because it needs
@@ -493,6 +505,20 @@ export async function generateAIResponse(
         select: { config: true, metadata: true, program: { select: { organizationId: true } } },
     }) : null;
     const parsedPlayerConfig = playerConfig ? programVersionConfigSchema.safeParse(playerConfig.config) : null;
+    const delivery = playerTurn
+        ? resolveDelivery(playerConfig?.metadata)
+        : await resolveLearnerDelivery(socio.id, collectionKey);
+    let chatDelivery: ChatDelivery | undefined;
+    if (playerTurn) {
+        if (delivery.surface !== 'player') {
+            throw new Error(`Player tutor turn rejected for ${delivery.surface}-surface course ${collectionKey}`);
+        }
+    } else {
+        if (delivery.surface !== 'chat') {
+            throw new Error(`Chat curriculum routing rejected for ${delivery.surface}-surface course ${collectionKey}`);
+        }
+        chatDelivery = { ...delivery, surface: 'chat' };
+    }
     const responseStyle = parsedPlayerConfig?.success ? parsedPlayerConfig.data.responseStyle : undefined;
     const playerMetadata = playerConfig?.metadata && typeof playerConfig.metadata === 'object' && !Array.isArray(playerConfig.metadata)
         ? playerConfig.metadata as Record<string, unknown> : {};
@@ -530,13 +556,17 @@ export async function generateAIResponse(
         prefetchedProgress = repoProgress;
     }
 
-    // 1. Determine interaction mode from real progress data + PRIOR dimension
-    //    state. Gate detection does not read dimension state; only the reteach
-    //    heuristic does, and a one-turn lag on an EMA signal is immaterial.
+    // 1. Determine a legacy curriculum mode only for a metadata-resolved chat
+    //    course. A player turn has its own validated intent and authored block
+    //    state; feeding it through this router is how LESSON_START leaked onto
+    //    the player surface.
     const modeStart = performance.now();
-    const modeResult = await determineMode(
-        socio, playerTurn?.learnerText ?? incomingText, collectionKey, priorState, prefetchedProgress,
+    const modeResult = playerTurn ? undefined : await determineMode(
+        chatDelivery!, socio, incomingText, collectionKey, priorState, prefetchedProgress,
     );
+    const mode: InteractionMode | PlayerIntent = playerTurn
+        ? playerTurn.context.intent
+        : modeResult!.routerResult.mode;
     timings.determineMode = performance.now() - modeStart;
 
     // 1b. Kick off the sensing pass, if this turn is worth sensing.
@@ -551,15 +581,11 @@ export async function generateAIResponse(
     //     the LLM call — and buys the policy a mode to decide on. A learner
     //     typing "next" to advance a lesson is not reporting comprehension, and
     //     sensing it was a Haiku round trip spent to learn nothing.
-    const basePolicy = resolveAnalysisPolicy({
-        mode: modeResult.routerResult.mode,
-        message: playerTurn?.learnerText ?? incomingText,
-    });
-    const policy: AnalysisPolicy = playerTurn?.context.intent === 'expand'
-        ? { sensing: false, sentiment: false, contextExtraction: false }
-        : playerTurn && playerTurn.context.intent !== 'lesson_entry'
-        ? { sensing: true, sentiment: true, contextExtraction: false }
-        : basePolicy;
+    const policy: AnalysisPolicy = playerTurn
+        ? playerTurn.context.intent === 'expand' || playerTurn.context.intent === 'lesson_entry'
+            ? { sensing: false, sentiment: false, contextExtraction: false }
+            : { sensing: true, sentiment: true, contextExtraction: false }
+        : resolveAnalysisPolicy({ mode: modeResult!.routerResult.mode, message: incomingText });
     const playerDimensions = parsedPlayerConfig?.success
         ? parsedPlayerConfig.data.trackedDimensions.map((item) => ({ key: item.key, label: item.label, min: item.scale.min, max: item.scale.max }))
         : undefined;
@@ -571,7 +597,8 @@ export async function generateAIResponse(
     if (overrideDimensionState || !policy.sensing) {
         analysisPromise = Promise.resolve({ state: priorState, sentiment: null, dimensions: [] });
     } else {
-        const repoProgress = prefetchedProgress ?? modeResult.repoProgress;
+        const repoProgress = prefetchedProgress ?? modeResult?.repoProgress;
+        if (!repoProgress) throw new Error('Progress was not loaded before sensing');
         const lessonContext = playerTurn?.context.lessonKey ?? (hasLessonData(collectionKey, repoProgress.currentLessonNumber)
             ? getLessonData(collectionKey, repoProgress.currentLessonNumber).titleEs
             : 'Conversación general de mentoría');
@@ -600,7 +627,7 @@ export async function generateAIResponse(
     // ── Handle gated assessment mode early ──────────────────────────────────
     // When student reaches a gate, we return the assessment prompt instead of
     // normal AI generation. The client should switch to assessment mode.
-    if (modeResult.routerResult.mode === InteractionMode.GATED_ASSESSMENT) {
+    if (modeResult?.routerResult.mode === InteractionMode.GATED_ASSESSMENT) {
         const gateState = modeResult.routerResult.gatedAssessment!;
         const lang = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
 
@@ -665,19 +692,21 @@ export async function generateAIResponse(
             take: 10,
         }).then((rows) => rows.reverse())
         : repo.getMessages(socio.id, 10);
-    const [baseSystemPrompt, modelHistory, playerGrounding] = await Promise.all([
-        buildSystemPrompt(
+    const baseSystemPromptPromise = playerTurn
+        ? Promise.resolve(buildAuthoritativePlayerPrompt(socio))
+        : buildSystemPrompt(
             socio,
-            modeResult.routerResult,
-            modeResult.progress,
+            modeResult!.routerResult,
+            modeResult!.progress,
             collectionKey,
             priorState,
             dbPromptVersions,
-            modeResult.activeFlags,
-            modeResult.reachedMilestoneKeys,
-            modeResult.gateRecency,
-            playerTurn ? { authoritativePlayerTurn: true } : undefined,
-        ),
+            modeResult!.activeFlags,
+            modeResult!.reachedMilestoneKeys,
+            modeResult!.gateRecency,
+        );
+    const [baseSystemPrompt, modelHistory, playerGrounding] = await Promise.all([
+        baseSystemPromptPromise,
         modelHistoryPromise,
         playerTurn ? playerTutorGrounding(socio.id, playerTurn.context) : Promise.resolve(null),
     ]);
@@ -713,12 +742,15 @@ export async function generateAIResponse(
     try {
         const invokeStart = performance.now();
         const model = resolveOpenRouterModel();
-        const promptVersion = buildLessonPromptVersion({
-            dbVersions: dbPromptVersions,
-            contentIdentity: getContentIdentity(modeResult.routerResult, collectionKey),
-            language: (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage,
-            stance: modeResult.routerResult.stance,
-        });
+        const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
+        const promptVersion = playerTurn
+            ? { player: 'authoritative-v1', language }
+            : buildLessonPromptVersion({
+                dbVersions: dbPromptVersions,
+                contentIdentity: getContentIdentity(modeResult!.routerResult, collectionKey),
+                language,
+                stance: modeResult!.routerResult.stance,
+            });
         const playerTraceContext = playerTurn ? {
             surface: 'player',
             courseCode: playerTurn.context.courseCode,
@@ -755,7 +787,7 @@ export async function generateAIResponse(
                     promptVersion,
                     systemPrompt: stage === 'initial' ? systemPrompt : PLAYER_REPAIR_SYSTEM_PROMPT,
                     socioId: socio.id,
-                    mode: modeResult.routerResult.mode,
+                    mode,
                     context: buildPlayerInvocationTraceContext(playerTraceContext, {
                         turnTraceId,
                         generationStage: stage,
@@ -780,7 +812,7 @@ export async function generateAIResponse(
                 socioId: socio.id,
                 // The exact router mode (RETEACH, FREEFORM_QUESTION, ...) lives
                 // here; operation stays coarse so the whole path is queryable.
-                mode: modeResult.routerResult.mode,
+                mode,
                 context: playerTraceContext,
                 invoke: async (markFirstToken): Promise<{ content: unknown }> => onToken
                     ? await streamWithRetry(chat, messages, onToken, markFirstToken)
@@ -809,9 +841,10 @@ export async function generateAIResponse(
 
         void logEvent('info', 'ai', 'AI response generated', {
             socioId: socio.id,
-            mode: modeResult.routerResult.mode,
-            stance: modeResult.routerResult.stance?.stance,
-            stanceReason: modeResult.routerResult.stance?.reason,
+            surface: delivery.surface,
+            mode,
+            stance: modeResult?.routerResult.stance?.stance,
+            stanceReason: modeResult?.routerResult.stance?.reason,
             promptTokensApprox: systemPrompt.length,
             responseLength: rawContent.length,
             totalMs: Math.round(totalTime),
@@ -825,14 +858,14 @@ export async function generateAIResponse(
                 parseAndSanitize: Math.round(timings.parseAndSanitize),
             },
             dimensionState: liveState,
-            reteachFromDimension: modeResult.reteachFromDimension,
+            reteachFromDimension: modeResult?.reteachFromDimension,
         });
 
         return {
             text: sanitized,
             markers,
-            mode: modeResult.routerResult.mode,
-            determineModeResult: modeResult,
+            mode,
+            ...(modeResult ? { determineModeResult: modeResult } : {}),
             dimensionState: liveState,
             analysisPolicy: policy,
             sentiment,
@@ -853,10 +886,10 @@ export async function generateAIResponse(
 
         const language = (socio.language || DEFAULT_LANGUAGE) as SupportedLanguage;
         return {
-            text: AI_ERROR_FALLBACK[language] ?? AI_ERROR_FALLBACK['es'],
+            text: AI_ERROR_FALLBACK[language] ?? AI_ERROR_FALLBACK[DEFAULT_LANGUAGE],
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
-            mode: modeResult.routerResult.mode,
-            determineModeResult: modeResult,
+            mode,
+            ...(modeResult ? { determineModeResult: modeResult } : {}),
             // The reply failed, so there is no AI turn to extract context from.
             // Sentiment still stands on the learner's own message.
             analysisPolicy: { ...policy, contextExtraction: false },

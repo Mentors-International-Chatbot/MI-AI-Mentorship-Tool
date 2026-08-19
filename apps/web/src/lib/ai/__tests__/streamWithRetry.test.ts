@@ -80,6 +80,26 @@ describe('invokeStyledPlayerResponse — the delivery contract', () => {
     expect(chat.invoke).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps a non-empty lesson entry when only its style contract still misses', async () => {
+    const repairedIntro = 'Skills and tool calls turn repeated instructions into reusable actions. Does that make sense?';
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: 'This lesson introduces reusable AI actions. Does that make sense?' })
+        .mockResolvedValueOnce({ content: repairedIntro }),
+    };
+
+    const response = await invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, 'lesson_entry');
+
+    expect(response.content).toBe(repairedIntro);
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
   it('can observe one invalid first draft without entering the live repair path', async () => {
     const validations: Array<{ stage: string; repairIndex: number; passed: boolean; violations: string[] }> = [];
     const chat = { invoke: vi.fn().mockResolvedValue({ content: 'One? Two? [END]' }) };

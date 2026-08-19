@@ -3,7 +3,7 @@ import { SocioProgress } from '../types';
 import { getLessonTitle, getLessonCount } from '@/lib/lessons/db-lesson-service';
 import { repo } from '@/lib/repo';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
-import type { SupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 import type { GateRecency } from '../gateRecency';
 
 /**
@@ -24,7 +24,7 @@ export { getLessonTitle };
 function formatCompletedLessons(
   completed: number[],
   collectionKey: string,
-  language: SupportedLanguage = 'es',
+  language: SupportedLanguage = DEFAULT_LANGUAGE,
 ): string {
   const noneLabels: Record<SupportedLanguage, string> = {
     es: 'Ninguna',
@@ -194,7 +194,7 @@ export async function buildContextPrompt(
   socio: Socio,
   progress: SocioProgress | undefined,
   collectionKey: string,
-  language: SupportedLanguage = 'es',
+  language: SupportedLanguage = DEFAULT_LANGUAGE,
   /**
    * Active flags, already fetched by the router. Undefined for the callers that
    * assemble a prompt outside the conversational path (the reminder cron, the

@@ -34,6 +34,21 @@ export function hasPromptStartingPoint(text: string): boolean {
   return PROMPT_STARTING_POINT.test(text);
 }
 
+/**
+ * Whether a delivered reply's last non-blank character is a question mark.
+ *
+ * Deliberately the crude version of the check two lines down: no attempt at
+ * "is it actually open" or "is it actually asking the learner something."
+ * This gates the player's block advancement, not response-style acceptance —
+ * it decides whether to hold the next block, and holding on a false positive
+ * (a rhetorical "Sound good?") costs one extra Continue click, while missing a
+ * real open question lets the lesson move on out from under it. Bias toward
+ * the cheap miss.
+ */
+export function endsWithQuestion(text: string): boolean {
+  return /\?(?:["')\]]|\s)*$/u.test(text.trim());
+}
+
 export function finalQuestionHasOneFocus(text: string): boolean {
   const finalSentence = text.trim().match(/[^.!?]*\?(?:["')\]]|\s)*$/u)?.[0];
   if (!finalSentence) return true;
@@ -218,7 +233,12 @@ function intentCalibration(intent: StyledPlayerIntent | undefined): string[] {
       return [
         "LESSON ENTRY:",
         "- Open with a learner situation specific to this lesson, not a definition, welcome, agenda, or tutor introduction.",
-        "- Connect that situation to why the subject matters. A short final question may ask about the learner's situation.",
+        // No trailing question here, deliberately: this intent announces the
+        // block the player is about to show, not a conversation turn the
+        // learner is expected to answer. See the three-gate note in
+        // LessonPlayer.tsx — a mentor question on this intent would hold the
+        // next block open for an answer nobody is being asked to give.
+        "- Connect that situation to why the subject matters, then stop. Do not end with a question.",
       ];
     case "question":
       return [

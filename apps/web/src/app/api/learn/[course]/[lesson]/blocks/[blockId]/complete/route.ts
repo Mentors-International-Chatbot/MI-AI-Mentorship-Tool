@@ -7,9 +7,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cou
     const identity = await resolveRequestIdentity(req);
     if (!identity) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     const { course, lesson, blockId } = await params;
-    const body = await req.json().catch(() => ({})) as { response?: unknown };
+    const body = await req.json().catch(() => ({})) as {
+      response?: unknown;
+      openQuestionGateEnabled?: boolean;
+      acknowledgeReview?: boolean;
+    };
     const access = await resolvePlayerAccess(identity, course);
-    return NextResponse.json(await completeBlock(access, lesson, blockId, body.response));
+    return NextResponse.json(await completeBlock(access, lesson, blockId, body.response, {
+      openQuestionGateEnabled: body.openQuestionGateEnabled,
+      acknowledgeReview: body.acknowledgeReview,
+    }));
   } catch (error) {
     if (error instanceof PlayerError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     console.error("Player block completion failed", error);

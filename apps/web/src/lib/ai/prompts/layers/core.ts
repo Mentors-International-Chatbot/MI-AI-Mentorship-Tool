@@ -68,7 +68,7 @@ async function loadScopedPrompt(
  * Course-agnostic safety rules, course-specific identity.
  * Language-aware: returns prompt in es/en/pt.
  */
-function buildCoreSystemPromptGeneric(meta: CourseMeta, language: SupportedLanguage = 'es'): string {
+function buildCoreSystemPromptGeneric(meta: CourseMeta, language: SupportedLanguage = DEFAULT_LANGUAGE): string {
   const templates: Record<SupportedLanguage, string> = {
     es: `Eres el tutor virtual del curso "${meta.courseName}". Guías a estudiantes a través de este programa educativo.
 
@@ -188,7 +188,7 @@ Se o estudante perguntar algo que não tem a ver com o currículo, redirecione g
 Não escale — simplesmente redirecione.`,
   };
 
-  return templates[language] ?? templates['es'];
+  return templates[language] ?? templates[DEFAULT_LANGUAGE];
 }
 
 // ─── Tone Override Snippets ─────────────────────────────────────────

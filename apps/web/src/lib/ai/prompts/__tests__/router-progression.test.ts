@@ -5,10 +5,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { determineMode } from '../router';
+import { determineMode, type ChatDelivery } from '../router';
 import { InteractionMode } from '../types';
 import type { Socio } from '@/lib/repo/types';
 import type { AssessmentSession } from '@/lib/repo/tenantRepo.types';
+
+const CHAT_DELIVERY: ChatDelivery = { surface: 'chat', supportedChannels: ['web', 'whatsapp'] };
 
 // Mock the repo module
 vi.mock('@/lib/repo', () => ({
@@ -133,7 +135,7 @@ describe('Router Progression Control', () => {
       }),
     ]);
 
-    const result = await determineMode(testSocio, 'hello', 'test-collection');
+    const result = await determineMode(CHAT_DELIVERY, testSocio, 'hello', 'test-collection');
 
     // Should return GATED_ASSESSMENT mode, blocking progression
     expect(result.routerResult.mode).toBe(InteractionMode.GATED_ASSESSMENT);
@@ -164,7 +166,7 @@ describe('Router Progression Control', () => {
       }),
     ]);
 
-    const result = await determineMode(testSocio, 'hello', 'test-collection');
+    const result = await determineMode(CHAT_DELIVERY, testSocio, 'hello', 'test-collection');
 
     // Should NOT return GATED_ASSESSMENT - allows progression
     // Will fall through to FREEFORM_QUESTION since messageIndex >= messages.length
@@ -196,7 +198,7 @@ describe('Router Progression Control', () => {
       }),
     ]);
 
-    const result = await determineMode(testSocio, 'hello', 'test-collection');
+    const result = await determineMode(CHAT_DELIVERY, testSocio, 'hello', 'test-collection');
 
     // Should NOT return GATED_ASSESSMENT - gate has been passed
     expect(result.routerResult.mode).not.toBe(InteractionMode.GATED_ASSESSMENT);
@@ -227,7 +229,7 @@ describe('Router Progression Control', () => {
       }),
     ]);
 
-    const result = await determineMode(testSocio, 'hello', 'test-collection');
+    const result = await determineMode(CHAT_DELIVERY, testSocio, 'hello', 'test-collection');
 
     // Should NOT return GATED_ASSESSMENT - completed status unblocks, not passedAt
     expect(result.routerResult.mode).not.toBe(InteractionMode.GATED_ASSESSMENT);

@@ -21,7 +21,29 @@ const source = readFileSync(
   "utf8",
 );
 
+/**
+ * `source` with comments removed, for the handful of assertions that must be
+ * about what the component *renders* rather than what it explains about
+ * itself. Naive stripping — it would eat a `//` inside a string literal, and
+ * this file has none — which is checked here rather than assumed.
+ */
+const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+it("comment stripping does not eat code", () => {
+  expect(source).not.toMatch(/"[^"\n]*\/\//);
+  expect(code).toMatch(/export function LessonPlayer/);
+  expect(code).toMatch(/<textarea/);
+});
+
 describe("lesson player has a single tutor input", () => {
+  it("does not generate a lesson opener when the authored lesson mounts", () => {
+    const afterThreadLoad = source.slice(
+      source.indexOf("useEffect(() => { void loadThread();"),
+      source.indexOf("const current = useMemo"),
+    );
+    expect(afterThreadLoad).not.toMatch(/api\/chat/);
+    expect(afterThreadLoad).not.toMatch(/lesson_entry|Introduce this lesson/);
+  });
+
   it("renders exactly one textarea", () => {
     expect(source.match(/<textarea/g) ?? []).toHaveLength(1);
   });
@@ -113,26 +135,83 @@ describe("block advance sends before completing", () => {
   });
 
   it("sends first, awaits, then completes", () => {
-    const fn = source.slice(source.indexOf("async function advance("), source.indexOf("function advanceReviewedBlock"));
+    const fn = source.slice(source.indexOf("async function advance("), source.indexOf("async function advanceReviewedBlock"));
     expect(fn).toMatch(/const sent = await askTutor\(\);/);
     expect(fn).toMatch(/await complete\(response\);/);
     expect(fn.indexOf("askTutor")).toBeLessThan(fn.indexOf("await complete"));
   });
 
   it("aborts the advance when the send fails, rather than discarding by another door", () => {
-    const fn = source.slice(source.indexOf("async function advance("), source.indexOf("function advanceReviewedBlock"));
+    const fn = source.slice(source.indexOf("async function advance("), source.indexOf("async function advanceReviewedBlock"));
     expect(fn).toMatch(/if \(!sent\) return;/);
   });
 
   it("only sends when something was actually typed", () => {
-    const fn = source.slice(source.indexOf("async function advance("), source.indexOf("function advanceReviewedBlock"));
+    const fn = source.slice(source.indexOf("async function advance("), source.indexOf("async function advanceReviewedBlock"));
     expect(fn).toMatch(/if \(question\.trim\(\)\)/);
   });
 
   it("labels the control so the invitation is not contradicted", () => {
-    expect(source).toMatch(/function primaryLabel\(block: Teach, typed: string\): string/);
-    expect(source).toMatch(/return "Send and continue";/);
-    expect(source).toMatch(/block\.expectsResponse \? "Skip for now" : "Next"/);
+    expect(source).toMatch(/function primaryLabel\(typed: string\): string/);
+    expect(source).toMatch(/typed\.trim\(\) \? "Send and continue" : "Next"/);
+  });
+});
+
+/**
+ * One control on a block that requires a typed response
+ * ═══════════════════════════════════════════════════════════════════════════
+ * `expectsResponse` used to be advisory. The card offered "Skip for now" and
+ * the input panel offered "Ask a question", and the prominent one was the one
+ * that abandoned the interaction, so the way out read as the way forward.
+ *
+ * The flag now gates advancement. What this pins is the shape: one control, on
+ * the input rather than the card, disabled until there is something to send,
+ * and a failure-only fallback so a broken tutor is never a locked door.
+ */
+describe("expectsResponse blocks offer exactly one way forward", () => {
+  it("derives the requirement from the block, never from a key or course code", () => {
+    expect(source).toMatch(/const requiresResponse = current\?\.blockType === "teach" && \(current as Teach\)\.expectsResponse === true;/);
+    // Asserted against comment-stripped source. The file documents at length
+    // why a hardcoded "AIESS" came out of the /api/chat callers, and a test
+    // that forbade naming the mistake would forbid explaining it.
+    expect(code).not.toMatch(/stc-01|AIESS|SKILLS/);
+  });
+
+  it("drops the card's own button on those blocks, so there is no skip", () => {
+    // Gated by the outer `!submittedComplete` on the teach branch itself
+    // (same as quiz_checkpoint and drag_order), not repeated on the button.
+    expect(source).toMatch(/current\.blockType === "teach" && !submittedComplete\.has\(current\.id\) && <><ReactMarkdown remarkPlugins=\{\[remarkGfm\]\}>\{\(current as Teach\)\.content\}<\/ReactMarkdown>\{!requiresResponse && <button disabled=\{busy\} onClick=\{\(\) => advance\(\{ acknowledged: true \}\)\}>/);
+    // No control renders that label any more, on any block.
+    expect(code).not.toMatch(/Skip for now/);
+  });
+
+  it("hides the block's own content once reviewed, same as quiz_checkpoint and drag_order", () => {
+    // Once `submittedComplete`, the exchange already lives in the thread; the
+    // card must not re-show the authored teach content underneath it.
+    expect(source).toMatch(/\{current\.blockType === "teach" && !submittedComplete\.has\(current\.id\) && <>/);
+  });
+
+  it("puts the single control under the input and disables it while the box is empty", () => {
+    expect(source).toMatch(/requiresResponse && !submittedComplete\.has\(current\.id\)\s*\n\s*\? <button disabled=\{busy \|\| !question\.trim\(\)\} onClick=\{\(\) => advance\(\{ acknowledged: true \}\)\}>Send and continue<\/button>/);
+  });
+
+  it("leaves blocks without the flag exactly as they were", () => {
+    // The ask button keeps its own labels and still routes to askTutor.
+    expect(source).toMatch(/: <button disabled=\{busy \|\| !question\.trim\(\)\} onClick=\{\(\) => askTutor\(\)\}>\{teachingBack \? \(teachBackTurn === 1 \? "Share with AI Mentor" : "Send follow-up"\) : "Ask a question"\}<\/button>/);
+  });
+
+  it("reveals a fallback only after a send has actually failed twice", () => {
+    expect(source).toMatch(/\{requiresResponse && !submittedComplete\.has\(current\.id\) && sendFailures >= 2 && <button/);
+    // complete(), not advance(): advance() would try to send again, which is
+    // the thing that is failing.
+    expect(source).toMatch(/onClick=\{\(\) => complete\(\{ acknowledged: true \}\)\}>Continue without sending<\/button>/);
+  });
+
+  it("counts failures per block and forgets them on success", () => {
+    expect(source).toMatch(/setSendFailures\(\(value\) => value \+ 1\);/);
+    expect(source).toMatch(/setSendFailures\(0\);\s*\n\s*if \(teachingBack/);
+    // Reset on block change, so failures on block 1 cannot unlock block 4.
+    expect(source).toMatch(/setTeachBackTurn\(savedTurn === 1 \? 2 : 1\); setSendFailures\(0\);/);
   });
 });
 
@@ -154,7 +233,7 @@ describe("teach-back turn 2 does not auto-advance", () => {
   });
 
   it("shows the same Continue control every reviewed block uses", () => {
-    expect(source).toMatch(/\{submittedComplete\.has\(current\.id\) && <button onClick=\{advanceReviewedBlock\}>Continue<\/button>\}/);
+    expect(source).toMatch(/\{submittedComplete\.has\(current\.id\) && <button disabled=\{busy\} onClick=\{advanceReviewedBlock\}>Continue<\/button>\}/);
   });
 
   it("tells the learner they may keep talking once the exchange is done", () => {

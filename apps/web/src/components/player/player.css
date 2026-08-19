@@ -151,10 +151,21 @@
 .player-message :where(ul, ol) { margin: .35rem 0 0; padding-left: 1.1rem; }
 .player-message :where(h1, h2, h3) { font-size: 1rem; margin: .3rem 0 0; }
 .player-message a { color: var(--player-accent); }
-/* The block in play. Sticky so a reference block does not scroll away while
-   the thread grows under it. */
-.player-current { position: sticky; bottom: 1rem; z-index: 1; }
-@media (max-width: 760px) { .player-current { position: static; } }
+/* The block in play.
+   ─────────────────────────────────────────────────────────────────────────
+   Was `position: sticky; bottom: 1rem; z-index: 1`, to keep a reference block
+   (block 13 of SKILLS: six numbered setup steps and a spreadsheet URL) on
+   screen while the learner asked the tutor about step 3 and the thread grew.
+
+   Static during the layout diagnostic. Bottom-sticky pinned this card to the
+   viewport bottom whenever its flow position was below the fold, which put the
+   tutor input — the next element in flow — permanently off screen, on the same
+   blocks whose copy says "in the box below". It also painted over the tail of
+   the thread at 94% opacity, so a fresh reply could land underneath it.
+
+   Restore by putting the sticky declaration back; the 760px override below it
+   existed only to disable sticky on mobile and goes with it. */
+.player-current { position: static; }
 .player-complete { text-align: center; padding-block: 4rem; }
 .diagnostic-card fieldset { padding-bottom: 1.25rem; border-bottom: 1px solid var(--player-line); }
 .diagnostic-card legend span { display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--player-accent); color: white; margin-right: .7rem; }
@@ -170,6 +181,14 @@
 /* The teach-back card no longer holds an input. It points at the one that is
    already on screen rather than repeating the prompt the thread just showed. */
 .player-teachback-hint { color: var(--player-muted); font-size: .95rem; margin: .4rem 0 0; }
+/* The failure-only escape hatch on a block that requires a typed response.
+   Deliberately the quietest control on the card: it exists so a broken tutor
+   is not a locked door, not as an alternative to answering. */
+.player-card button.player-secondary {
+  background: none; border: 1px solid var(--player-line); color: var(--player-muted);
+  display: block; font-size: .85rem; font-weight: 700; margin-top: .7rem; padding: .5rem .9rem;
+}
+.player-card button.player-secondary:hover:enabled { border-color: var(--player-accent); color: var(--player-accent); }
 .player-chip-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .7rem; }
 .player-chip-row .player-chip { margin-top: 0; background: #e8f5f1; color: var(--player-accent); border: 1px solid #cfe7e0; font-weight: 700; }
 .player-chip-row .player-chip:hover:enabled { background: #d9efe8; border-color: var(--player-accent); }

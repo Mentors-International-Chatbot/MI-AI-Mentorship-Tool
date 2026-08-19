@@ -97,7 +97,11 @@ export const skillsToolCallsPackage: JourneyPackageInput = {
               "",
               "Today you'll learn how to use AI Skills and Tool Calls — two things that turn AI from something you re-explain every time into something that just does the job.",
               "",
-              "First, introduce yourself to AI Mentor in the box below — your name and what you're studying — then press Next for a couple of quick questions about where you're starting from.",
+              // Names the control the player actually renders. `primaryLabel`
+              // shows "Send and continue" once anything is typed, and this block
+              // sets `expectsResponse`, so there is no button called "Next" on
+              // this screen for the copy to point at.
+              "First, introduce yourself to AI Mentor in the box below: your name and what you're studying. Then press Send and continue for a couple of quick questions about where you're starting from.",
             ].join("\n"),
           },
           {

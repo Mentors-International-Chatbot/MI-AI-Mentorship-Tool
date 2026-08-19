@@ -184,7 +184,7 @@ function streamResponse(params: {
 }
 
 export async function POST(req: NextRequest) {
-    let language: SupportedLanguage = 'es';
+    let language: SupportedLanguage = DEFAULT_LANGUAGE;
     try {
         const identity = await resolveRequestIdentity(req);
         if (!identity) {
@@ -297,7 +297,7 @@ export async function POST(req: NextRequest) {
         }
         console.error('Chat API Error:', error);
         return NextResponse.json(
-            { error: FRIENDLY_ERROR[language] ?? FRIENDLY_ERROR['es'] },
+            { error: FRIENDLY_ERROR[language] ?? FRIENDLY_ERROR[DEFAULT_LANGUAGE] },
             { status: 500 },
         );
     }

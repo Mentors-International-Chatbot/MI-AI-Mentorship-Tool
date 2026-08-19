@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth/session';
 import { prisma } from '@/lib/db';
 import { repo } from '@/lib/repo';
-import { DEFAULT_LANGUAGE, isSupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, isSupportedLanguage, type SupportedLanguage } from '@/lib/i18n/languages';
 import { getCourseMeta } from '@/lib/courses/course-meta';
 import { resolveLearnerHome } from '@/lib/courses/learnerHome';
 
@@ -17,7 +17,7 @@ export async function GET() {
     }, { status: 401 });
   }
 
-  let language = 'es';
+  let language: SupportedLanguage = DEFAULT_LANGUAGE;
   let curriculumCollectionKey: string | null = null;
   let courseName: string | null = null;
   let mentorName: string | null = null;
@@ -36,7 +36,7 @@ export async function GET() {
         code: 'session_database_mismatch',
       }, { status: 409 });
     }
-    language = socio.language || DEFAULT_LANGUAGE;
+    language = isSupportedLanguage(socio.language) ? socio.language : DEFAULT_LANGUAGE;
     curriculumCollectionKey = socio.curriculumCollectionKey ?? null;
 
     // Fetch course metadata if socio has a curriculum.

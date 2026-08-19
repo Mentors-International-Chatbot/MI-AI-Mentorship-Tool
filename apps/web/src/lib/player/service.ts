@@ -265,10 +265,17 @@ export async function preparePlayerContext(
 export async function recordPlayerTutorSuccess(socioId: string, context: ValidatedPlayerContext) {
   if (context.intent !== "teach_back" || !context.blockId || !context.contentVersion || !context.teachBackTurn) return;
   const completedAt = context.teachBackTurn === 2 ? new Date() : null;
+  const state = {
+    turnCount: context.teachBackTurn,
+    // The tutor's closing feedback is learner-visible review just like a quiz
+    // verdict. Keep the block current until Continue explicitly acknowledges
+    // it, including after a reload.
+    ...(completedAt ? { reviewPending: true } : {}),
+  };
   await playerRuntimeRepo.blockProgress.upsert({
     where: { socioId_collectionKey_lessonKey_blockId: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, blockId: context.blockId } },
-    create: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, blockId: context.blockId, contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state: { turnCount: context.teachBackTurn } },
-    update: { contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state: { turnCount: context.teachBackTurn } },
+    create: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, blockId: context.blockId, contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state },
+    update: { contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state },
   });
   if (context.teachBackTurn === 2) {
     const version = await playerRuntimeRepo.programVersion.findUniqueOrThrow({ where: { id: context.programVersionId }, select: { version: true } });
@@ -383,6 +390,10 @@ export async function getLessonThread(access: PlayerAccess, lessonKey: string) {
         { metadata: { path: ["collectionKey"], equals: access.collectionKey } },
         { metadata: { path: ["lessonKey"], equals: lessonKey } },
       ],
+      // Player lessons are introduced by authored block 1. Historical
+      // mount-generated lesson_entry rows remain in the audit record but are
+      // not lesson conversation and must not reappear after this fix.
+      NOT: { metadata: { path: ["intent"], equals: "lesson_entry" } },
     },
     orderBy: { createdAt: "asc" },
     select: { id: true, role: true, content: true, senderType: true, createdAt: true, metadata: true },
@@ -421,10 +432,20 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
     progress: lesson.blocks.map((block) => {
       const item = progressById.get(block.id);
       const current = item?.contentVersion === block.contentVersion;
-      const state = current && block.blockType === "teach_back" && item?.state && typeof item.state === "object" && !Array.isArray(item.state)
-        ? { turnCount: Number((item.state as { turnCount?: unknown }).turnCount) || 0 }
+      const persistedState = current && item?.state && typeof item.state === "object" && !Array.isArray(item.state)
+        ? item.state as { turnCount?: unknown; reviewPending?: unknown }
         : undefined;
-      return { blockId: block.id, contentVersion: block.contentVersion, startedAt: current ? item?.startedAt ?? null : null, completedAt: current ? item?.completedAt ?? null : null, score: current ? item?.score ?? null : null, state };
+      const state = persistedState
+        ? {
+            ...(block.blockType === "teach_back" ? { turnCount: Number(persistedState.turnCount) || 0 } : {}),
+            reviewPending: persistedState.reviewPending === true,
+          }
+        : undefined;
+      const priorAttempts = Number(progressState(item?.state).attempts) || 0;
+      const feedback = current && item?.completedAt && state?.reviewPending && block.blockType !== "teach_back"
+        ? gradePlayerBlock(block, item.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT)).feedback
+        : undefined;
+      return { blockId: block.id, contentVersion: block.contentVersion, startedAt: current ? item?.startedAt ?? null : null, completedAt: current ? item?.completedAt ?? null : null, score: current ? item?.score ?? null : null, state, feedback };
     }),
   };
 }
@@ -522,7 +543,39 @@ export function gradePlayerBlock(block: LessonBlock, response: unknown, attempt 
   return { complete: true, score: 1, response, feedback: null };
 }
 
-export async function completeBlock(access: PlayerAccess, lessonKey: string, blockId: string, response: unknown) {
+type CompleteBlockOptions = {
+  /** Client-side cap may disable the open-question pause after repeated gates. */
+  openQuestionGateEnabled?: boolean;
+  /** Explicit Continue from a block already saved as complete. */
+  acknowledgeReview?: boolean;
+};
+
+function progressState(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+async function persistedBlockHoldsOpenQuestion(access: PlayerAccess, lessonKey: string, blockId: string): Promise<boolean> {
+  const latest = await playerRuntimeRepo.message.findFirst({
+    where: {
+      socioId: access.socioId,
+      assessmentSessionId: null,
+      AND: [
+        { metadata: { path: ["surface"], equals: "player" } },
+        { metadata: { path: ["collectionKey"], equals: access.collectionKey } },
+        { metadata: { path: ["lessonKey"], equals: lessonKey } },
+        { metadata: { path: ["blockId"], equals: blockId } },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { role: true, metadata: true },
+  });
+  const metadata = progressState(latest?.metadata);
+  return latest?.role === "assistant" && metadata.endsWithQuestion === true;
+}
+
+export async function completeBlock(access: PlayerAccess, lessonKey: string, blockId: string, response: unknown, options: CompleteBlockOptions = {}) {
   const rows = await lessonRows(access);
   const lessonIndex = rows.findIndex((row) => row.slug === lessonKey);
   if (lessonIndex < 0 || !rows[lessonIndex].versions[0]) throw new PlayerError(404, "lesson_not_found", "Lesson not found");
@@ -532,6 +585,16 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
   const existing = await playerRuntimeRepo.blockProgress.findUnique({
     where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
   });
+  if (options.acknowledgeReview) {
+    if (existing?.contentVersion !== block.contentVersion || !existing.completedAt) {
+      throw new PlayerError(409, "review_not_ready", "This block is not ready for review");
+    }
+    await playerRuntimeRepo.blockProgress.update({
+      where: { id: existing.id },
+      data: { state: { ...progressState(existing.state), reviewPending: false } },
+    });
+    return { blockId, completed: true, score: existing.score, feedback: null, reviewPending: false, lessonComplete: false };
+  }
   // Attempts survive on the progress row, so a reload between tries cannot
   // hand the learner a fresh set of them. Counted per content version: an
   // edited block is a different question and starts over.
@@ -545,18 +608,34 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
     const existingGrade = gradePlayerBlock(block, existing.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT));
     const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey } });
     const lessonComplete = lesson.blocks.every((item) => progress.some((entry) => entry.blockId === item.id && entry.contentVersion === item.contentVersion && entry.completedAt));
-    return { blockId, completed: true, score: existing.score, feedback: existingGrade.feedback, lessonComplete };
+    return {
+      blockId,
+      completed: true,
+      score: existing.score,
+      feedback: existingGrade.feedback,
+      reviewPending: progressState(existing.state).reviewPending === true,
+      lessonComplete,
+    };
   }
   const attempt = priorAttempts + 1;
   const grade = gradePlayerBlock(block, response, attempt);
-  // Only the quiz counts attempts. `state` stays untouched for every other
-  // block type, which is what keeps the teach-back turn counter intact.
-  const state = block.blockType === "quiz_checkpoint" ? { attempts: attempt } : undefined;
+  const openQuestionReview = grade.complete
+    && !grade.feedback
+    && options.openQuestionGateEnabled !== false
+    && await persistedBlockHoldsOpenQuestion(access, lessonKey, blockId);
+  const reviewPending = grade.complete && (!!grade.feedback || openQuestionReview);
+  // Quizzes persist attempt count; every completed review shape also persists
+  // its hold so hydration cannot mistake "saved" for "already reviewed."
+  const state = {
+    ...(block.blockType === "quiz_checkpoint" ? { attempts: attempt } : {}),
+    ...(reviewPending ? { reviewPending: true } : {}),
+  };
+  const savedState = Object.keys(state).length > 0 ? state : undefined;
   const now = new Date();
   await playerRuntimeRepo.blockProgress.upsert({
     where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
-    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state },
-    update: { contentVersion: block.contentVersion, startedAt: now, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state },
+    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: savedState },
+    update: { contentVersion: block.contentVersion, startedAt: now, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: savedState },
   });
 
   const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey } });
@@ -569,7 +648,7 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
       update: { completedAt: now },
     });
   }
-  return { blockId, completed: grade.complete, score: grade.score, feedback: grade.feedback, lessonComplete };
+  return { blockId, completed: grade.complete, score: grade.score, feedback: grade.feedback, reviewPending, lessonComplete };
 }
 
 export async function getCourseProgress(access: PlayerAccess) {

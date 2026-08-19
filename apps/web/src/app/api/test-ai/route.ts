@@ -12,6 +12,7 @@ import { getLessonData, hasLessonData, DEFAULT_COLLECTION_KEY, preloadCollection
 import { Socio } from '@/lib/repo/types';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
+import { DEFAULT_LANGUAGE } from '@/lib/i18n/languages';
 
 /**
  * Test endpoint for prompt iteration.
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
             whatsappPhoneNumber: '0000000000',
             channelType: 'whatsapp',
             externalId: '0000000000',
-            language: 'es',
+            language: DEFAULT_LANGUAGE,
             name: socioName || 'Test User',
             businessDescription: businessDescription || null,
             status: 'ACTIVE' as const,

@@ -14,7 +14,7 @@ import { getLessonThread } from "../service";
  * `/api/chat/history` returns a socio's last 50 messages across every context,
  * so a learner who ever used the chat surface would find MI turns inside a
  * player lesson. That cross-course bleed is what this query exists to avoid,
- * and the three metadata predicates are the whole of the fix.
+ * and the metadata predicates are the whole of the fix.
  */
 const access = {
   socioId: "socio-1", courseCode: "SKILLS", collectionKey: "skills-tool-calls",
@@ -40,6 +40,7 @@ describe("getLessonThread", () => {
       { metadata: { path: ["collectionKey"], equals: "skills-tool-calls" } },
       { metadata: { path: ["lessonKey"], equals: "skills-and-tool-calls" } },
     ]);
+    expect(where.NOT).toEqual({ metadata: { path: ["intent"], equals: "lesson_entry" } });
   });
 
   it("reads oldest first, so the thread renders in the order it happened", async () => {

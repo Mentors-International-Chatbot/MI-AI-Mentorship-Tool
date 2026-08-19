@@ -23,6 +23,7 @@ import { resolvePromptScope } from './resolveScope';
 import { resolveCourseMilestones } from './courseOutcome';
 import { canDeliverGatedAssessment } from '@/lib/ai/assessment/channelSupport';
 import { readGateRecency, type GateRecency } from './gateRecency';
+import type { DeliveryConfig } from '@/lib/journey-package/delivery';
 
 // ─── Mode Router ────────────────────────────────────────────────────
 // Inspects the socio's state and returns the correct InteractionMode.
@@ -175,6 +176,14 @@ export interface DetermineModeResult {
 }
 
 /**
+ * The legacy curriculum router belongs only to the chat delivery surface.
+ * Requiring the discriminator in the function type makes a player caller a
+ * compile error instead of relying on a course-code check or an internal
+ * suppression branch.
+ */
+export type ChatDelivery = DeliveryConfig & { surface: 'chat' };
+
+/**
  * Milestone keys this learner has reached, fetched at most once per turn and
  * only when something actually asks.
  *
@@ -228,6 +237,7 @@ function shouldReteachFromDimensions(dimensionState?: DimensionStateMap): boolea
  * lets the stance rules be read in one place.
  */
 export async function determineMode(
+  _delivery: ChatDelivery,
   socio: Socio,
   incomingText: string,
   collectionKey: string,

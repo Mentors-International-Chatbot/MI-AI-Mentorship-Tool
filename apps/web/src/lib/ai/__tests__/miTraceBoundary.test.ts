@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   chatInvoke: vi.fn(),
   invokeTraced: vi.fn(),
   logEvent: vi.fn(),
+  resolveLearnerDelivery: vi.fn(),
+  playerProgramVersion: vi.fn(),
+  playerMessages: vi.fn(),
+  playerTutorGrounding: vi.fn(),
 }));
 
 vi.mock("@/lib/repo", () => ({
@@ -42,6 +46,21 @@ vi.mock("@/lib/ai/trace/invokeTraced", () => ({
 }));
 
 vi.mock("@/lib/logging/logger", () => ({ logEvent: mocks.logEvent }));
+
+vi.mock("@/lib/courses/deliverySurface", () => ({
+  resolveLearnerDelivery: mocks.resolveLearnerDelivery,
+}));
+
+vi.mock("@/lib/repo/playerRuntimeRepo", () => ({
+  playerRuntimeRepo: {
+    programVersion: { findFirst: mocks.playerProgramVersion },
+    message: { findFirst: vi.fn(), findMany: mocks.playerMessages },
+  },
+}));
+
+vi.mock("@/lib/player/service", () => ({
+  playerTutorGrounding: mocks.playerTutorGrounding,
+}));
 
 vi.mock("@/lib/ai/prompts/layers/content", () => ({
   getContentIdentity: () => "mi-content-v1",
@@ -79,6 +98,9 @@ const socio: Socio = {
 describe("MI lesson-delivery trace boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.resolveLearnerDelivery.mockResolvedValue({ surface: "chat", supportedChannels: ["web", "whatsapp"] });
+    mocks.playerMessages.mockResolvedValue([]);
+    mocks.playerTutorGrounding.mockResolvedValue("Verified player block");
     mocks.getSocioProgress.mockResolvedValue(progress);
     mocks.getMessages.mockResolvedValue([]);
     mocks.determineMode.mockResolvedValue({
@@ -113,5 +135,60 @@ describe("MI lesson-delivery trace boundary", () => {
       systemPrompt: "Frozen MI system prompt",
     });
     expect(trace.context).toBeUndefined();
+  });
+
+  it("never calls the chat router for a metadata-verified player turn", async () => {
+    mocks.playerProgramVersion.mockResolvedValue({
+      config: {},
+      metadata: { delivery: { surface: "player", supportedChannels: ["web"] } },
+      program: { organizationId: "org-1" },
+    });
+    mocks.chatInvoke.mockResolvedValue({ content: "Ordinary answer to the learner." });
+
+    const result = await generateAIResponse(
+      { ...socio, channelType: "web", curriculumCollectionKey: "skills-tool-calls" },
+      "I run a small shop and repeat this task every day.",
+      "skills-tool-calls",
+      {},
+      undefined,
+      {
+        learnerText: "I run a small shop and repeat this task every day.",
+        context: {
+          surface: "player",
+          courseCode: "SKILLS",
+          collectionKey: "skills-tool-calls",
+          programVersionId: "pv-skills",
+          lessonKey: "skills-and-tool-calls",
+          blockId: "stc-01",
+          intent: "question",
+        },
+      },
+    );
+
+    expect(mocks.determineMode).not.toHaveBeenCalled();
+    expect(mocks.buildSystemPrompt).not.toHaveBeenCalled();
+    expect(result.mode).toBe("question");
+    expect(result.determineModeResult).toBeUndefined();
+    expect(mocks.playerTutorGrounding).toHaveBeenCalledTimes(1);
+    expect(mocks.invokeTraced).toHaveBeenCalledTimes(1);
+    expect(mocks.invokeTraced.mock.calls[0][0]).toMatchObject({
+      mode: "question",
+      context: { surface: "player", intent: "question", courseCode: "SKILLS" },
+    });
+  });
+
+  it("rejects a player-surface course before the chat router when player context is absent", async () => {
+    mocks.resolveLearnerDelivery.mockResolvedValue({ surface: "player", supportedChannels: ["web"] });
+
+    await expect(generateAIResponse(
+      { ...socio, channelType: "web", curriculumCollectionKey: "skills-tool-calls" },
+      "Hello",
+      "skills-tool-calls",
+      {},
+    )).rejects.toThrow("Chat curriculum routing rejected for player-surface course skills-tool-calls");
+
+    expect(mocks.determineMode).not.toHaveBeenCalled();
+    expect(mocks.buildSystemPrompt).not.toHaveBeenCalled();
+    expect(mocks.chatInvoke).not.toHaveBeenCalled();
   });
 });

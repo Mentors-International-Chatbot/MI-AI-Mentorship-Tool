@@ -53,7 +53,9 @@ vi.mock('../courseOutcome', () => ({
 
 import { repo } from '@/lib/repo';
 import { hasLessonData, getLessonData } from '@/lib/lessons/db-lesson-service';
-import { determineMode } from '../router';
+import { determineMode, type ChatDelivery } from '../router';
+
+const CHAT_DELIVERY: ChatDelivery = { surface: 'chat', supportedChannels: ['web', 'whatsapp'] };
 
 const mockRepo = repo as unknown as Record<string, ReturnType<typeof vi.fn>>;
 const mockHasLessonData = hasLessonData as ReturnType<typeof vi.fn>;
@@ -122,17 +124,17 @@ beforeEach(() => {
 
 describe('determineMode query budget', () => {
   it('does not re-read progress the caller already fetched', async () => {
-    await determineMode(socio, 'hello', 'course-a', undefined, progress);
+    await determineMode(CHAT_DELIVERY, socio, 'hello', 'course-a', undefined, progress);
     expect(mockRepo.getSocioProgress).not.toHaveBeenCalled();
   });
 
   it('still reads progress when the caller has none to give', async () => {
-    await determineMode(socio, 'hello', 'course-a');
+    await determineMode(CHAT_DELIVERY, socio, 'hello', 'course-a');
     expect(mockRepo.getSocioProgress).toHaveBeenCalledTimes(1);
   });
 
   it('fetches each gate\'s sessions once, not once per reader', async () => {
-    await determineMode(socio, 'hello', 'course-a', undefined, progress);
+    await determineMode(CHAT_DELIVERY, socio, 'hello', 'course-a', undefined, progress);
 
     const calls = mockRepo.getAssessmentSessionsForSocioLesson.mock.calls;
     const gateKeys = calls.map((c) => `${c[1]}|${c[2]}`);
@@ -143,7 +145,7 @@ describe('determineMode query budget', () => {
   });
 
   it('still sees the pass, so sharing the fetch did not change the answer', async () => {
-    const r = await determineMode(socio, 'hello', 'course-a', undefined, progress);
+    const r = await determineMode(CHAT_DELIVERY, socio, 'hello', 'course-a', undefined, progress);
     // Both gates passed and no distress → coach, per stance rule (c).
     expect(r.routerResult.stance).toEqual({ stance: 'coach', reason: 'gate_passed' });
   });
@@ -164,7 +166,7 @@ describe('days since last contact', () => {
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     mockRepo.getLastAssistantMessageAt.mockResolvedValue(threeDaysAgo);
 
-    const r = await determineMode(socio, 'hello', 'course-a', undefined, progress);
+    const r = await determineMode(CHAT_DELIVERY, socio, 'hello', 'course-a', undefined, progress);
 
     expect(r.progress.daysSinceLastInteraction).toBe(3);
   });
@@ -175,7 +177,7 @@ describe('days since last contact', () => {
       new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
     );
 
-    const r = await determineMode(socio, 'hello', 'course-a', undefined, progress);
+    const r = await determineMode(CHAT_DELIVERY, socio, 'hello', 'course-a', undefined, progress);
 
     expect(r.progress.daysSinceLastInteraction).toBe(5);
     expect(mockRepo.getMessages).not.toHaveBeenCalled();
@@ -183,13 +185,13 @@ describe('days since last contact', () => {
 
   it('reports zero for a learner the AI has never answered', async () => {
     mockRepo.getLastAssistantMessageAt.mockResolvedValue(null);
-    const r = await determineMode(socio, 'hello', 'course-a', undefined, progress);
+    const r = await determineMode(CHAT_DELIVERY, socio, 'hello', 'course-a', undefined, progress);
     expect(r.progress.daysSinceLastInteraction).toBe(0);
   });
 
   it('never returns a negative gap from a clock skew', async () => {
     mockRepo.getLastAssistantMessageAt.mockResolvedValue(new Date(Date.now() + 60_000));
-    const r = await determineMode(socio, 'hello', 'course-a', undefined, progress);
+    const r = await determineMode(CHAT_DELIVERY, socio, 'hello', 'course-a', undefined, progress);
     expect(r.progress.daysSinceLastInteraction).toBe(0);
   });
 });

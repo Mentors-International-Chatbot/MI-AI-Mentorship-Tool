@@ -55,7 +55,7 @@ model Socio {
   whatsappPhoneNumber String?          @unique @map("whatsapp_phone_number")
   channelType         String           @default("whatsapp") @map("channel_type")
   externalId          String           @default("") @map("external_id")
-  language            String           @default("es") @map("language")
+  language            String           @default("en") @map("language")
   passwordHash        String?          @map("password_hash")
   name                String?
   businessName        String?          @map("business_name")

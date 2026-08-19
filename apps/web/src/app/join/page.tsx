@@ -94,7 +94,7 @@ export default function JoinPage() {
     const router = useRouter();
     const [session, setSession] = useState<ClientSession | null>(null);
     const [step, setStep] = useState<Step>('language');
-    const [language, setLanguage] = useState<SupportedLanguage>('es');
+    const [language, setLanguage] = useState<SupportedLanguage>('en');
     const [courseCode, setCourseCode] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');

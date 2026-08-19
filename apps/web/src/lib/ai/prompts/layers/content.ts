@@ -2,7 +2,7 @@ import { InteractionMode, LessonDeliveryState, ReteachState, RouterResult } from
 import { getLessonData, hasLessonData } from '@/lib/lessons/db-lesson-service';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import { DEFAULT_PERSONALIZATION_INSTRUCTION } from '@/lib/courses/defaults';
-import type { SupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 
 /** Bump whenever the Layer 4 prompt text changes. Recorded on every AiInvocation. */
 export const CONTENT_PROMPT_VERSION = 'v1';
@@ -39,7 +39,7 @@ export function getContentIdentity(
 export async function buildContentPrompt(
   result: RouterResult,
   collectionKey: string,
-  language: SupportedLanguage = 'es',
+  language: SupportedLanguage = DEFAULT_LANGUAGE,
 ): Promise<string | null> {
   const meta = await getCourseMeta(collectionKey);
   const participantNoun = resolveLocalized(meta.terminology.participant, language);

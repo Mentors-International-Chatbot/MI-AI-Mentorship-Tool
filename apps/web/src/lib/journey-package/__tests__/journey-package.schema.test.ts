@@ -350,4 +350,43 @@ describe("Journey Package Schema — Assessment Validation", () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe("blockBase.handoff", () => {
+    it("is optional: a block with no handoff still validates", () => {
+      const pkg = makeBasePackage();
+      const result = journeyPackageSchema.safeParse(pkg);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.curriculum.lessons[0].blocks[0].handoff).toBeUndefined();
+      }
+    });
+
+    it("is available on every block type, not just quiz_checkpoint", () => {
+      const pkg = makeBasePackage();
+      pkg.curriculum.lessons[0].blocks.push({
+        id: "b2-quiz",
+        order: 2,
+        blockType: "quiz_checkpoint",
+        title: "Where you're starting from",
+        handoff: "Now a couple of quick questions.",
+        questions: [
+          { id: "q1", prompt: "Pick one", format: "multiple_choice", options: ["A", "B"], answerKey: "A", explanation: "A is correct because...", graded: true },
+        ],
+      });
+
+      const result = journeyPackageSchema.safeParse(pkg);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const block = result.data.curriculum.lessons[0].blocks.find((b) => b.id === "b2-quiz");
+        expect(block?.handoff).toBe("Now a couple of quick questions.");
+      }
+    });
+
+    it("rejects an empty handoff rather than authoring a silent no-op line", () => {
+      const pkg = makeBasePackage();
+      pkg.curriculum.lessons[0].blocks[0] = { ...pkg.curriculum.lessons[0].blocks[0], handoff: "" };
+      const result = journeyPackageSchema.safeParse(pkg);
+      expect(result.success).toBe(false);
+    });
+  });
 });

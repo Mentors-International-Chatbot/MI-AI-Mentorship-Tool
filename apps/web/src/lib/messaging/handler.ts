@@ -17,7 +17,8 @@ import { getCourseMeta, buildWelcomeMessage } from '@/lib/courses/course-meta';
 import { createAssessmentSession } from '@/lib/ai/assessment/createAssessmentSession';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
-import { playerMilestoneAvailabilitySnapshot, recordPlayerTutorSuccess, type ValidatedPlayerContext } from '@/lib/player/service';
+import { playerMilestoneAvailabilitySnapshot, recordPlayerTutorSuccess, type PlayerIntent, type ValidatedPlayerContext } from '@/lib/player/service';
+import { endsWithQuestion } from '@/lib/player/responseStyle';
 import { playerRuntimeRepo } from '@/lib/repo/playerRuntimeRepo';
 import { queueMilestoneGrade } from '@/lib/lti/grades';
 import { evaluateAlerts } from '@/lib/alerts/evaluateAlerts';
@@ -76,7 +77,7 @@ export interface HandleMessageInput {
 
 export interface HandleMessageResult {
     responseText: string;
-    mode: InteractionMode;
+    mode: InteractionMode | PlayerIntent;
     markers: ParsedMarkers;
     socioId: string;
     isNewSocio: boolean;
@@ -199,6 +200,11 @@ async function persistPlayerObservations(params: {
 export async function handleIncomingMessage(input: HandleMessageInput): Promise<HandleMessageResult> {
     const startTime = performance.now();
     const { externalId, channelType, message, channel, language, userName, systemInitiated, onToken, playerContext, overrideDimensionState, bufferedGenerationPolicy } = input;
+    // `playerContext` has already passed resolvePlayerAccess, including its
+    // delivery-metadata surface check. Even an early return must preserve that
+    // player intent rather than leaking a legacy chat-only InteractionMode.
+    const earlyMode = (chatMode: InteractionMode): InteractionMode | PlayerIntent =>
+        playerContext?.intent ?? chatMode;
 
     let socio = await repo.getSocio(channelType, externalId);
     const isNewSocio = !socio;
@@ -248,7 +254,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
             return {
                 responseText: welcomeMsg,
-                mode: InteractionMode.LESSON_START,
+                mode: earlyMode(InteractionMode.LESSON_START),
                 markers: {
                     cleanText: welcomeMsg,
                     flags: [],
@@ -270,7 +276,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         await handleOnboarding(socio, message, channel);
         return {
             responseText: '',
-            mode: InteractionMode.LESSON_START,
+            mode: earlyMode(InteractionMode.LESSON_START),
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
             socioId: socio.id,
             isNewSocio: true,
@@ -281,7 +287,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         await handleOnboarding(socio, message, channel);
         return {
             responseText: '',
-            mode: InteractionMode.LESSON_START,
+            mode: earlyMode(InteractionMode.LESSON_START),
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
             socioId: socio.id,
             isNewSocio,
@@ -307,7 +313,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             );
             return {
                 responseText: '',
-                mode: InteractionMode.FREEFORM_QUESTION,
+                mode: earlyMode(InteractionMode.FREEFORM_QUESTION),
                 markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
                 socioId: socio.id,
                 isNewSocio,
@@ -318,7 +324,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
     if (playerContext?.intent === 'lesson_entry' && await playerLessonEntryExists(socio.id, playerContext.lessonKey)) {
         return {
-            responseText: '', mode: InteractionMode.LESSON_START,
+            responseText: '', mode: earlyMode(InteractionMode.LESSON_START),
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
             socioId: socio.id, isNewSocio, suppressed: true,
         };
@@ -351,7 +357,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
     if (socio.aiPaused) {
         return {
             responseText: '',
-            mode: InteractionMode.LESSON_DELIVERY,
+            mode: earlyMode(InteractionMode.LESSON_DELIVERY),
             markers: { cleanText: '', flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
             socioId: socio.id,
             isNewSocio,
@@ -398,7 +404,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
             return {
                 responseText: thankYou,
-                mode: InteractionMode.LESSON_DELIVERY,
+                mode: earlyMode(InteractionMode.LESSON_DELIVERY),
                 markers: {
                     cleanText: thankYou,
                     flags: [],
@@ -426,7 +432,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
         return {
             responseText: nudge,
-            mode: InteractionMode.LESSON_DELIVERY,
+            mode: earlyMode(InteractionMode.LESSON_DELIVERY),
             markers: {
                 cleanText: nudge,
                 flags: [],
@@ -465,7 +471,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
         return {
             responseText: joinMessage,
-            mode: InteractionMode.LESSON_START,
+            mode: earlyMode(InteractionMode.LESSON_START),
             markers: { cleanText: joinMessage, flags: [], lessonsCompleted: [], escalations: [], financials: [], milestones: [] },
             socioId: socio.id,
             isNewSocio,
@@ -676,7 +682,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
 
     // Prepend lesson number header when starting a new lesson
     if (!playerContext && aiResponse.mode === InteractionMode.LESSON_START) {
-        const currentLesson = aiResponse.determineModeResult.progress?.currentLessonNumber ?? 1;
+        const currentLesson = aiResponse.determineModeResult?.progress.currentLessonNumber ?? 1;
         responseText = `${lm.lessonHeader(currentLesson, getLessonCount(collectionKey))}\n\n${responseText}`;
     }
 
@@ -790,8 +796,16 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         senderType: 'ai',
         // Attribution for a turn nobody asked for. Without it there is no way
         // to tell, later, which messages the system volunteered.
+        //
+        // `endsWithQuestion` computed here, once, against the exact text that
+        // reaches the learner (after the feedback/escalation/lesson-header
+        // appends above), and persisted rather than re-derived on the client:
+        // the completion service reads it to decide whether a block may advance, and that
+        // decision has to survive a reload of the thread. Player-scoped only —
+        // MI and PB&J messages carry no such metadata and this reads nothing
+        // for them.
         ...(playerContext
-            ? { metadata: { ...playerContext, generationStatus: aiResponse.isError ? 'fallback' : 'success' } }
+            ? { metadata: { ...playerContext, generationStatus: aiResponse.isError ? 'fallback' : 'success', endsWithQuestion: !aiResponse.isError && endsWithQuestion(responseText) } }
             : systemInitiated
             ? { metadata: { kind: systemInitiated.kind, sessionId: systemInitiated.sessionId } }
             : {}),

@@ -143,11 +143,11 @@ function systemMessageForLang(lang: SupportedLanguage): string {
 
 /**
  * @param language Output language for the mentor-facing summary (es | en | pt).
- *        Default `es`. Cron/dashboard pass the mentor's preference explicitly.
+ *        Default `en`. Cron/dashboard pass the mentor's preference explicitly.
  */
 export async function generateSummary(
   socioId: string,
-  language: string = 'es',
+  language: string = DEFAULT_LANGUAGE,
 ): Promise<GeneratedSummary | null> {
   const lang = normalizeSummaryLanguage(language);
 

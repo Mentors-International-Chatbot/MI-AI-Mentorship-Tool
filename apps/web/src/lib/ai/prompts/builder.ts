@@ -70,6 +70,15 @@ SYSTEM MARKERS (removed by the backend before delivery):
 - Put any marker at the end, after learner-visible text.`;
 }
 
+/**
+ * Player tutor turns do not have a legacy InteractionMode. Expose their base
+ * prompt directly so callers do not need to manufacture a chat RouterResult
+ * merely to reach the authoritative-player branch below.
+ */
+export function buildAuthoritativePlayerPrompt(socio: Socio): string {
+  return buildAuthoritativePlayerBase((socio.language || DEFAULT_LANGUAGE) as SupportedLanguage);
+}
+
 export async function buildSystemPrompt(
   socio: Socio,
   routerResult: RouterResult,

@@ -196,6 +196,20 @@ const blockBase = {
   concepts: z.array(key).default([]),
   /** Increment intentionally to reset learner progress for this block. */
   contentVersion: z.number().int().positive().default(1),
+  /**
+   * A mentor line introducing this block, shown once while it is current.
+   *
+   * For a block that follows a conversational exchange — most usefully a
+   * `quiz_checkpoint` arriving after teach blocks — the quiz otherwise just
+   * materializes under the mentor's last reply. This is the authored way to
+   * say so ("Now a couple of quick questions") rather than a fixed client
+   * string, so a course can word its own transitions or supply none.
+   *
+   * Derived into the thread verbatim, the same way the teach_back prompt is:
+   * authored content already has a home in the published lesson version, and
+   * routing it through a model turn would return a paraphrase of it.
+   */
+  handoff: z.string().min(1).optional(),
 };
 
 /**
@@ -237,15 +251,26 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
      *                         and gates block completion — the learner cannot
      *                         advance until the tutor has replied twice
      *   teach + expectsResponse
-     *                         one shot, advisory, ungraded. The reply is a
-     *                         courtesy; the block completes either way, and a
-     *                         learner who types nothing just moves on
+     *                         one shot, ungraded, and gates advancement on
+     *                         *something* being typed rather than on what it
+     *                         said. The tutor replies but never judges
      *
      * Use this for an invitation ("introduce yourself"), not for assessment.
+     *
+     * ── This blocks advancement ────────────────────────────────────────────
+     * It used to be advisory: the player offered "Skip for now" and a learner
+     * who typed nothing moved on. That put the control which abandoned the
+     * interaction directly on the block card, where it was the most prominent
+     * thing on screen and read as the way forward. The flag now means what its
+     * name says. A block carrying it renders exactly one control, next to the
+     * input, disabled until there is text to send.
+     *
+     * So do not set it on a block the learner should be able to pass without
+     * answering. There is no skip, and the only way past a tutor that will not
+     * respond is a fallback the player reveals after two failed sends.
+     *
      * Advancing with text in the box sends it regardless of this flag — that is
-     * a floor against silently discarding what someone typed. What the flag
-     * adds is legibility: the control says so, instead of the block's prose
-     * inviting a response that the button then contradicts.
+     * a floor against silently discarding what someone typed.
      */
     expectsResponse: z.boolean().default(false),
   }),

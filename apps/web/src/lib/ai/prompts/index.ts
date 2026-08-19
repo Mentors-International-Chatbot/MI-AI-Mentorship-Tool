@@ -1,5 +1,5 @@
-export { buildSystemPrompt } from './builder';
-export { determineMode, parseScore, type DetermineModeResult } from './router';
+export { buildAuthoritativePlayerPrompt, buildSystemPrompt } from './builder';
+export { determineMode, parseScore, type ChatDelivery, type DetermineModeResult } from './router';
 export { parseMarkers } from './markers';
 export {
   RETEACH_THRESHOLD,

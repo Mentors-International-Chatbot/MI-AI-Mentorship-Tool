@@ -50,8 +50,10 @@ vi.mock('../courseOutcome', () => ({
 
 import { repo } from '@/lib/repo';
 import { hasLessonData, getLessonData } from '@/lib/lessons/db-lesson-service';
-import { determineMode } from '../router';
+import { determineMode, type ChatDelivery } from '../router';
 import { InteractionMode, ROUTABLE_MODES } from '../types';
+
+const CHAT_DELIVERY: ChatDelivery = { surface: 'chat', supportedChannels: ['web', 'whatsapp'] };
 
 const mockRepo = repo as unknown as {
   getSocioProgress: ReturnType<typeof vi.fn>;
@@ -131,24 +133,24 @@ describe('ROUTABLE_MODES', () => {
     const seen = new Set<InteractionMode>();
 
     // Priority 2: ready for a new lesson.
-    seen.add((await determineMode(socio, 'hello', 'mi')).routerResult.mode);
+    seen.add((await determineMode(CHAT_DELIVERY, socio, 'hello', 'mi')).routerResult.mode);
 
     // Explicit "next".
-    seen.add((await determineMode(socio, 'siguiente', 'mi')).routerResult.mode);
+    seen.add((await determineMode(CHAT_DELIVERY, socio, 'siguiente', 'mi')).routerResult.mode);
 
     // Priority 1: mid-lesson delivery.
     mockRepo.getSocioProgress.mockResolvedValue({
       currentLessonNumber: 2, currentMessageIndex: 1, completedLessons: [1],
       weeklyUnderstanding: 7, weeklyImplementation: null, remindersSent: 0,
     });
-    seen.add((await determineMode(socio, 'ok', 'mi')).routerResult.mode);
+    seen.add((await determineMode(CHAT_DELIVERY, socio, 'ok', 'mi')).routerResult.mode);
 
     // Reteach: last message + an explicit low score.
-    seen.add((await determineMode(socio, '2', 'mi')).routerResult.mode);
+    seen.add((await determineMode(CHAT_DELIVERY, socio, '2', 'mi')).routerResult.mode);
 
     // Freeform: no lesson data available.
     mockHasLessonData.mockReturnValue(false);
-    seen.add((await determineMode(socio, 'what is gross margin', 'mi')).routerResult.mode);
+    seen.add((await determineMode(CHAT_DELIVERY, socio, 'what is gross margin', 'mi')).routerResult.mode);
 
     expect(seen.size).toBeGreaterThan(3);
     for (const mode of seen) {
@@ -159,7 +161,7 @@ describe('ROUTABLE_MODES', () => {
 
 describe('stance rides alongside mode', () => {
   it('attaches a stance to a normal turn', async () => {
-    const r = await determineMode(socio, 'hello', 'mi');
+    const r = await determineMode(CHAT_DELIVERY, socio, 'hello', 'mi');
     expect(r.routerResult.stance).toEqual({ stance: 'tutor', reason: 'gate_not_passed' });
   });
 
@@ -169,10 +171,10 @@ describe('stance rides alongside mode', () => {
     // done, and mode alone cannot express that.
     mockHasLessonData.mockReturnValue(false);
 
-    const calm = await determineMode(socio, 'I raised prices and customers complained', 'mi');
+    const calm = await determineMode(CHAT_DELIVERY, socio, 'I raised prices and customers complained', 'mi');
 
     mockRepo.getActiveFlags.mockResolvedValue([redFlag()]);
-    const distressed = await determineMode(socio, 'I raised prices and customers complained', 'mi');
+    const distressed = await determineMode(CHAT_DELIVERY, socio, 'I raised prices and customers complained', 'mi');
 
     expect(calm.routerResult.mode).toBe(distressed.routerResult.mode);
     expect(calm.routerResult.mode).toBe(InteractionMode.FREEFORM_QUESTION);
@@ -183,7 +185,7 @@ describe('stance rides alongside mode', () => {
 
   it('hands the flags it read on to the caller, so Layer 2 does not refetch', async () => {
     mockRepo.getActiveFlags.mockResolvedValue([redFlag()]);
-    const r = await determineMode(socio, 'hello', 'mi');
+    const r = await determineMode(CHAT_DELIVERY, socio, 'hello', 'mi');
 
     expect(r.activeFlags).toHaveLength(1);
     expect(mockRepo.getActiveFlags).toHaveBeenCalledTimes(1);
@@ -193,7 +195,7 @@ describe('stance rides alongside mode', () => {
     // Failing the turn because a flag query failed would be worse than losing
     // the distress signal for one turn.
     mockRepo.getActiveFlags.mockRejectedValue(new Error('db down'));
-    const r = await determineMode(socio, 'hello', 'mi');
+    const r = await determineMode(CHAT_DELIVERY, socio, 'hello', 'mi');
 
     expect(r.routerResult.mode).toBe(InteractionMode.LESSON_START);
     expect(r.routerResult.stance?.stance).toBe('tutor');
@@ -222,7 +224,7 @@ describe('stance rides alongside mode', () => {
       remindersSent: 0,
     });
 
-    const r = await determineMode(socio, 'I tried it and got stuck on the pricing part', 'mi');
+    const r = await determineMode(CHAT_DELIVERY, socio, 'I tried it and got stuck on the pricing part', 'mi');
 
     expect(r.routerResult.mode).toBe(InteractionMode.FREEFORM_QUESTION);
     expect(r.routerResult.stance).toEqual({ stance: 'coach', reason: 'lesson_taught_out' });
@@ -244,7 +246,7 @@ describe('stance rides alongside mode', () => {
     });
 
     const whatsappSocio = { ...socio, channelType: 'whatsapp' };
-    const r = await determineMode(whatsappSocio, 'ok', 'mi');
+    const r = await determineMode(CHAT_DELIVERY, whatsappSocio, 'ok', 'mi');
 
     expect(r.routerResult.mode).not.toBe(InteractionMode.GATED_ASSESSMENT);
     // And it still gets a stance, which the gated path would have skipped.
@@ -262,7 +264,7 @@ describe('stance rides alongside mode', () => {
       weeklyUnderstanding: 7, weeklyImplementation: null, remindersSent: 0,
     });
 
-    const r = await determineMode(socio, 'ok', 'mi');
+    const r = await determineMode(CHAT_DELIVERY, socio, 'ok', 'mi');
     expect(r.routerResult.mode).toBe(InteractionMode.GATED_ASSESSMENT);
   });
 
@@ -275,7 +277,7 @@ describe('stance rides alongside mode', () => {
       weeklyUnderstanding: 7, weeklyImplementation: null, remindersSent: 0,
     });
 
-    const r = await determineMode(socio, 'ok', 'mi');
+    const r = await determineMode(CHAT_DELIVERY, socio, 'ok', 'mi');
     expect(r.routerResult.mode).toBe(InteractionMode.GATED_ASSESSMENT);
     expect(r.routerResult.stance).toBeUndefined();
     expect(mockRepo.getActiveFlags).not.toHaveBeenCalled();

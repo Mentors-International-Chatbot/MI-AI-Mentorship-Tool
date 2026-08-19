@@ -16,7 +16,7 @@ import type { ConfigScope } from '../scope';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
 import { getCourseMeta, resolveLocalized } from '@/lib/courses/course-meta';
 import { DEFAULT_PERSONALIZATION_INSTRUCTION } from '@/lib/courses/defaults';
-import type { SupportedLanguage } from '@/lib/i18n/languages';
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 import { buildStanceBlock } from '../stance';
 
 /**
@@ -166,7 +166,7 @@ export async function buildTaskPrompt(
   progress: SocioProgress | undefined,
   collectionKey: string,
   dimensionState?: DimensionStateMap,
-  language: SupportedLanguage = 'es',
+  language: SupportedLanguage = DEFAULT_LANGUAGE,
   /** Trace-only: receives `task` when a DB-backed prompt overrode the default. */
   sink?: PromptVersionSink,
   scope?: ConfigScope,
@@ -936,7 +936,7 @@ async function buildReminderPrompt(
   socio: Socio,
   reminder: ReminderState,
   participantNoun: string,
-  language: SupportedLanguage = 'es',
+  language: SupportedLanguage = DEFAULT_LANGUAGE,
   sink?: PromptVersionSink,
   scope?: ConfigScope,
 ): Promise<string> {
@@ -1027,7 +1027,7 @@ async function buildMentorHandoffPrompt(
   socio: Socio,
   mentor: MentorSession,
   participantNoun: string,
-  language: SupportedLanguage = 'es',
+  language: SupportedLanguage = DEFAULT_LANGUAGE,
   sink?: PromptVersionSink,
   scope?: ConfigScope,
 ): Promise<string> {
@@ -1090,7 +1090,7 @@ async function buildPostMentorPrompt(
   socio: Socio,
   mentor: MentorSession,
   participantNoun: string,
-  language: SupportedLanguage = 'es',
+  language: SupportedLanguage = DEFAULT_LANGUAGE,
   sink?: PromptVersionSink,
   scope?: ConfigScope,
 ): Promise<string> {
