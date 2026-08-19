@@ -110,6 +110,12 @@ export const skillsToolCallsPackage: JourneyPackageInput = {
             blockType: "quiz_checkpoint",
             concepts: ["skill"],
             contentVersion: 2,
+            // Signals the shift out of block 1's brief back-and-forth. Renders
+            // in the thread the moment this block becomes current — i.e. right
+            // after the learner clicks Continue on the held block 1 — so the
+            // transition reads as the mentor moving things along rather than
+            // the polls just materializing mid-conversation.
+            handoff: "Now let's gauge your understanding.",
             title: "Where you're starting from",
             questions: [{
               id: "stc-q-skills",
@@ -301,7 +307,7 @@ export const skillsToolCallsPackage: JourneyPackageInput = {
               "Go to claude.ai. Sign in, or create a free account.",
               "",
               "**3. Turn on code execution**",
-              "Settings → enable code execution and file creation. Skills need this.",
+              "Go to Settings → Capabilities → toggle on \"Cloud code execution and file creation\". (Skills require this to run.)",
               "",
               "**4. Connect Google Drive**",
               "Settings → Connectors → Google Drive → Connect. Approve the permissions.",

@@ -605,6 +605,14 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         {current.blockType === "teach_back" && <><h2>Teach it back</h2><p className="player-teachback-hint">{submittedComplete.has(current.id)
           ? "Keep talking with AI Mentor if you want to, or continue when you are ready."
           : "AI Mentor asked you a question. Answer it in the box below."}</p></>}
+        {/* Same invitation teach_back shows once reviewed, generalized to any
+            block the open-question gate — not a graded verdict — is holding.
+            Without it the card was a bare Continue button next to the mentor's
+            question, which reads as "no chance to reply" even though the box
+            underneath is still open for one. */}
+        {current.blockType !== "teach_back" && submittedComplete.has(current.id) && !feedback[current.id] && <p className="player-teachback-hint">
+          Keep talking with AI Mentor if you want to, or continue when you are ready.
+        </p>}
         {/* Never a raw object: `BlockFeedback` draws only the verdict shapes it
             can name, and renders nothing at all for anything else. */}
         <BlockFeedback
