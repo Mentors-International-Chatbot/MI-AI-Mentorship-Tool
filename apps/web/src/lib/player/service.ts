@@ -429,7 +429,47 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
   };
 }
 
-export function gradePlayerBlock(block: LessonBlock, response: unknown) {
+/**
+ * How many times a learner may answer one graded quiz block.
+ *
+ * Two, because the answer key is a teaching resource that is spent the moment
+ * it is shown. A first wrong answer is worth more as a second attempt than as
+ * a reveal, and revealing on the first miss is also what made the block
+ * unretryable: `completeBlock` stamps `completedAt` as soon as the block is
+ * complete, and a complete block returns its stored grade instead of grading
+ * the new one. Holding the key back and leaving the block incomplete is the
+ * same shape `drag_order` has always had.
+ */
+export const QUIZ_ATTEMPT_LIMIT = 2;
+
+/**
+ * Server-graded verdicts, tagged so the player can dispatch on `kind` rather
+ * than sniffing for properties. Anything the player cannot name it does not
+ * render — an unrecognized verdict is a bug to fix in here, never a JSON dump
+ * for a learner to read.
+ */
+export type PlayerFeedback =
+  | {
+      kind: "quiz";
+      correct: boolean;
+      /** The learner may submit a different set of answers to this block. */
+      retryAvailable: boolean;
+      questions: Array<{
+        questionId: string;
+        correct: boolean;
+        /**
+         * Present only once this question's key is spent — see
+         * QUIZ_ATTEMPT_LIMIT. An array because `answerKey` is one, for the
+         * multi-select formats; `multiple_choice` is refined to a single
+         * string in the package schema.
+         */
+        correctAnswer?: string | string[];
+        explanation?: string;
+      }>;
+    }
+  | { kind: "drag_order"; correct: boolean; misplacedPositions: number[]; correctOrder?: number[] };
+
+export function gradePlayerBlock(block: LessonBlock, response: unknown, attempt = 1): { complete: boolean; score: number | null; response: unknown; feedback: PlayerFeedback | null } {
   if (block.blockType === "teach") return { complete: true, score: 1, response: { acknowledged: true }, feedback: null };
   if (block.blockType === "quiz_checkpoint") {
     if (!response || typeof response !== "object" || Array.isArray(response)) throw new PlayerError(400, "invalid_response", "Submit an answer for every question");
@@ -441,25 +481,42 @@ export function gradePlayerBlock(block: LessonBlock, response: unknown) {
     // "no opinion was wrong" and "every answer was wrong" must not look alike
     // in BlockProgress.score.
     const graded = block.questions.filter((question) => question.graded);
-    const results = graded.map((question) => ({
-      questionId: question.id, correct: answers[question.id] === question.answerKey,
-      correctAnswer: question.answerKey, explanation: question.explanation,
-    }));
+    const results = graded.map((question) => ({ question, correct: answers[question.id] === question.answerKey }));
+    const allCorrect = results.every((item) => item.correct);
+    // The last attempt either way: nothing left to earn by holding the key
+    // back, and the block has to stop being a wall.
+    const lastAttempt = allCorrect || attempt >= QUIZ_ATTEMPT_LIMIT;
     return {
-      complete: true,
+      // A missed first attempt leaves the block incomplete so the learner can
+      // answer it again; the second attempt completes it whatever the score,
+      // which is what the block did unconditionally before.
+      complete: results.length === 0 || lastAttempt,
       score: results.length > 0 ? results.filter((item) => item.correct).length / results.length : null,
       response: answers,
       // No graded questions means no verdict to show, which also lets the
       // player advance straight past an opinion poll instead of pausing on a
       // feedback panel that would have nothing in it.
-      feedback: results.length > 0 ? { questions: results } : null,
+      feedback: results.length > 0 ? {
+        kind: "quiz" as const,
+        correct: allCorrect,
+        retryAvailable: !lastAttempt,
+        questions: results.map(({ question, correct }) => (
+          // Per question, not per block: a question the learner already got
+          // right has no key left to protect, so its explanation lands while
+          // they are still looking at their own answer. A question they missed
+          // keeps both until the retry is spent.
+          correct || lastAttempt
+            ? { questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation }
+            : { questionId: question.id, correct }
+        )),
+      } : null,
     };
   }
   if (block.blockType === "drag_order") {
     if (!Array.isArray(response) || !response.every(Number.isInteger)) throw new PlayerError(400, "invalid_response", "Submit an item-index order");
     const misplacedPositions = block.correctOrder.flatMap((value, index) => response[index] === value ? [] : [index]);
     const correct = misplacedPositions.length === 0 && response.length === block.correctOrder.length;
-    return { complete: correct, score: correct ? 1 : 0, response, feedback: { correct, misplacedPositions, correctOrder: correct ? block.correctOrder : undefined } };
+    return { complete: correct, score: correct ? 1 : 0, response, feedback: { kind: "drag_order" as const, correct, misplacedPositions, correctOrder: correct ? block.correctOrder : undefined } };
   }
   if (block.blockType === "teach_back") throw new PlayerError(409, "tutor_required", "Complete teach-back blocks through the tutor");
   return { complete: true, score: 1, response, feedback: null };
@@ -475,18 +532,31 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
   const existing = await playerRuntimeRepo.blockProgress.findUnique({
     where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
   });
+  // Attempts survive on the progress row, so a reload between tries cannot
+  // hand the learner a fresh set of them. Counted per content version: an
+  // edited block is a different question and starts over.
+  const priorAttempts = existing?.contentVersion === block.contentVersion
+    ? Number((existing.state as { attempts?: unknown } | null)?.attempts) || 0
+    : 0;
   if (existing?.contentVersion === block.contentVersion && existing.completedAt) {
-    const existingGrade = gradePlayerBlock(block, existing.response);
+    // A finished block has no retry left to protect, so it re-grades at the
+    // limit and shows the key. Legacy rows carry no attempt count; they are
+    // complete, which is the only fact that matters here.
+    const existingGrade = gradePlayerBlock(block, existing.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT));
     const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey } });
     const lessonComplete = lesson.blocks.every((item) => progress.some((entry) => entry.blockId === item.id && entry.contentVersion === item.contentVersion && entry.completedAt));
     return { blockId, completed: true, score: existing.score, feedback: existingGrade.feedback, lessonComplete };
   }
-  const grade = gradePlayerBlock(block, response);
+  const attempt = priorAttempts + 1;
+  const grade = gradePlayerBlock(block, response, attempt);
+  // Only the quiz counts attempts. `state` stays untouched for every other
+  // block type, which is what keeps the teach-back turn counter intact.
+  const state = block.blockType === "quiz_checkpoint" ? { attempts: attempt } : undefined;
   const now = new Date();
   await playerRuntimeRepo.blockProgress.upsert({
     where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
-    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object },
-    update: { contentVersion: block.contentVersion, startedAt: now, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: undefined },
+    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state },
+    update: { contentVersion: block.contentVersion, startedAt: now, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state },
   });
 
   const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey } });

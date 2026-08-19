@@ -95,10 +95,57 @@ describe("player server grading", () => {
     expect(JSON.stringify(sanitizePlayerBlock(drag))).not.toContain("correctOrder");
   });
 
-  it("completes a submitted quiz regardless of score and returns feedback", () => {
-    const result = gradePlayerBlock(quiz, { q1: "A" });
+  it("completes a correct quiz on the first attempt and explains why it was right", () => {
+    const result = gradePlayerBlock(quiz, { q1: "B" });
+    expect(result).toEqual(expect.objectContaining({ complete: true, score: 1 }));
+    expect(result.feedback).toEqual({
+      kind: "quiz", correct: true, retryAvailable: false,
+      questions: [{ questionId: "q1", correct: true, correctAnswer: "B", explanation: "B is correct" }],
+    });
+  });
+
+  /**
+   * The leak this whole shape exists to close: the first wrong answer used to
+   * come back with `correctAnswer` and `explanation` attached, which the player
+   * then printed verbatim. `sanitizePlayerBlock` strips both from the lesson
+   * DTO, so grading was the only door left open — and it was open.
+   */
+  it("withholds the key on a missed first attempt and leaves the block open", () => {
+    const result = gradePlayerBlock(quiz, { q1: "A" }, 1);
+    expect(result).toEqual(expect.objectContaining({ complete: false, score: 0 }));
+    expect(result.feedback).toEqual({
+      kind: "quiz", correct: false, retryAvailable: true,
+      questions: [{ questionId: "q1", correct: false }],
+    });
+    expect(JSON.stringify(result.feedback)).not.toContain("B is correct");
+  });
+
+  it("reveals the key once the retry is spent, and completes regardless of score", () => {
+    const result = gradePlayerBlock(quiz, { q1: "A" }, 2);
     expect(result).toEqual(expect.objectContaining({ complete: true, score: 0 }));
-    expect(result.feedback).toEqual({ questions: [expect.objectContaining({ correct: false, correctAnswer: "B", explanation: "B is correct" })] });
+    expect(result.feedback).toEqual({
+      kind: "quiz", correct: false, retryAvailable: false,
+      questions: [{ questionId: "q1", correct: false, correctAnswer: "B", explanation: "B is correct" }],
+    });
+  });
+
+  it("reveals only the questions already answered right in a part-correct block", () => {
+    const twoQuestions = lessonBlockSchema.parse({
+      id: "quiz2", order: 1, blockType: "quiz_checkpoint", concepts: [],
+      questions: [
+        { id: "q1", prompt: "One", format: "multiple_choice", options: ["A", "B"], answerKey: "A", explanation: "A one." },
+        { id: "q2", prompt: "Two", format: "multiple_choice", options: ["A", "B"], answerKey: "B", explanation: "B two." },
+      ],
+    });
+    const feedback = gradePlayerBlock(twoQuestions, { q1: "A", q2: "A" }, 1).feedback;
+    expect(feedback).toEqual({
+      kind: "quiz", correct: false, retryAvailable: true,
+      questions: [
+        { questionId: "q1", correct: true, correctAnswer: "A", explanation: "A one." },
+        { questionId: "q2", correct: false },
+      ],
+    });
+    expect(JSON.stringify(feedback)).not.toContain("B two.");
   });
 
   it("rejects incomplete quiz submissions", () => {
@@ -106,7 +153,7 @@ describe("player server grading", () => {
   });
 
   it("keeps drag order incomplete and identifies misplaced positions", () => {
-    expect(gradePlayerBlock(drag, [0, 1, 2])).toEqual(expect.objectContaining({ complete: false, feedback: { correct: false, misplacedPositions: [0, 1, 2], correctOrder: undefined } }));
+    expect(gradePlayerBlock(drag, [0, 1, 2])).toEqual(expect.objectContaining({ complete: false, feedback: { kind: "drag_order", correct: false, misplacedPositions: [0, 1, 2], correctOrder: undefined } }));
   });
 
   it("completes drag order only for the exact permutation", () => {

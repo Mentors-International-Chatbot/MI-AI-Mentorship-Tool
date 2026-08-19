@@ -96,7 +96,10 @@ describe("grading an ungraded block", () => {
     };
     const result = gradePlayerBlock(mixed, { q2: "Some", q1: "A" });
     expect(result.score).toBe(1);
-    expect(result.feedback).toEqual({ questions: [expect.objectContaining({ questionId: "q1", correct: true })] });
+    expect(result.feedback).toEqual(expect.objectContaining({
+      kind: "quiz", correct: true,
+      questions: [expect.objectContaining({ questionId: "q1", correct: true })],
+    }));
   });
 
   it("sends graded to the client but never the key", () => {

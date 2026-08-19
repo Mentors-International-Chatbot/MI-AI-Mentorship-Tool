@@ -8,13 +8,14 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { playerFetch } from "@/lib/player/client";
 import type { LessonDashboard } from "@/lib/player/dashboard";
+import { BlockFeedback, feedbackAllowsRetry } from "./BlockFeedback";
 import { HelpRequestPanel } from "./HelpRequestPanel";
 import { PlayerDashboard } from "./PlayerDashboard";
 import { SortableOrderItem } from "./SortableOrderItem";
 import "./player.css";
 
 type BlockBase = { id: string; order: number; blockType: string; contentVersion: number; concepts: string[] };
-type Teach = BlockBase & { blockType: "teach"; content: string };
+type Teach = BlockBase & { blockType: "teach"; content: string; expectsResponse?: boolean };
 type Quiz = BlockBase & { blockType: "quiz_checkpoint"; questions: Array<{ id: string; prompt: string; options?: string[]; graded: boolean }> };
 type Drag = BlockBase & { blockType: "drag_order"; prompt: string; items: string[] };
 type TeachBack = BlockBase & { blockType: "teach_back"; prompt: string };
@@ -83,6 +84,19 @@ type ThreadItem =
  * What a finished block looks like in the thread. Authored strings only — the
  * teach body, the question that was asked — never a generated summary.
  */
+/**
+ * What the block's primary control says.
+ *
+ * `expectsResponse` changes the resting label so an invitation in the block's
+ * prose is matched by the control, rather than contradicted by a bare "Next".
+ * Text in the box wins either way — that is the send-before-advance floor made
+ * visible before it happens.
+ */
+function primaryLabel(block: Teach, typed: string): string {
+  if (typed.trim()) return "Send and continue";
+  return block.expectsResponse ? "Skip for now" : "Next";
+}
+
 function historyContent(block: Block): string | null {
   if (block.blockType === "teach") return (block as Teach).content;
   if (block.blockType === "teach_back") return (block as TeachBack).prompt;
@@ -97,6 +111,17 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   const [data, setData] = useState<LessonDto | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  /**
+   * A tutor turn is in flight. Separate from `busy`, which also covers block
+   * completion — that returns in well under a second and needs no indicator,
+   * while a tutor turn runs 3.5-5.2s and reads as a frozen page without one.
+   *
+   * Carries the learner's own text so it can be shown immediately, in the
+   * thread, before the server round trip returns it.
+   */
+  const [pending, setPending] = useState<{ learnerText?: string } | null>(null);
+  /** Tutor failure, rendered where the reply would have been. */
+  const [tutorError, setTutorError] = useState("");
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [feedback, setFeedback] = useState<Record<string, unknown>>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -175,6 +200,30 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     finally { setBusy(false); }
   }
 
+  /**
+   * The block's primary control. Sends whatever is in the tutor box first, then
+   * completes the block.
+   *
+   * This is the floor, and it applies to every block regardless of authoring:
+   * "advance the lesson" and "send to the mentor" used to be separate controls
+   * in separate places, so a learner who typed an answer and then pressed Next
+   * had it silently discarded. `expectsResponse` makes the invitation legible
+   * on blocks that ask for one; this makes discarding impossible on all of them.
+   *
+   * Send, await, then complete — in that order, so the learner watches their
+   * message land instead of watching the block vanish out from under it. A
+   * failed send aborts the advance rather than completing anyway: `askTutor`
+   * puts the text back in the box, and completing here would throw it away
+   * again through a different door.
+   */
+  async function advance(response?: unknown) {
+    if (question.trim()) {
+      const sent = await askTutor();
+      if (!sent) return;
+    }
+    await complete(response);
+  }
+
   function advanceReviewedBlock() {
     if (!current) return;
     setSubmittedComplete((value) => { const next = new Set(value); next.delete(current.id); return next; });
@@ -197,40 +246,58 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
    *
    * `preset` comes from a tutor chip: a shortcut into this path, not a second one.
    */
-  async function askTutor(preset?: string) {
+  async function askTutor(preset?: string): Promise<boolean> {
     const content = (preset ?? question).trim();
-    if (!content) return;
+    if (!content) return false;
     const teachingBack = current?.blockType === "teach_back";
     const intent = teachingBack ? "teach_back" as const : "question" as const;
     const blockId = current?.id;
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setTutorError("");
+    // Clear the box and echo the text into the thread straight away. On failure
+    // it goes back, so a failed turn never costs the learner what they wrote.
+    setQuestion("");
+    setPending({ learnerText: content });
     try {
       const result = await playerFetch<{ response: string; isError?: boolean }>("/api/chat", {
         method: "POST",
         body: JSON.stringify({ message: content, context: { surface: "player", courseCode: course, lessonKey, blockId, intent } }),
       });
-      setQuestion("");
       await loadThread();
       if (teachingBack && current && !result.isError) {
-        // The server has already recorded this turn. Mirroring the second one
-        // here is what moves the learner off the block without a refetch.
-        if (teachBackTurn === 2) setCompleted((value) => new Set(value).add(current.id));
+        // Turn 2 completes the block server-side, but the learner decides when
+        // to leave it. Auto-advancing buried the mentor's closing feedback under
+        // the next block the instant it arrived — and when that feedback ended
+        // in a question, it read as the mentor abandoning its own question.
+        //
+        // `submittedComplete` is the review state quiz blocks already use:
+        // recorded on the server, still on screen, waiting for Continue. The
+        // learner can keep talking to the tutor from here; further turns stay at
+        // turn 2 server-side and re-stamp the same completion.
+        if (teachBackTurn === 2) setSubmittedComplete((value) => new Set(value).add(current.id));
         else setTeachBackTurn(2);
       }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Tutor reply failed"); }
-    finally { setBusy(false); }
+      return true;
+    } catch (reason) {
+      setQuestion(content);
+      setTutorError(reason instanceof Error ? reason.message : "AI Mentor did not reply. Try sending that again.");
+      return false;
+    }
+    finally { setBusy(false); setPending(null); }
   }
 
   async function explainMore(parentIntent: ParentIntent, blockId?: string) {
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setTutorError("");
+    setPending({});
     try {
       await playerFetch<{ response: string }>("/api/chat", {
         method: "POST",
         body: JSON.stringify({ context: { surface: "player", courseCode: course, lessonKey, blockId, intent: "expand", parentIntent } }),
       });
       await loadThread();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Tutor expansion failed"); }
-    finally { setBusy(false); }
+    } catch (reason) {
+      setTutorError(reason instanceof Error ? reason.message : "AI Mentor could not expand that. Try again.");
+    }
+    finally { setBusy(false); setPending(null); }
   }
 
   /**
@@ -286,6 +353,20 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     return items;
   }, [data, completed, current, threadMessages]);
 
+  /**
+   * Same POST the chat surface uses, so there is one way to end a session.
+   * Full navigation rather than a client push: the session cookie is gone, and
+   * a soft transition would leave this component's fetched state on screen
+   * behind a page the learner is no longer authenticated for.
+   */
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      window.location.assign("/login");
+    }
+  }
+
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -304,7 +385,10 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           {/* Persistent way out. Safe to navigate: the thread is server state
               since it moved to /thread, so leaving and coming back restores the
               conversation rather than dropping it. */}
-          <Link className="player-home-link" href="/home">← Home</Link>
+          <div className="player-nav">
+            <Link className="player-home-link" href="/home">← Home</Link>
+            <button type="button" className="player-home-link player-logout" onClick={logout}>Log out</button>
+          </div>
           <span className="player-eyebrow">{data.lesson.category ?? "AI Essentials"}</span><h1>{data.lesson.title}</h1>{data.hasCapstone && <Link className="player-project-link" href={`/learn/${course}/capstone`}>Open project</Link>}
         </div>
         <div className="player-header-side">
@@ -330,7 +414,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       <div className="player-main">
       {/* The lesson so far. Everything here is history — no block controls, so
           re-reading block 7 cannot accidentally re-answer it. */}
-      {threadItems.length > 0 && <section className="player-thread" aria-label="Lesson so far">
+      {(threadItems.length > 0 || pending || tutorError) && <section className="player-thread" aria-label="Lesson so far">
         {threadItems.map((item, index) => {
           if (item.kind === "tutor") {
             const isLast = index === threadItems.length - 1;
@@ -347,6 +431,23 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
           </div>;
         })}
+
+        {/* In the thread, not at the top of the page: the eye should already be
+            where the reply will appear. `aria-live` announces it once. */}
+        {pending && <>
+          {pending.learnerText && <div className="player-message learner"><strong>You</strong><p>{pending.learnerText}</p></div>}
+          <div className="player-message" aria-live="polite">
+            <strong>AI Mentor</strong>
+            <span className="player-thinking" role="status" aria-label="AI Mentor is thinking">
+              <i /><i /><i />
+            </span>
+          </div>
+        </>}
+
+        {tutorError && <div className="player-message is-error" role="alert">
+          <strong>AI Mentor</strong>
+          <p>{tutorError}</p>
+        </div>}
       </section>}
 
       {/* The current block, pinned. Sticky rather than inline so a block that is
@@ -354,22 +455,32 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           the learner asks the tutor about it and the thread grows underneath. */}
       {current ? <><section className="player-card player-current" aria-live="polite">
         <div className="player-step">Step {done + 1} of {total}</div>
-        {current.blockType === "teach" && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown><button disabled={busy} onClick={() => complete({ acknowledged: true })}>Next</button></>}
+        {current.blockType === "teach" && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown><button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(current as Teach, question)}</button></>}
         {current.blockType === "quiz_checkpoint" && !submittedComplete.has(current.id) && <>
           {(current as Quiz).questions.map((question) => <fieldset key={question.id}><legend>{question.prompt}</legend>{question.options?.map((option) => <label className="player-option" key={option}><input type="radio" name={question.id} value={option} checked={answers[question.id] === option} onChange={() => setAnswers((value) => ({ ...value, [question.id]: option }))} />{option}</label>)}</fieldset>)}
           {/* An opinion poll has nothing to submit an answer *to*, so it does
               not claim otherwise. */}
-          <button disabled={busy || (current as Quiz).questions.some((q) => !answers[q.id])} onClick={() => complete(answers)}>{(current as Quiz).questions.some((q) => q.graded) ? "Submit answer" : "Continue"}</button>
+          <button disabled={busy || (current as Quiz).questions.some((q) => !answers[q.id])} onClick={() => advance(answers)}>{feedbackAllowsRetry(feedback[current.id]) ? "Try again" : (current as Quiz).questions.some((q) => q.graded) ? "Submit answer" : "Continue"}</button>
         </>}
-        {current.blockType === "drag_order" && !submittedComplete.has(current.id) && <><h2>{(current as Drag).prompt}</h2><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={order} strategy={verticalListSortingStrategy}><ol className="player-sort-list">{order.map((item, index) => <SortableOrderItem key={item} id={item} label={(current as Drag).items[item]} position={index} />)}</ol></SortableContext></DndContext><button disabled={busy} onClick={() => complete(order)}>Check order</button></>}
+        {current.blockType === "drag_order" && !submittedComplete.has(current.id) && <><h2>{(current as Drag).prompt}</h2><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={order} strategy={verticalListSortingStrategy}><ol className="player-sort-list">{order.map((item, index) => <SortableOrderItem key={item} id={item} label={(current as Drag).items[item]} position={index} />)}</ol></SortableContext></DndContext><button disabled={busy} onClick={() => advance(order)}>Check order</button></>}
         {/* The prompt is derived into the thread above, verbatim from the block
             body, and answered in the single input below. This card keeps only
             the heading, so the block still reads as a step. */}
-        {current.blockType === "teach_back" && <><h2>Teach it back</h2><p className="player-teachback-hint">AI Mentor asked you a question. Answer it in the box below.</p></>}
-        {feedback[current.id] ? <pre className="player-feedback">{JSON.stringify(feedback[current.id], null, 2)}</pre> : null}
+        {current.blockType === "teach_back" && <><h2>Teach it back</h2><p className="player-teachback-hint">{submittedComplete.has(current.id)
+          ? "Keep talking with AI Mentor if you want to, or continue when you are ready."
+          : "AI Mentor asked you a question. Answer it in the box below."}</p></>}
+        {/* Never a raw object: `BlockFeedback` draws only the verdict shapes it
+            can name, and renders nothing at all for anything else. */}
+        <BlockFeedback
+          feedback={feedback[current.id]}
+          questionPrompts={current.blockType === "quiz_checkpoint"
+            ? Object.fromEntries((current as Quiz).questions.map((item) => [item.id, item.prompt]))
+            : undefined}
+          items={current.blockType === "drag_order" ? (current as Drag).items : undefined}
+        />
         {submittedComplete.has(current.id) && <button onClick={advanceReviewedBlock}>Continue</button>}
         {error && <p className="player-error">{error}</p>}
-      </section><aside className="player-card"><h2>Ask AI Mentor</h2><textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} placeholder={teachingBack ? "Explain it in your own words…" : "Ask about this lesson…"} /><button disabled={busy || !question.trim()} onClick={() => askTutor()}>{teachingBack ? (teachBackTurn === 1 ? "Share with AI Mentor" : "Send follow-up") : "Ask a question"}</button>
+      </section><aside className="player-card"><h2>Ask AI Mentor</h2><textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} disabled={busy} placeholder={teachingBack ? "Explain it in your own words…" : "Ask about this lesson…"} /><button disabled={busy || !question.trim()} onClick={() => askTutor()}>{teachingBack ? (teachBackTurn === 1 ? "Share with AI Mentor" : "Send follow-up") : "Ask a question"}</button>
         {/* Chips are for asking about the lesson. During a teach-back the box is
             the learner's own explanation, and a canned question is not that. */}
         {!teachingBack && <div className="player-chip-row">{TUTOR_CHIPS.map((chip) => <button type="button" className="player-chip" key={chip} disabled={busy} onClick={() => askTutor(chip)}>{chip}</button>)}</div>}

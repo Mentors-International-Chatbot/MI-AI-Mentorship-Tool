@@ -225,6 +225,29 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
     role: z.enum(["scenario", "explanation", "example", "question", "deepening"]),
     content: z.string().min(1),
     presentation: z.enum(["narrated", "rendered"]).default("narrated"),
+    /**
+     * This block invites the learner to type something, so its primary control
+     * sends the tutor box's contents before advancing.
+     *
+     * ── NOT a teach_back ───────────────────────────────────────────────────
+     * These two look interchangeable and are not. Reach for `teach_back` when
+     * the answer is the point:
+     *
+     *   teach_back            graded against `dimensionKey`, runs two turns,
+     *                         and gates block completion — the learner cannot
+     *                         advance until the tutor has replied twice
+     *   teach + expectsResponse
+     *                         one shot, advisory, ungraded. The reply is a
+     *                         courtesy; the block completes either way, and a
+     *                         learner who types nothing just moves on
+     *
+     * Use this for an invitation ("introduce yourself"), not for assessment.
+     * Advancing with text in the box sends it regardless of this flag — that is
+     * a floor against silently discarding what someone typed. What the flag
+     * adds is legibility: the control says so, instead of the block's prose
+     * inviting a response that the button then contradicts.
+     */
+    expectsResponse: z.boolean().default(false),
   }),
 
   /**

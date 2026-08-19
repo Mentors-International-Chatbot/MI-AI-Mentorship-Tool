@@ -1,4 +1,4 @@
-import type { JourneyPackage } from "../journey-package.schema";
+import type { JourneyPackageInput } from "../journey-package.schema";
 
 /**
  * Skills & Tool Calls — a one-lesson focus-group course on the player surface.
@@ -22,14 +22,14 @@ import type { JourneyPackage } from "../journey-package.schema";
  * no V2 grader can later act on fiction. The choice is recorded; nothing is
  * judged, and `BlockProgress.score` stays null rather than reading zero.
  */
-export const skillsToolCallsPackage: JourneyPackage = {
+export const skillsToolCallsPackage: JourneyPackageInput = {
   schemaVersion: "1.2",
   metadata: {
     packageId: "skills-tool-calls",
     title: "Skills & Tool Calls",
     description: "A one-lesson introduction to AI skills and tool calls, built around a weekly sales report.",
     languages: ["en"],
-    version: "2026.4",
+    version: "2026.5",
     author: { name: "OCI" },
     // Without this the runtime falls back to LEGACY_DELIVERY (chat) and the
     // learner is routed to /chat instead of the player.
@@ -86,8 +86,12 @@ export const skillsToolCallsPackage: JourneyPackage = {
             blockType: "teach",
             role: "scenario",
             concepts: [],
-            contentVersion: 2,
+            contentVersion: 3,
             presentation: "narrated",
+            // The copy asks the learner to introduce themselves, so the control
+            // has to offer to send it. Without this the button read "Next" and
+            // advancing discarded what they typed.
+            expectsResponse: true,
             content: [
               "Welcome to your learning journey.",
               "",

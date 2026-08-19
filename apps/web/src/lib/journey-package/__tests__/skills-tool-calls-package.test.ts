@@ -114,3 +114,22 @@ describe("Skills & Tool Calls package", () => {
     expect(COURSE_CODES.SKILLS).toBe("skills-tool-calls");
   });
 });
+
+describe("teach blocks that invite a typed response", () => {
+  it("marks block 1, whose copy asks the learner to introduce themselves", () => {
+    const blocks = skillsToolCallsPackage.curriculum.lessons[0].blocks;
+    const welcome = blocks.find((b) => b.id === "stc-01-welcome")!;
+    expect(welcome.blockType).toBe("teach");
+    expect("expectsResponse" in welcome && welcome.expectsResponse).toBe(true);
+    // The prose and the flag have to agree, or the control contradicts the copy.
+    expect("content" in welcome && welcome.content).toMatch(/introduce yourself/i);
+  });
+
+  it("leaves every other teach block alone", () => {
+    const others = skillsToolCallsPackage.curriculum.lessons[0].blocks
+      .filter((b) => b.blockType === "teach" && b.id !== "stc-01-welcome");
+    for (const block of others) {
+      expect("expectsResponse" in block ? block.expectsResponse : undefined).toBeFalsy();
+    }
+  });
+});
