@@ -40,7 +40,36 @@ describe("getLessonThread", () => {
       { metadata: { path: ["collectionKey"], equals: "skills-tool-calls" } },
       { metadata: { path: ["lessonKey"], equals: "skills-and-tool-calls" } },
     ]);
-    expect(where.NOT).toEqual({ metadata: { path: ["intent"], equals: "lesson_entry" } });
+    // The lesson_entry exclusion is NOT expressed as a SQL `NOT` on this
+    // query — see the "excludes lesson_entry" and "does not drop a row
+    // missing intent" cases below for why, and `resolveMentorMessageMetadata
+    // wrote a row the thread never showed` for the incident this pins.
+    expect(where.NOT).toBeUndefined();
+  });
+
+  it("excludes historical mount-generated lesson_entry rows", async () => {
+    mocks.findMany.mockResolvedValue([
+      { id: "m1", role: "assistant", content: "intro", senderType: "ai", createdAt: new Date(), metadata: { surface: "player", intent: "lesson_entry" } },
+      { id: "m2", role: "assistant", content: "real turn", senderType: "ai", createdAt: new Date(), metadata: { surface: "player", intent: "question" } },
+    ]);
+
+    const rows = await getLessonThread(access, "skills-and-tool-calls");
+    expect(rows.map((r) => r.id)).toEqual(["m2"]);
+  });
+
+  it("does not drop a row whose metadata is present but has no intent key — the mentor-DM regression", async () => {
+    // This is exactly the shape `resolveMentorMessageMetadata` writes: no
+    // `intent` field at all, because a mentor DM has no player intent to
+    // stamp. A SQL `NOT: { metadata: { path: ["intent"], equals:
+    // "lesson_entry" } } }` treats the missing key as SQL NULL, and
+    // `NOT (NULL = 'lesson_entry')` is UNKNOWN rather than TRUE, so Postgres
+    // drops the row instead of keeping it. This mentor DM must survive.
+    mocks.findMany.mockResolvedValue([
+      { id: "mentor-1", role: "mentor", content: "Do you see this?", senderType: "mentor", createdAt: new Date(), metadata: { surface: "player", collectionKey: "skills-tool-calls", lessonKey: "skills-and-tool-calls" } },
+    ]);
+
+    const rows = await getLessonThread(access, "skills-and-tool-calls");
+    expect(rows.map((r) => r.id)).toEqual(["mentor-1"]);
   });
 
   it("reads oldest first, so the thread renders in the order it happened", async () => {

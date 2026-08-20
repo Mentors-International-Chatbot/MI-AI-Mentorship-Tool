@@ -381,7 +381,7 @@ async function getLessonDashboard(
  * one learner's rows.
  */
 export async function getLessonThread(access: PlayerAccess, lessonKey: string) {
-  return playerRuntimeRepo.message.findMany({
+  const rows = await playerRuntimeRepo.message.findMany({
     where: {
       socioId: access.socioId,
       assessmentSessionId: null,
@@ -390,14 +390,22 @@ export async function getLessonThread(access: PlayerAccess, lessonKey: string) {
         { metadata: { path: ["collectionKey"], equals: access.collectionKey } },
         { metadata: { path: ["lessonKey"], equals: lessonKey } },
       ],
-      // Player lessons are introduced by authored block 1. Historical
-      // mount-generated lesson_entry rows remain in the audit record but are
-      // not lesson conversation and must not reappear after this fix.
-      NOT: { metadata: { path: ["intent"], equals: "lesson_entry" } },
     },
     orderBy: { createdAt: "asc" },
     select: { id: true, role: true, content: true, senderType: true, createdAt: true, metadata: true },
   });
+  // Player lessons are introduced by authored block 1. Historical
+  // mount-generated lesson_entry rows remain in the audit record but are not
+  // lesson conversation and must not reappear after this fix.
+  //
+  // Filtered here rather than negating a JSON `intent` path equality directly
+  // in the Prisma `where` clause: Postgres JSON-path equality on a missing
+  // key evaluates to UNKNOWN, not FALSE, so negating that UNKNOWN is still
+  // UNKNOWN and the WHERE clause silently drops the row instead of keeping
+  // it. Every mentor DM lacks `intent` entirely, so that shape hid every
+  // mentor message from the player thread. A missing `intent` must default
+  // to "not lesson_entry", not to "excluded".
+  return rows.filter((row) => progressState(row.metadata).intent !== "lesson_entry");
 }
 
 /**
