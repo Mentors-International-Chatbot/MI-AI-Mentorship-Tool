@@ -21,9 +21,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockHandle = vi.hoisted(() => vi.fn());
 const mockVerify = vi.hoisted(() => vi.fn());
+const mockGetSocio = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/messaging/handler', () => ({ handleIncomingMessage: mockHandle }));
 vi.mock('@/lib/auth/session', () => ({ verifySession: mockVerify }));
+vi.mock('@/lib/repo', () => ({ repo: { getSocio: mockGetSocio } }));
 
 import { POST } from '../route';
 import { InteractionMode } from '@/lib/ai/prompts';
@@ -78,6 +80,7 @@ function handlerStreaming(deltas: string[], finalText = APPENDED) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockVerify.mockResolvedValue({ userId: `u-${Math.random()}`, role: 'socio', name: 'Ana' });
+  mockGetSocio.mockResolvedValue({ id: 'socio-1', aiPaused: false });
   mockHandle.mockImplementation(handlerStreaming(['Muy bien, ', 'Ana.']));
 });
 
@@ -187,6 +190,27 @@ describe('the dedup cache', () => {
     await POST(post({ message: 'igual' }) as never);
 
     expect(mockHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it('never returns a cached AI reply after the learner is paused', async () => {
+    mockVerify.mockResolvedValue({ userId: 'u-paused-cache', role: 'socio', name: 'Ana' });
+
+    const first = await POST(post({ message: 'igual' }) as never);
+    expect((await first.json()).response).toBe(APPENDED);
+
+    mockGetSocio.mockResolvedValue({ id: 'socio-1', aiPaused: true });
+    mockHandle.mockResolvedValueOnce({
+      responseText: '',
+      mode: InteractionMode.LESSON_DELIVERY,
+      markers: noMarkers,
+      socioId: 'socio-1',
+      isNewSocio: false,
+      messages: [],
+    });
+    const paused = await POST(post({ message: 'igual' }) as never);
+
+    expect(mockHandle).toHaveBeenCalledTimes(2);
+    expect((await paused.json()).response).toBe('');
   });
 
   it('does not let a streamed turn poison the cache for a later plain one', async () => {

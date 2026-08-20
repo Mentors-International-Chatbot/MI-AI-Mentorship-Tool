@@ -369,12 +369,10 @@ async function getLessonDashboard(
 /**
  * The learner's persisted tutor turns for one lesson, oldest first.
  *
- * Scoped by the metadata the handler already writes on both the user and the
- * assistant row (`surface`, `collectionKey`, `lessonKey`). `/api/chat/history`
- * cannot serve this: it returns the socio's last 50 messages across every
- * context, so a learner who ever used the chat surface would find MI turns
- * inside a player lesson — and it authenticates with a cookie session only,
- * which locks out Canvas learners whose identity is a bearer token.
+ * AI and learner turns are scoped by the metadata the handler writes on both
+ * rows (`surface`, `collectionKey`, `lessonKey`). Human mentor DMs are direct
+ * learner-level messages, so every `senderType="mentor"` row for this socio is
+ * unioned into the thread without requiring guessed lesson metadata.
  *
  * The socioId predicate is what makes the JSON filters cheap: `messages` is
  * indexed on `[socioId, createdAt]`, so the path comparisons only ever run over
@@ -384,11 +382,16 @@ export async function getLessonThread(access: PlayerAccess, lessonKey: string) {
   const rows = await playerRuntimeRepo.message.findMany({
     where: {
       socioId: access.socioId,
-      assessmentSessionId: null,
-      AND: [
-        { metadata: { path: ["surface"], equals: "player" } },
-        { metadata: { path: ["collectionKey"], equals: access.collectionKey } },
-        { metadata: { path: ["lessonKey"], equals: lessonKey } },
+      OR: [
+        { senderType: "mentor" },
+        {
+          assessmentSessionId: null,
+          AND: [
+            { metadata: { path: ["surface"], equals: "player" } },
+            { metadata: { path: ["collectionKey"], equals: access.collectionKey } },
+            { metadata: { path: ["lessonKey"], equals: lessonKey } },
+          ],
+        },
       ],
     },
     orderBy: { createdAt: "asc" },
@@ -402,81 +405,9 @@ export async function getLessonThread(access: PlayerAccess, lessonKey: string) {
   // in the Prisma `where` clause: Postgres JSON-path equality on a missing
   // key evaluates to UNKNOWN, not FALSE, so negating that UNKNOWN is still
   // UNKNOWN and the WHERE clause silently drops the row instead of keeping
-  // it. Every mentor DM lacks `intent` entirely, so that shape hid every
-  // mentor message from the player thread. A missing `intent` must default
-  // to "not lesson_entry", not to "excluded".
-  return rows.filter((row) => progressState(row.metadata).intent !== "lesson_entry");
-}
-
-/**
- * Best guess at the lesson a mentor DM should attach to.
- *
- * The dashboard message route has no player turn to read a `lessonKey` off —
- * a mentor is writing in from outside the lesson entirely — so this is the
- * only way the row can carry the metadata `getLessonThread` requires. Most
- * recently touched `BlockProgress` is the honest guess for a learner mid
- * course. A learner with none yet (never opened a block) falls back to the
- * collection's first authored lesson, scoped by `organizationId` because
- * `ContentCollection.slug` is only unique per organization — two tenants can
- * share a slug, and matching the wrong one would stamp a message into a
- * course the learner isn't even in.
- *
- * Returns null only when the collection itself has no lessons yet, in which
- * case there is nothing to attach to and the caller writes without a
- * `lessonKey` rather than blocking the send.
- */
-export async function resolveActiveLessonKey(
-  socioId: string,
-  collectionKey: string,
-  organizationId: string,
-): Promise<string | null> {
-  const recent = await playerRuntimeRepo.blockProgress.findFirst({
-    where: { socioId, collectionKey },
-    orderBy: { updatedAt: "desc" },
-    select: { lessonKey: true },
-  });
-  if (recent) return recent.lessonKey;
-
-  const first = await playerRuntimeRepo.contentLesson.findFirst({
-    where: { collection: { slug: collectionKey, organizationId } },
-    orderBy: { orderIndex: "asc" },
-    select: { slug: true },
-  });
-  return first?.slug ?? null;
-}
-
-/**
- * What the dashboard message route should stamp on a mentor DM, if anything.
- *
- * `Socio.curriculumCollectionKey` is not a reliable "is this a player
- * learner" test by itself — `/api/auth/curriculum` writes it for every course
- * a socio selects, MI included, so an MI socio can carry
- * `curriculumCollectionKey: "mi-colombia-curriculum"` same as a player
- * learner carries `"skills-tool-calls"`. The one thing that actually
- * distinguishes them is the published version's delivery surface. Undefined
- * here must mean "write the message exactly as before" — MI's chat-surface
- * history read is metadata-blind, so stamping player metadata onto an MI row
- * would not help it and would only ever be a regression.
- */
-export async function resolveMentorMessageMetadata(
-  socioId: string,
-  collectionKey: string,
-  organizationId: string,
-): Promise<Record<string, unknown> | undefined> {
-  const programVersion = await playerRuntimeRepo.programVersion.findFirst({
-    where: {
-      status: { in: ["published", "archived"] },
-      collection: { slug: collectionKey, organizationId },
-    },
-    orderBy: { publishedAt: "desc" },
-    select: { metadata: true },
-  });
-  if (!programVersion || resolveDelivery(programVersion.metadata).surface !== "player") {
-    return undefined;
-  }
-
-  const lessonKey = await resolveActiveLessonKey(socioId, collectionKey, organizationId);
-  return { surface: "player", collectionKey, ...(lessonKey ? { lessonKey } : {}) };
+  // it. A missing `intent` must default to "not lesson_entry", not to
+  // "excluded". Human mentor rows are always retained regardless of metadata.
+  return rows.filter((row) => row.senderType === "mentor" || progressState(row.metadata).intent !== "lesson_entry");
 }
 
 export async function getLessonDto(access: PlayerAccess, lessonKey: string) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/messaging/handler';
 import { WebChannel } from '@/lib/delivery';
 import { resolveRequestIdentity } from '@/lib/auth/requestIdentity';
+import { repo } from '@/lib/repo';
 import { PlayerError, preparePlayerContext, resolvePlayerAccess, type PlayerIntent, type PlayerParentIntent, type ValidatedPlayerContext } from '@/lib/player/service';
 import { DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 import { toClientMessage } from './toClientMessage';
@@ -267,7 +268,13 @@ export async function POST(req: NextRequest) {
 
         // Check for duplicate request (prevents double-click spam)
         const requestIdentity = `${playerContext?.programVersionId ?? ''}:${playerContext?.lessonKey ?? ''}:${playerContext?.blockId ?? ''}:${playerContext?.intent ?? ''}:${playerContext?.parentIntent ?? ''}:${message}`;
-        const cachedResponse = getCachedResponse(identity.userId, requestIdentity);
+        // A mentor can pause AI between two otherwise identical requests. Never
+        // let a response generated before takeover bypass the handler's current
+        // `socio.aiPaused` check.
+        const currentSocio = await repo.getSocio(identity.channel, identity.externalId);
+        const cachedResponse = currentSocio?.aiPaused
+            ? null
+            : getCachedResponse(identity.userId, requestIdentity);
         if (cachedResponse) {
             console.log(`[Chat] Returning cached response for duplicate request from ${identity.userId}`);
             return NextResponse.json(cachedResponse);

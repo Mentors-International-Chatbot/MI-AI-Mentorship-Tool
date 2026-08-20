@@ -36,10 +36,7 @@ it("comment stripping does not eat code", () => {
 
 describe("lesson player has a single tutor input", () => {
   it("does not generate a lesson opener when the authored lesson mounts", () => {
-    const afterThreadLoad = source.slice(
-      source.indexOf("useEffect(() => { void loadThread();"),
-      source.indexOf("const current = useMemo"),
-    );
+    const afterThreadLoad = source.slice(source.indexOf("usePlayerThread(course, lessonKey)"), source.indexOf("const current = useMemo"));
     expect(afterThreadLoad).not.toMatch(/api\/chat/);
     expect(afterThreadLoad).not.toMatch(/lesson_entry|Introduce this lesson/);
   });

@@ -11,10 +11,9 @@ import { getLessonThread } from "../service";
 /**
  * Lesson thread scoping
  * ═══════════════════════════════════════════════════════════════════════════
- * `/api/chat/history` returns a socio's last 50 messages across every context,
- * so a learner who ever used the chat surface would find MI turns inside a
- * player lesson. That cross-course bleed is what this query exists to avoid,
- * and the metadata predicates are the whole of the fix.
+ * AI and learner turns remain scoped to one player lesson. Human mentor DMs
+ * are learner-level communication, so they are unioned into every player
+ * transcript regardless of lesson metadata.
  */
 const access = {
   socioId: "socio-1", courseCode: "SKILLS", collectionKey: "skills-tool-calls",
@@ -33,9 +32,10 @@ describe("getLessonThread", () => {
 
     const where = mocks.findMany.mock.calls[0][0].where;
     expect(where.socioId).toBe("socio-1");
+    expect(where.OR[0]).toEqual({ senderType: "mentor" });
     // Gate turns live on their own session and are not lesson conversation.
-    expect(where.assessmentSessionId).toBeNull();
-    expect(where.AND).toEqual([
+    expect(where.OR[1].assessmentSessionId).toBeNull();
+    expect(where.OR[1].AND).toEqual([
       { metadata: { path: ["surface"], equals: "player" } },
       { metadata: { path: ["collectionKey"], equals: "skills-tool-calls" } },
       { metadata: { path: ["lessonKey"], equals: "skills-and-tool-calls" } },
@@ -57,15 +57,9 @@ describe("getLessonThread", () => {
     expect(rows.map((r) => r.id)).toEqual(["m2"]);
   });
 
-  it("does not drop a row whose metadata is present but has no intent key — the mentor-DM regression", async () => {
-    // This is exactly the shape `resolveMentorMessageMetadata` writes: no
-    // `intent` field at all, because a mentor DM has no player intent to
-    // stamp. A SQL `NOT: { metadata: { path: ["intent"], equals:
-    // "lesson_entry" } } }` treats the missing key as SQL NULL, and
-    // `NOT (NULL = 'lesson_entry')` is UNKNOWN rather than TRUE, so Postgres
-    // drops the row instead of keeping it. This mentor DM must survive.
+  it("does not require lesson metadata on a human mentor DM", async () => {
     mocks.findMany.mockResolvedValue([
-      { id: "mentor-1", role: "mentor", content: "Do you see this?", senderType: "mentor", createdAt: new Date(), metadata: { surface: "player", collectionKey: "skills-tool-calls", lessonKey: "skills-and-tool-calls" } },
+      { id: "mentor-1", role: "mentor", content: "Do you see this?", senderType: "mentor", createdAt: new Date(), metadata: null },
     ]);
 
     const rows = await getLessonThread(access, "skills-and-tool-calls");
@@ -87,6 +81,6 @@ describe("getLessonThread", () => {
   it("does not leak another lesson's key into the filter", async () => {
     await getLessonThread(access, "other-lesson");
     const where = mocks.findMany.mock.calls[0][0].where;
-    expect(where.AND[2]).toEqual({ metadata: { path: ["lessonKey"], equals: "other-lesson" } });
+    expect(where.OR[1].AND[2]).toEqual({ metadata: { path: ["lessonKey"], equals: "other-lesson" } });
   });
 });

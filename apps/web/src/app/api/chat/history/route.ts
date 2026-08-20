@@ -1,17 +1,17 @@
-import { NextResponse } from 'next/server';
-import { verifySession } from '@/lib/auth/session';
+import { NextRequest, NextResponse } from 'next/server';
+import { resolveRequestIdentity } from '@/lib/auth/requestIdentity';
 import { repo } from '@/lib/repo';
 import { toClientMessage } from '../toClientMessage';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const session = await verifySession();
-  if (!session) {
+export async function GET(req: NextRequest) {
+  const identity = await resolveRequestIdentity(req);
+  if (!identity) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  const socio = await repo.getSocio('web', session.userId);
+  const socio = await repo.getSocio(identity.channel, identity.externalId);
   if (!socio) {
     return NextResponse.json({
       messages: [],

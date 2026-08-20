@@ -10,10 +10,9 @@ import { describe, expect, it } from "vitest";
  * used to push that empty string straight into an "AI Mentor" bubble, which
  * reads as the tutor answering with nothing at the exact moment a learner is
  * waiting to hear that a person is now handling it. This pins that an empty
- * reply no longer produces an "AI Mentor" bubble, and instead produces a
- * clearly-labeled note that does not claim the human's reply will land here
- * (it can't — this pane holds no persisted thread, so it must not promise a
- * delivery it cannot keep).
+ * reply no longer produces an "AI Mentor" bubble. The persisted capstone
+ * thread is reloaded instead, while a clearly labeled handoff note covers the
+ * interval before the human's message arrives through polling.
  *
  * Source-read, matching the rest of this test directory: no component test
  * environment exists for these .tsx files.
@@ -31,31 +30,28 @@ it("comment stripping does not eat code", () => {
 });
 
 describe("send()", () => {
-  it("trims the response before deciding whether it is empty", () => {
-    expect(code).toMatch(/const reply = result\.response\.trim\(\);/);
+  it("uses the persisted capstone thread, which hydrates on mount", () => {
+    expect(code).toMatch(/usePlayerThread\(course, "capstone"\)/);
   });
 
   it("does not label an empty reply as coming from the AI", () => {
-    // The only place "AI Mentor" may appear for this turn is inside the
-    // truthy branch of the `reply ? ... : ...` conditional.
-    expect(code).toMatch(/reply\s*\n?\s*\? \[\{ role: "AI Mentor", content: reply, expandable: !result\.isError \}\]/);
+    expect(code).toMatch(/setHandoffNotice\(!result\.response\.trim\(\)\)/);
+    expect(code).not.toMatch(/setMessages/);
   });
 
-  it("gives a distinct, non-AI label when the AI did not reply", () => {
-    expect(code).toMatch(/: \[\{ role: "Your Mentor", content:.*\}\]/);
+  it("reloads the authoritative transcript after the turn", () => {
+    expect(code).toMatch(/await loadThread\(\)/);
   });
 
-  it("does not promise the human reply will appear in this pane", () => {
-    const noteMatch = code.match(/role: "Your Mentor", content: "([^"]*)"/);
-    expect(noteMatch).not.toBeNull();
-    expect(noteMatch![1].toLowerCase()).not.toContain("here");
+  it("gives a distinct, non-AI handoff note when the AI did not reply", () => {
+    expect(code).toMatch(/handoffNotice && <p[^>]*>Your mentor has this and will follow up\.<\/p>/);
   });
 });
 
 describe("explainMore()", () => {
-  it("does not push an empty AI Mentor bubble on an empty expand reply", () => {
+  it("reloads rather than pushing a locally fabricated bubble", () => {
     const fn = code.slice(code.indexOf("async function explainMore"), code.indexOf("if (!data) return"));
-    expect(fn).toMatch(/const reply = result\.response\.trim\(\);/);
-    expect(fn).toMatch(/if \(reply\) setMessages/);
+    expect(fn).toMatch(/await loadThread\(\)/);
+    expect(fn).not.toMatch(/setMessages/);
   });
 });

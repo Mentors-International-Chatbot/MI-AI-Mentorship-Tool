@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -12,6 +12,7 @@ import { BlockFeedback, feedbackAllowsRetry } from "./BlockFeedback";
 import { HelpRequestPanel } from "./HelpRequestPanel";
 import { PlayerDashboard } from "./PlayerDashboard";
 import { SortableOrderItem } from "./SortableOrderItem";
+import { usePlayerThread } from "./usePlayerThread";
 import "./player.css";
 
 type BlockBase = { id: string; order: number; blockType: string; contentVersion: number; concepts: string[]; handoff?: string };
@@ -45,16 +46,6 @@ const PARENT_INTENTS: ParentIntent[] = ["question", "teach_back", "lesson_entry"
  * and a second control doing the same thing is worse than none.
  */
 const TUTOR_CHIPS = ["Give me an example", "Can you rephrase that?"] as const;
-/** A persisted row, as `toClientMessage` serializes it. */
-export type ThreadMessage = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  senderType: string | null;
-  createdAt: string;
-  metadata: Record<string, unknown> | null;
-};
-
 /**
  * One entry in the lesson thread, discriminated by `kind` the way the chat
  * surface discriminates its assessment card.
@@ -199,7 +190,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [order, setOrder] = useState<number[]>([]);
   const [question, setQuestion] = useState("");
-  const [threadMessages, setThreadMessages] = useState<ThreadMessage[]>([]);
+  const { messages: threadMessages, reload: loadThread } = usePlayerThread(course, lessonKey);
   const [teachBackTurn, setTeachBackTurn] = useState(1);
   const [submittedComplete, setSubmittedComplete] = useState<Set<string>>(new Set());
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
@@ -222,25 +213,6 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       });
     return () => { active = false; };
   }, [course, lessonKey]);
-
-  /**
-   * The thread is server state, so every turn ends by re-reading it rather than
-   * appending a local guess. A refresh mid-lesson now restores the whole
-   * conversation instead of an empty sidebar.
-   *
-   * Failures are swallowed: the thread is history, and losing it must not cost
-   * the learner the lesson they are in the middle of.
-   */
-  const loadThread = useCallback(async () => {
-    try {
-      const result = await playerFetch<{ messages: ThreadMessage[] }>(
-        `/api/learn/${encodeURIComponent(course)}/${encodeURIComponent(lessonKey)}/thread`,
-      );
-      setThreadMessages(result.messages);
-    } catch { /* history is decoration around the lesson, never a blocker */ }
-  }, [course, lessonKey]);
-
-  useEffect(() => { void loadThread(); }, [loadThread]);
 
   const current = useMemo(() => data?.lesson.blocks.find((block) => !completed.has(block.id)) ?? null, [data, completed]);
   const teachingBack = current?.blockType === "teach_back";
@@ -412,10 +384,31 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   const threadItems = useMemo<ThreadItem[]>(() => {
     if (!data) return [];
 
+    // Human mentor DMs are learner-level and therefore carry no block id. For
+    // display only, place each one after the most recent persisted block turn;
+    // if the lesson has no turns yet, place it with the current block. This
+    // preserves the createdAt ordering supplied by `usePlayerThread` without
+    // putting every global mentor message at the top of the lesson.
+    const mentorBlockIds = new Map<string, string | undefined>();
+    let precedingBlockId: string | undefined;
+    for (const message of threadMessages) {
+      const explicitBlockId = typeof message.metadata?.blockId === "string"
+        ? message.metadata.blockId
+        : undefined;
+      if (message.senderType === "mentor") {
+        mentorBlockIds.set(message.id, explicitBlockId ?? precedingBlockId ?? current?.id);
+      } else if (explicitBlockId) {
+        precedingBlockId = explicitBlockId;
+      }
+    }
+
     const tutorFor = (blockId: string | undefined): ThreadItem[] => threadMessages
       .filter((message) => {
         const meta = message.metadata ?? {};
-        if ((meta.blockId as string | undefined) !== blockId) return false;
+        const messageBlockId = message.senderType === "mentor"
+          ? mentorBlockIds.get(message.id)
+          : meta.blockId as string | undefined;
+        if (messageBlockId !== blockId) return false;
         // `lesson_entry` and `expand` send a canned string the learner never
         // typed. Showing "Introduce this lesson." as their own words would be a
         // small lie about who said what.
