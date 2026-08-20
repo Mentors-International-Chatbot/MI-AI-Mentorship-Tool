@@ -29,6 +29,13 @@ export type SocioRow = {
    */
   unresolvedRed: number;
   unresolvedYellow: number;
+  /**
+   * True for a socio with no `mentorId` who is only in this list because of
+   * the org-wide fallback — not part of the viewing mentor's own caseload.
+   * Unrelated to {@link UNASSIGNED_COURSE_KEY}, which is about having no
+   * course at all.
+   */
+  unassignedToMentor?: boolean;
 };
 
 /**

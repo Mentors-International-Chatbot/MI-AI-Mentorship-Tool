@@ -25,7 +25,19 @@ export function CapstonePlayer({ course }: { course: string }) {
     const content = message.trim(); setBusy(true); setError("");
     try {
       const result = await playerFetch<{ response: string; isError?: boolean }>("/api/chat", { method: "POST", body: JSON.stringify({ message: content, context: { surface: "player", courseCode: course, lessonKey: "capstone", intent: "capstone" } }) });
-      setMessages((value) => [...value, { role: "You", content }, { role: "AI Mentor", content: result.response, expandable: !result.isError }]); setMessage("");
+      // An empty `response` means the AI is paused — a mentor has taken over —
+      // not that it replied with nothing. Pushing that through as an "AI
+      // Mentor" bubble reads as the tutor silently ignoring the learner, right
+      // when they most need to know a person is now handling it.
+      const reply = result.response.trim();
+      setMessages((value) => [
+        ...value,
+        { role: "You", content },
+        ...(reply
+          ? [{ role: "AI Mentor", content: reply, expandable: !result.isError }]
+          : [{ role: "Your Mentor", content: "Your mentor has this and will follow up." }]),
+      ]);
+      setMessage("");
       setData(await playerFetch<Capstone>(`/api/learn/${course}/capstone`));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to reach AI Mentor"); }
     finally { setBusy(false); }
@@ -34,7 +46,8 @@ export function CapstonePlayer({ course }: { course: string }) {
     setBusy(true); setError("");
     try {
       const result = await playerFetch<{ response: string }>("/api/chat", { method: "POST", body: JSON.stringify({ context: { surface: "player", courseCode: course, lessonKey: "capstone", intent: "expand", parentIntent: "capstone" } }) });
-      setMessages((value) => [...value, { role: "AI Mentor", content: result.response }]);
+      const reply = result.response.trim();
+      if (reply) setMessages((value) => [...value, { role: "AI Mentor", content: reply }]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to expand the reply"); }
     finally { setBusy(false); }
   }

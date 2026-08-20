@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifySession, type SessionPayload } from '@/lib/auth/session';
-import { repo } from '@/lib/repo';
+import { repo, tenantRepo } from '@/lib/repo';
 
 type OwnershipResult =
   | { authorized: true; session: SessionPayload }
@@ -35,14 +35,40 @@ export async function verifyMentorOwnership(
 
   // Role is 'mentor' — check ownership
   const socio = await repo.getSocioById(socioId);
-  if (!socio || socio.mentorId !== session.userId) {
+  if (!socio) {
     return {
       authorized: false,
       response: NextResponse.json({ error: 'Not found' }, { status: 404 }),
     };
   }
+  if (socio.mentorId === session.userId) {
+    return { authorized: true, session };
+  }
 
-  return { authorized: true, session };
+  // Unassigned socios (web/`/join` signups and LTI-provisioned player
+  // learners never get a `mentorId`) are reachable by any mentor in their
+  // organization — same posture as the alerts-page zone 0 org-wide fallback.
+  // Scoping strictly to `mentorId` would leave them permanently unreachable,
+  // which is worse than a caseload mentor occasionally reaching someone
+  // outside their assigned list.
+  if (socio.mentorId === null) {
+    const mentorOrgId = await tenantRepo.getOrganizationIdByMentorId(session.userId);
+    if (mentorOrgId) {
+      try {
+        const { organizationId } = await tenantRepo.resolveOrganizationForSocio(socioId);
+        if (organizationId === mentorOrgId) {
+          return { authorized: true, session };
+        }
+      } catch {
+        // No resolvable tenant for this socio — fail closed below.
+      }
+    }
+  }
+
+  return {
+    authorized: false,
+    response: NextResponse.json({ error: 'Not found' }, { status: 404 }),
+  };
 }
 
 /**

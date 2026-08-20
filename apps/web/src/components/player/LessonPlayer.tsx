@@ -68,7 +68,20 @@ export type ThreadMessage = {
 type ThreadItem =
   | { kind: "block"; key: string; content: string }
   | { kind: "prompt"; key: string; content: string }
-  | { kind: "tutor"; key: string; role: "learner" | "mentor"; content: string; parentIntent?: ParentIntent; blockId?: string };
+  | {
+      kind: "tutor";
+      key: string;
+      role: "learner" | "mentor";
+      /**
+       * `Message.senderType`, carried through so the render can tell a human
+       * mentor's reply apart from the AI's. Legacy rows predate the column and
+       * read `null` — those must keep rendering as the AI, not as "unknown".
+       */
+      senderType: string | null;
+      content: string;
+      parentIntent?: ParentIntent;
+      blockId?: string;
+    };
 
 /**
  * Every `/api/chat` call below passes the `course` route prop. It used to send
@@ -414,6 +427,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           kind: "tutor" as const,
           key: message.id,
           role: message.role === "user" ? "learner" as const : "mentor" as const,
+          senderType: message.senderType,
           content: message.content,
           blockId,
           parentIntent: PARENT_INTENTS.includes(intent as ParentIntent) ? intent as ParentIntent : undefined,
@@ -546,12 +560,17 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         {threadItems.map((item, index) => {
           if (item.kind === "tutor") {
             const isLast = index === threadItems.length - 1;
-            return <div key={item.key} className={`player-message ${item.role}`}>
-              <strong>{item.role === "mentor" ? "AI Mentor" : "You"}</strong>
-              {item.role === "mentor"
+            // `senderType: null` covers rows from before the column existed —
+            // those are all AI turns, so only an explicit "mentor" flips the
+            // label. A human mentor's own typing is not model output, so it
+            // renders as plain text rather than through the markdown pass.
+            const isHumanMentor = item.role === "mentor" && item.senderType === "mentor";
+            return <div key={item.key} className={`player-message ${item.role}${isHumanMentor ? " human-mentor" : ""}`}>
+              <strong>{item.role === "mentor" ? (isHumanMentor ? "Your Mentor" : "AI Mentor") : "You"}</strong>
+              {item.role === "mentor" && !isHumanMentor
                 ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
                 : <p>{item.content}</p>}
-              {item.role === "mentor" && item.parentIntent && isLast && <button type="button" className="player-chip" disabled={busy} aria-label="Ask AI Mentor to explain the previous reply in more detail" onClick={() => explainMore(item.parentIntent!, item.blockId)}>Explain more</button>}
+              {item.role === "mentor" && !isHumanMentor && item.parentIntent && isLast && <button type="button" className="player-chip" disabled={busy} aria-label="Ask AI Mentor to explain the previous reply in more detail" onClick={() => explainMore(item.parentIntent!, item.blockId)}>Explain more</button>}
             </div>;
           }
           return <div key={item.key} className={`player-message lesson ${item.kind === "prompt" ? "is-prompt" : ""}`}>

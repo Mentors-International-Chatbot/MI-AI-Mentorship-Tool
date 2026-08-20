@@ -47,6 +47,7 @@ export default async function SociosPage() {
   }
 
   let socios;
+  let unassignedSocios: Awaited<ReturnType<typeof tenantRepo.getSociosForOrganization>> = [];
   let scopedOrganizationId: string | undefined;
   try {
     // Mentors are scoped to their own organization. A mentor with no
@@ -56,6 +57,14 @@ export default async function SociosPage() {
     scopedOrganizationId = organizationId ?? undefined;
     socios = organizationId
       ? await tenantRepo.getSociosForMentor(organizationId, session.userId)
+      : [];
+    // Org-wide fallback, same posture as `verifyMentorOwnership` and the
+    // alerts-page zone 0: a socio with no `mentorId` (web/`/join` signup, LTI
+    // provisioning) is not on anyone's caseload, so the roster is the only
+    // place a mentor would ever discover them. Marked `unassignedToMentor` so
+    // the table can tell them apart from the caseload.
+    unassignedSocios = organizationId
+      ? (await tenantRepo.getSociosForOrganization(organizationId)).filter((s) => s.mentorId === null)
       : [];
   } catch (err) {
     const isSchemaError =
@@ -78,7 +87,7 @@ export default async function SociosPage() {
   // RED. Calling `computeHealthFromData` with the same data also drops this
   // from three queries per socio to two.
   const rows: SocioRow[] = await Promise.all(
-    socios.map(async (socio) => {
+    [...socios, ...unassignedSocios].map(async (socio) => {
       const [flags, progress] = await Promise.all([
         repo.getFlags(socio.id),
         repo.getSocioProgress(socio.id),
@@ -94,6 +103,7 @@ export default async function SociosPage() {
         curriculumCollectionKey: socio.curriculumCollectionKey ?? null,
         unresolvedRed: unresolved.filter((f) => f.level === 'RED').length,
         unresolvedYellow: unresolved.filter((f) => f.level === 'YELLOW').length,
+        unassignedToMentor: socio.mentorId === null,
       };
     })
   );

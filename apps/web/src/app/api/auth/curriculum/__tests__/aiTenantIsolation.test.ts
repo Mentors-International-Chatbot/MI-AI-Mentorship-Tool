@@ -122,4 +122,36 @@ describe("POST /api/auth/curriculum — AI Essentials tenant isolation", () => {
     expect(mocks.setSocioCurriculum).not.toHaveBeenCalled();
     expect(mocks.enrollmentUpsert).not.toHaveBeenCalled();
   });
+
+  it("lets an unanchored learner join a synthetic publication whose org opts into open enrollment", async () => {
+    mocks.participantFindUnique.mockResolvedValueOnce(null);
+    mocks.programVersionFindMany.mockResolvedValue([{
+      id: "verification-version",
+      programId: "verification-program",
+      metadata: { delivery: { surface: "player", supportedChannels: ["web"] } },
+      program: {
+        organizationId: "verification-org",
+        organization: { settings: { syntheticDataOnly: true, openEnrollment: true } },
+      },
+    }]);
+    mocks.resolveOrganizationForSocio.mockResolvedValue({ organizationId: "verification-org", source: "collection_key" });
+    mocks.createParticipant.mockResolvedValue({ id: "participant-new", organizationId: "verification-org" });
+    mocks.participantFindUnique.mockResolvedValueOnce({ id: "participant-new", organizationId: "verification-org" });
+    mocks.cohortUpsert.mockResolvedValue({ id: "cohort-1", programId: "verification-program" });
+    mocks.enrollmentUpsert.mockResolvedValue({ id: "enrollment-1" });
+    mocks.resolveLearnerHome.mockResolvedValue("/learn/ai-essentials");
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.setSocioCurriculum).toHaveBeenCalledWith("learner-a", "ai-essentials");
+    // The learner is anchored into the course's own org, not a shared or
+    // caller-supplied one — resolveOrganizationForSocio (tier 2, keyed off the
+    // curriculumCollectionKey just written) is the sole source of that org.
+    expect(mocks.createParticipant).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ socioId: "learner-a" }),
+    );
+    expect(mocks.enrollmentUpsert).toHaveBeenCalled();
+  });
 });

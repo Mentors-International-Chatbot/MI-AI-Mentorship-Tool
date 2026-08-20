@@ -170,6 +170,11 @@ export function SocioListTable({
                 <Link href={`/dashboard/learners/${row.id}`} className="text-[#1B2A4A] font-medium hover:underline">
                   {row.name || t.noName}
                 </Link>
+                {row.unassignedToMentor && (
+                  <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                    {t.helpRequestUnassigned}
+                  </span>
+                )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">
                 {row.channelType}

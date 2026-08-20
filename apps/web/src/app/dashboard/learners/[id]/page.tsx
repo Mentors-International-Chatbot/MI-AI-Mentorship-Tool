@@ -45,9 +45,25 @@ export default async function SocioDetailPage({
   const socio = await repo.getSocioById(id);
   if (!socio) notFound();
 
-  // Mentors can only view their assigned socios
+  // Mentors can only view their assigned socios, or an unassigned one in their
+  // own organization — unassigned player learners (`/join` signups, LTI
+  // provisioning) never get a `mentorId` and would otherwise be permanently
+  // unreachable. Same posture as `verifyMentorOwnership` and the alerts-page
+  // zone 0 org-wide fallback.
   if (session.role === 'mentor' && socio.mentorId !== session.userId) {
-    notFound();
+    let reachable = false;
+    if (socio.mentorId === null) {
+      const mentorOrgId = await tenantPrismaRepo.getOrganizationIdByMentorId(session.userId);
+      if (mentorOrgId) {
+        try {
+          const { organizationId } = await tenantPrismaRepo.resolveOrganizationForSocio(id);
+          reachable = organizationId === mentorOrgId;
+        } catch {
+          reachable = false;
+        }
+      }
+    }
+    if (!reachable) notFound();
   }
 
   // Collection slugs are only unique within an organization, so the course

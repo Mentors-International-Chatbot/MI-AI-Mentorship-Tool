@@ -127,6 +127,10 @@
 .player-thread { display: grid; gap: .55rem; margin: 0 0 1rem; }
 .player-message { max-width: 82%; padding: .75rem 1rem; border-radius: 14px; background: #dceee9; font-size: .9rem; }
 .player-message.learner { justify-self: end; background: #e6edf4; }
+/* A human mentor's reply must read as a different person arriving, not a
+   restyled AI turn — left border + a warm tint carry that at a glance. */
+.player-message.human-mentor { background: #fff6e0; border-left: 3px solid #d69e2e; }
+.player-message.human-mentor > strong { color: #b7791f; }
 .player-message p { margin: .2rem 0 0; }
 .player-message > strong { color: var(--player-accent); font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; display: block; margin-bottom: .15rem; }
 /* Finished lesson content reads as the page, not as something the tutor said. */
