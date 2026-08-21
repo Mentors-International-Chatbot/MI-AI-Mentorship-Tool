@@ -390,6 +390,25 @@ export interface TenantRepo {
   getEnrollmentsByParticipant(ctx: TenantContext, participantId: string): Promise<Enrollment[]>;
   createEnrollment(ctx: TenantContext, cohortId: string, participantId: string): Promise<Enrollment>;
   updateEnrollmentStatus(ctx: TenantContext, enrollmentId: string, status: Enrollment['status']): Promise<Enrollment>;
+  /**
+   * The single shared entry point for beginning a course. Every live path that
+   * starts a learner on a course (web self-serve selection, LTI launch, and any
+   * future path) must call this rather than writing Enrollment/Cohort rows
+   * itself — see Platform Restructure Phase A, Stage 1 (closes G3: chat-surface
+   * and pbj-basics traffic never wrote live Enrollment rows).
+   *
+   * Idempotent: re-entry for the same (participantId, cohortId) resolves the
+   * existing row via the unique constraint and reactivates it, never creating a
+   * duplicate. When `cohortId` is omitted (self-serve web/whatsapp, which has
+   * no pre-provisioned cohort the way LTI does), a per-program "direct-web"
+   * cohort is found-or-created and used.
+   */
+  resolveOrCreateActiveEnrollment(ctx: TenantContext, input: {
+    participantId: string;
+    programVersionId: string;
+    cohortId?: string;
+    channel: string;
+  }): Promise<Enrollment>;
 
   // ─── Learner Projects ─────────────────────────────────────────────────────
   /** The one current DRAFT/ACTIVE project for an enrollment, if any. */

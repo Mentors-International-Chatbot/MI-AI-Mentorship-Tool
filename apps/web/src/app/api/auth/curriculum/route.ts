@@ -147,12 +147,12 @@ export async function POST(req: NextRequest) {
     let published: Awaited<ReturnType<typeof prisma.programVersion.findFirst>> & {
         program: { organizationId: string; organization: { settings: unknown } };
     } | null = null;
-    let participant = isPlayerCourse
-        ? await prisma.participantProfile.findUnique({
-            where: { socioId: socio.id },
-            select: { id: true, organizationId: true },
-        })
-        : null;
+    // Read unconditionally now: the chat-surface enrollment attempt below also
+    // needs the participant's org to run the same tenant-safe version pick.
+    let participant = await prisma.participantProfile.findUnique({
+        where: { socioId: socio.id },
+        select: { id: true, organizationId: true },
+    });
     if (isPlayerCourse) {
         published = selectPublishedPlayerVersion(candidates, participant?.organizationId);
         if (!published) {
@@ -185,16 +185,47 @@ export async function POST(req: NextRequest) {
             if (participant.organizationId !== published.program.organizationId) {
                 return NextResponse.json({ error: 'Course tenancy does not match learner tenancy' }, { status: 403 });
             }
-            const cohort = await prisma.cohort.upsert({
-                where: { programId_slug: { programId: published.programId, slug: 'direct-web' } },
-                create: { programId: published.programId, programVersionId: published.id, slug: 'direct-web', name: 'Direct web enrollment' },
-                update: { programVersionId: published.id },
+            await tenantPrismaRepo.resolveOrCreateActiveEnrollment(createTenantContext(participant.organizationId), {
+                participantId: participant.id,
+                programVersionId: published.id,
+                channel: 'web',
             });
-            await prisma.enrollment.upsert({
-                where: { participantId_cohortId: { participantId: participant.id, cohortId: cohort.id } },
-                create: { participantId: participant.id, cohortId: cohort.id, programVersionId: published.id, metadata: { channel: 'web' } },
-                update: { programVersionId: published.id, status: 'active' },
-            });
+        }
+    } else if (!isPlayerCourse && candidates.length > 0) {
+        // Chat-surface course (MI2024, pbj-basics): the branch above never runs
+        // for these, which is exactly how G3 happened — this endpoint set
+        // curriculumCollectionKey and anchored a ParticipantProfile, but never
+        // wrote a live Enrollment row, for any chat-surface learner ever.
+        //
+        // Best-effort and fail-open, unlike the player branch above: chat
+        // delivery does not depend on this row to render (resolveLearnerHome
+        // sends surface:"chat" straight to /chat regardless), so a resolution
+        // failure here must not turn an already-working chat selection into a
+        // hard failure. It only needs to happen at all, eventually, for every
+        // learner — which idempotent re-entry on next selection guarantees.
+        try {
+            const chatVersion = selectPublishedPlayerVersion(candidates, participant?.organizationId);
+            if (chatVersion && resolveDelivery(chatVersion.metadata).supportedChannels.includes('web')) {
+                participant ??= await prisma.participantProfile.findUnique({
+                    where: { socioId: socio.id },
+                    select: { id: true, organizationId: true },
+                });
+                if (participant && participant.organizationId === chatVersion.program.organizationId) {
+                    await tenantPrismaRepo.resolveOrCreateActiveEnrollment(createTenantContext(participant.organizationId), {
+                        participantId: participant.id,
+                        programVersionId: chatVersion.id,
+                        channel: 'web',
+                    });
+                }
+            }
+        } catch (error) {
+            await logEvent(
+                'error',
+                'system',
+                `[Curriculum] could not create Enrollment for chat-surface course "${collectionKey}" ` +
+                    `(socio ${socio.id}) — course selection still succeeded; this socio needs backfill.`,
+                { socioId: socio.id, collectionKey, error: error instanceof Error ? error.message : String(error) },
+            );
         }
     }
 

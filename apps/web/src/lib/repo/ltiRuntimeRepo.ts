@@ -17,7 +17,6 @@ export const ltiRuntimeRepo = {
   ltiGradeDelivery: prisma.ltiGradeDelivery,
   socio: prisma.socio,
   participantProfile: prisma.participantProfile,
-  enrollment: prisma.enrollment,
   mentor: prisma.mentor,
   mentorProfile: prisma.mentorProfile,
   milestoneProgress: prisma.milestoneProgress,

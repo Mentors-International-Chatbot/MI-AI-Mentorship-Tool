@@ -21,10 +21,12 @@ const mocks = vi.hoisted(() => ({
   setSocioCurriculum: vi.fn(),
   resolveOrganizationForSocio: vi.fn(),
   createParticipant: vi.fn(),
+  resolveOrCreateActiveEnrollment: vi.fn(),
   preloadCollection: vi.fn(),
   resolveCourseCode: vi.fn(),
   logEvent: vi.fn(),
   programVersionFindMany: vi.fn(),
+  participantFindUnique: vi.fn(),
 }));
 
 vi.mock('@/lib/logging/logger', () => ({
@@ -46,6 +48,7 @@ vi.mock('@/lib/repo/tenantPrismaRepo', () => ({
   tenantPrismaRepo: {
     resolveOrganizationForSocio: mocks.resolveOrganizationForSocio,
     createParticipant: mocks.createParticipant,
+    resolveOrCreateActiveEnrollment: mocks.resolveOrCreateActiveEnrollment,
   },
 }));
 
@@ -59,16 +62,16 @@ vi.mock('@/lib/courses/resolver', () => ({
   getAvailableCourses: () => [],
 }));
 
-// The route now reads published versions for every collection to decide, from
-// delivery metadata rather than the collection key, whether this is a player
-// course that needs a cohort and enrollment. MI is chat: no candidates, so the
-// enrollment path stays skipped exactly as it was.
+// The route reads published versions for every collection to decide, from
+// delivery metadata rather than the collection key, whether a course is
+// player-surface (hard-gated enrollment) or chat-surface (best-effort
+// enrollment — see the "chat-surface enrollment" describe block below). The
+// base beforeEach still defaults to no candidates at all, which is the plain
+// "course has no published version yet" case for every other test in this file.
 vi.mock('@/lib/db', () => ({
   prisma: {
     programVersion: { findMany: mocks.programVersionFindMany },
-    participantProfile: { findUnique: vi.fn() },
-    cohort: { upsert: vi.fn() },
-    enrollment: { upsert: vi.fn() },
+    participantProfile: { findUnique: mocks.participantFindUnique },
   },
 }));
 
@@ -119,6 +122,8 @@ beforeEach(() => {
   mocks.logEvent.mockResolvedValue(undefined);
   // MI has no player-surface published version, so the enrollment path is skipped.
   mocks.programVersionFindMany.mockResolvedValue([]);
+  mocks.participantFindUnique.mockResolvedValue(undefined);
+  mocks.resolveOrCreateActiveEnrollment.mockResolvedValue({ id: 'enrollment-1' });
 });
 
 /** The single logEvent call matching a level, or undefined. */
@@ -300,5 +305,82 @@ describe('POST /api/auth/curriculum — ParticipantProfile creation', () => {
     expect(mocks.setSocioCurriculum).not.toHaveBeenCalled();
     expect(mocks.resolveOrganizationForSocio).not.toHaveBeenCalled();
     expect(mocks.createParticipant).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * G3 closure: chat-surface courses (MI2024, pbj-basics) used to skip
+ * enrollment creation entirely — only the `isPlayerCourse` branch ever wrote
+ * one. This is the regression guard for the fix: any collection whose
+ * published version resolves to a real, tenant-matched candidate now also
+ * gets a best-effort Enrollment through the same shared repo method the
+ * player branch uses, whether or not its delivery surface is "player".
+ */
+describe('POST /api/auth/curriculum — chat-surface enrollment (G3)', () => {
+  it('creates an enrollment for a chat-surface course through the shared repo method', async () => {
+    mocks.resolveOrganizationForSocio.mockResolvedValue({
+      organizationId: ORG_ID,
+      source: 'collection_key',
+    });
+    mocks.participantFindUnique.mockResolvedValue({ id: 'participant-chat', organizationId: ORG_ID });
+    mocks.programVersionFindMany.mockResolvedValue([{
+      id: 'chat-version-1',
+      programId: 'chat-program-1',
+      // No `delivery` metadata at all resolves to the legacy chat default
+      // (surface: "chat", supportedChannels: ["web", "whatsapp"]) — this is
+      // MI2024's real shape.
+      metadata: null,
+      program: { organizationId: ORG_ID, organization: { settings: null } },
+    }]);
+
+    const res = await POST(postRequest());
+
+    expect(res.status).toBe(200);
+    expect(mocks.resolveOrCreateActiveEnrollment).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: ORG_ID }),
+      expect.objectContaining({
+        participantId: 'participant-chat',
+        programVersionId: 'chat-version-1',
+        channel: 'web',
+      }),
+    );
+  });
+
+  it('fails open: an enrollment error still returns success and logs, chat is unaffected', async () => {
+    mocks.resolveOrganizationForSocio.mockResolvedValue({
+      organizationId: ORG_ID,
+      source: 'collection_key',
+    });
+    mocks.participantFindUnique.mockResolvedValue({ id: 'participant-chat', organizationId: ORG_ID });
+    mocks.programVersionFindMany.mockResolvedValue([{
+      id: 'chat-version-1',
+      programId: 'chat-program-1',
+      metadata: null,
+      program: { organizationId: ORG_ID, organization: { settings: null } },
+    }]);
+    mocks.resolveOrCreateActiveEnrollment.mockRejectedValue(new Error('db blew up'));
+
+    const res = await POST(postRequest());
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(
+      expect.objectContaining({ success: true, collectionKey: COLLECTION_KEY, homePath: '/chat' }),
+    );
+    const logged = loggedAt('error');
+    expect(logged).toBeDefined();
+    expect(logged!.message).toContain('Enrollment');
+  });
+
+  it('does not attempt enrollment when no published version exists for the collection', async () => {
+    mocks.resolveOrganizationForSocio.mockResolvedValue({
+      organizationId: ORG_ID,
+      source: 'collection_key',
+    });
+    mocks.programVersionFindMany.mockResolvedValue([]);
+
+    const res = await POST(postRequest());
+
+    expect(res.status).toBe(200);
+    expect(mocks.resolveOrCreateActiveEnrollment).not.toHaveBeenCalled();
   });
 });

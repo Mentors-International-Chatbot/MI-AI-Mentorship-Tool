@@ -1164,6 +1164,57 @@ export const tenantPrismaRepo: TenantRepo = {
     return toEnrollment(enrollment);
   },
 
+  async resolveOrCreateActiveEnrollment(ctx, { participantId, programVersionId, cohortId, channel }) {
+    await verifyParticipantOwnership(ctx, participantId);
+
+    const version = await prisma.programVersion.findUnique({
+      where: { id: programVersionId },
+      select: { programId: true, program: { select: { organizationId: true } } },
+    });
+    if (!version) {
+      throw new TenantIsolationError('ProgramVersion not found', {
+        requestedOrgId: ctx.organizationId,
+        resourceType: 'ProgramVersion',
+        resourceId: programVersionId,
+      });
+    }
+    if (version.program.organizationId !== ctx.organizationId) {
+      throw new TenantIsolationError('Cross-tenant access denied', {
+        requestedOrgId: ctx.organizationId,
+        actualOrgId: version.program.organizationId,
+        resourceType: 'ProgramVersion',
+        resourceId: programVersionId,
+      });
+    }
+
+    let resolvedCohortId = cohortId;
+    if (resolvedCohortId) {
+      await verifyCohortOwnership(ctx, resolvedCohortId);
+    } else {
+      // Self-serve web/WhatsApp course selection has no pre-provisioned
+      // cohort the way an LTI launch does (context.cohortId). One
+      // find-or-create cohort per program holds every self-serve learner,
+      // matching the convention `POST /api/auth/curriculum` used before this
+      // method existed.
+      const cohort = await prisma.cohort.upsert({
+        where: { programId_slug: { programId: version.programId, slug: 'direct-web' } },
+        create: { programId: version.programId, programVersionId, slug: 'direct-web', name: 'Direct enrollment' },
+        update: { programVersionId },
+      });
+      resolvedCohortId = cohort.id;
+    }
+
+    // Upsert on the (participantId, cohortId) unique constraint is what makes
+    // this idempotent: re-entry for the same learner+cohort always resolves
+    // the same row and reactivates it rather than minting a duplicate.
+    const enrollment = await prisma.enrollment.upsert({
+      where: { participantId_cohortId: { participantId, cohortId: resolvedCohortId } },
+      create: { participantId, cohortId: resolvedCohortId, programVersionId, status: 'active', metadata: { channel } },
+      update: { programVersionId, status: 'active' },
+    });
+    return toEnrollment(enrollment);
+  },
+
   // ─── Learner Projects ─────────────────────────────────────────────────────
   async getCurrentLearnerProject(ctx, enrollmentId) {
     const owner = await verifyLearnerProjectEnrollmentOwnership(ctx, enrollmentId);

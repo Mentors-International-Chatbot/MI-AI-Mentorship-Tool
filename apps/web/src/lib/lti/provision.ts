@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { ltiRuntimeRepo } from "@/lib/repo/ltiRuntimeRepo";
+import { tenantPrismaRepo } from "@/lib/repo/tenantPrismaRepo";
+import { createTenantContext } from "@/lib/repo/tenantContext";
 import { hashBearerToken } from "@/lib/auth/requestIdentity";
 
 type LaunchClaims = Record<string, unknown>;
@@ -35,10 +37,14 @@ export async function provisionLaunch(params: {
     const participant = existingParticipant ?? await ltiRuntimeRepo.participantProfile.create({
       data: { organizationId: context.organizationId, socioId, displayName, preferredLang: String(claims.locale ?? "en").split(/[-_]/)[0] },
     });
-    await ltiRuntimeRepo.enrollment.upsert({
-      where: { participantId_cohortId: { participantId: participant.id, cohortId: context.cohortId } },
-      create: { participantId: participant.id, cohortId: context.cohortId, programVersionId: context.programVersionId, metadata: { channel: "canvas" } },
-      update: { status: "active", programVersionId: context.programVersionId },
+    // Same shared creation path as web self-serve selection
+    // (resolveOrCreateActiveEnrollment) — see Platform Restructure Phase A,
+    // Stage 1. LTI supplies a pre-provisioned cohortId, unlike self-serve.
+    await tenantPrismaRepo.resolveOrCreateActiveEnrollment(createTenantContext(context.organizationId), {
+      participantId: participant.id,
+      programVersionId: context.programVersionId,
+      cohortId: context.cohortId,
+      channel: "canvas",
     });
   }
   if (instructorRole(roles) && !identity.mentorId) {

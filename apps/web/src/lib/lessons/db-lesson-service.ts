@@ -111,8 +111,11 @@ function keyToLessonNumber(key: string, fallbackIndex: number): number {
 
 /**
  * Transforms PackageLesson (DB format) to LessonData (legacy format).
+ *
+ * Exported so `__tests__/transformToLessonData.test.ts` can pin its output
+ * for the frozen MI2024 surface — see Platform Restructure Phase A, Stage 1.
  */
-function transformToLessonData(pkg: PackageLesson, orderIndex: number): LessonData {
+export function transformToLessonData(pkg: PackageLesson, orderIndex: number): LessonData {
   const lessonNumber = keyToLessonNumber(pkg.key, orderIndex);
 
   // Sort all blocks by order first

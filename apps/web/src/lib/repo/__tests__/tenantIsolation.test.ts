@@ -46,12 +46,14 @@ const mockPrisma = vi.hoisted(() => ({
     findUnique: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    upsert: vi.fn(),
   },
   enrollment: {
     findMany: vi.fn(),
     findUnique: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    upsert: vi.fn(),
   },
   enrollmentInvitation: {
     findUnique: vi.fn(),
@@ -579,6 +581,169 @@ describe('Create with Cross-Tenant References', () => {
     ).rejects.toThrow(TenantIsolationError);
 
     expect(mockPrisma.alertRule.create).not.toHaveBeenCalled();
+  });
+});
+
+// Platform Restructure Phase A, Stage 1: the single shared entry point every
+// course-start path (web self-serve selection, LTI launch) must call rather
+// than writing Enrollment/Cohort rows itself.
+describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () => {
+  const PROGRAM_VERSION_A_ID = 'pver-a-uuid-0000-0000-000000000001';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('BLOCKS: Org A context resolving enrollment against a Org B ProgramVersion', async () => {
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({
+      id: PARTICIPANT_A_ID,
+      organizationId: ORG_A_ID,
+    });
+    mockPrisma.programVersion.findUnique.mockResolvedValue({
+      programId: PROGRAM_B_ID,
+      program: { organizationId: ORG_B_ID },
+    });
+
+    await expect(
+      tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, {
+        participantId: PARTICIPANT_A_ID,
+        programVersionId: PROGRAM_VERSION_A_ID,
+        channel: 'web',
+      })
+    ).rejects.toThrow(TenantIsolationError);
+
+    expect(mockPrisma.enrollment.upsert).not.toHaveBeenCalled();
+  });
+
+  it('BLOCKS: Org A context resolving enrollment for a Org B participant', async () => {
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({
+      id: PARTICIPANT_B_ID,
+      organizationId: ORG_B_ID,
+    });
+
+    await expect(
+      tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, {
+        participantId: PARTICIPANT_B_ID,
+        programVersionId: PROGRAM_VERSION_A_ID,
+        channel: 'web',
+      })
+    ).rejects.toThrow(TenantIsolationError);
+
+    expect(mockPrisma.enrollment.upsert).not.toHaveBeenCalled();
+  });
+
+  it('BLOCKS: a caller-supplied cohortId belonging to another org, even with a matching participant/version', async () => {
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({
+      id: PARTICIPANT_A_ID,
+      organizationId: ORG_A_ID,
+    });
+    mockPrisma.programVersion.findUnique.mockResolvedValue({
+      programId: PROGRAM_A_ID,
+      program: { organizationId: ORG_A_ID },
+    });
+    mockPrisma.cohort.findUnique.mockResolvedValue({
+      id: COHORT_B_ID,
+      program: { organizationId: ORG_B_ID },
+    });
+
+    await expect(
+      tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, {
+        participantId: PARTICIPANT_A_ID,
+        programVersionId: PROGRAM_VERSION_A_ID,
+        cohortId: COHORT_B_ID,
+        channel: 'canvas',
+      })
+    ).rejects.toThrow(TenantIsolationError);
+
+    expect(mockPrisma.enrollment.upsert).not.toHaveBeenCalled();
+  });
+
+  it('ALLOWS: creates a "direct-web" cohort and an active enrollment when no cohortId is supplied', async () => {
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({
+      id: PARTICIPANT_A_ID,
+      organizationId: ORG_A_ID,
+    });
+    mockPrisma.programVersion.findUnique.mockResolvedValue({
+      programId: PROGRAM_A_ID,
+      program: { organizationId: ORG_A_ID },
+    });
+    mockPrisma.cohort.upsert.mockResolvedValue({ id: COHORT_A_ID, programId: PROGRAM_A_ID, slug: 'direct-web' });
+    mockPrisma.enrollment.upsert.mockResolvedValue({
+      id: ENROLLMENT_A_ID,
+      participantId: PARTICIPANT_A_ID,
+      cohortId: COHORT_A_ID,
+      programVersionId: PROGRAM_VERSION_A_ID,
+      status: 'active',
+      enrolledAt: new Date(),
+      completedAt: null,
+      projectSelectionGrandfatheredAt: null,
+      metadata: { channel: 'web' },
+    });
+
+    const result = await tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, {
+      participantId: PARTICIPANT_A_ID,
+      programVersionId: PROGRAM_VERSION_A_ID,
+      channel: 'web',
+    });
+
+    expect(mockPrisma.cohort.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { programId_slug: { programId: PROGRAM_A_ID, slug: 'direct-web' } },
+      }),
+    );
+    expect(mockPrisma.enrollment.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { participantId_cohortId: { participantId: PARTICIPANT_A_ID, cohortId: COHORT_A_ID } },
+      }),
+    );
+    expect(result.status).toBe('active');
+  });
+
+  it('IDEMPOTENT: re-entry for the same participant+cohort resolves the existing row rather than creating a duplicate', async () => {
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({
+      id: PARTICIPANT_A_ID,
+      organizationId: ORG_A_ID,
+    });
+    mockPrisma.programVersion.findUnique.mockResolvedValue({
+      programId: PROGRAM_A_ID,
+      program: { organizationId: ORG_A_ID },
+    });
+    mockPrisma.cohort.findUnique.mockResolvedValue({
+      id: COHORT_A_ID,
+      program: { organizationId: ORG_A_ID },
+    });
+    mockPrisma.enrollment.upsert.mockResolvedValue({
+      id: ENROLLMENT_A_ID,
+      participantId: PARTICIPANT_A_ID,
+      cohortId: COHORT_A_ID,
+      programVersionId: PROGRAM_VERSION_A_ID,
+      status: 'active',
+      enrolledAt: new Date(),
+      completedAt: null,
+      projectSelectionGrandfatheredAt: null,
+      metadata: { channel: 'canvas' },
+    });
+
+    const params = {
+      participantId: PARTICIPANT_A_ID,
+      programVersionId: PROGRAM_VERSION_A_ID,
+      cohortId: COHORT_A_ID,
+      channel: 'canvas',
+    };
+    const first = await tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, params);
+    const second = await tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, params);
+
+    // No ad-hoc cohort creation when a cohortId is supplied — LTI's
+    // pre-provisioned cohort is used as-is, never re-upserted.
+    expect(mockPrisma.cohort.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.enrollment.upsert).toHaveBeenCalledTimes(2);
+    expect(first.id).toBe(second.id);
+    // Every call targets the same unique (participantId, cohortId) key —
+    // this is what makes upsert resolve the existing row instead of
+    // minting a duplicate.
+    for (const call of mockPrisma.enrollment.upsert.mock.calls) {
+      expect(call[0].where).toEqual({ participantId_cohortId: { participantId: PARTICIPANT_A_ID, cohortId: COHORT_A_ID } });
+    }
   });
 });
 

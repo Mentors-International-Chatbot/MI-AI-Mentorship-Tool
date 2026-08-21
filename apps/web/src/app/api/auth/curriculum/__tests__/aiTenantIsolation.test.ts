@@ -7,10 +7,9 @@ const mocks = vi.hoisted(() => ({
   setSocioCurriculum: vi.fn(),
   participantFindUnique: vi.fn(),
   programVersionFindMany: vi.fn(),
-  cohortUpsert: vi.fn(),
-  enrollmentUpsert: vi.fn(),
   createParticipant: vi.fn(),
   resolveOrganizationForSocio: vi.fn(),
+  resolveOrCreateActiveEnrollment: vi.fn(),
   preloadCollection: vi.fn(),
   resolveLearnerHome: vi.fn(),
   logEvent: vi.fn(),
@@ -24,15 +23,17 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     participantProfile: { findUnique: mocks.participantFindUnique },
     programVersion: { findMany: mocks.programVersionFindMany },
-    cohort: { upsert: mocks.cohortUpsert },
-    enrollment: { upsert: mocks.enrollmentUpsert },
   },
 }));
 vi.mock("@/lib/repo/tenantPrismaRepo", () => ({
   tenantPrismaRepo: {
     createParticipant: mocks.createParticipant,
     resolveOrganizationForSocio: mocks.resolveOrganizationForSocio,
+    resolveOrCreateActiveEnrollment: mocks.resolveOrCreateActiveEnrollment,
   },
+}));
+vi.mock("@/lib/repo/tenantContext", () => ({
+  createTenantContext: (organizationId: string) => ({ organizationId }),
 }));
 vi.mock("@/lib/lessons/db-lesson-service", () => ({
   preloadCollection: mocks.preloadCollection,
@@ -100,8 +101,7 @@ describe("POST /api/auth/curriculum — AI Essentials tenant isolation", () => {
     });
     expect(mocks.setSocioCurriculum).not.toHaveBeenCalled();
     expect(mocks.createParticipant).not.toHaveBeenCalled();
-    expect(mocks.cohortUpsert).not.toHaveBeenCalled();
-    expect(mocks.enrollmentUpsert).not.toHaveBeenCalled();
+    expect(mocks.resolveOrCreateActiveEnrollment).not.toHaveBeenCalled();
   });
 
   it("does not expose a synthetic publication to an unanchored learner", async () => {
@@ -120,7 +120,7 @@ describe("POST /api/auth/curriculum — AI Essentials tenant isolation", () => {
 
     expect(response.status).toBe(409);
     expect(mocks.setSocioCurriculum).not.toHaveBeenCalled();
-    expect(mocks.enrollmentUpsert).not.toHaveBeenCalled();
+    expect(mocks.resolveOrCreateActiveEnrollment).not.toHaveBeenCalled();
   });
 
   it("lets an unanchored learner join a synthetic publication whose org opts into open enrollment", async () => {
@@ -137,8 +137,7 @@ describe("POST /api/auth/curriculum — AI Essentials tenant isolation", () => {
     mocks.resolveOrganizationForSocio.mockResolvedValue({ organizationId: "verification-org", source: "collection_key" });
     mocks.createParticipant.mockResolvedValue({ id: "participant-new", organizationId: "verification-org" });
     mocks.participantFindUnique.mockResolvedValueOnce({ id: "participant-new", organizationId: "verification-org" });
-    mocks.cohortUpsert.mockResolvedValue({ id: "cohort-1", programId: "verification-program" });
-    mocks.enrollmentUpsert.mockResolvedValue({ id: "enrollment-1" });
+    mocks.resolveOrCreateActiveEnrollment.mockResolvedValue({ id: "enrollment-1" });
     mocks.resolveLearnerHome.mockResolvedValue("/learn/ai-essentials");
 
     const response = await POST(request());
@@ -152,6 +151,13 @@ describe("POST /api/auth/curriculum — AI Essentials tenant isolation", () => {
       expect.anything(),
       expect.objectContaining({ socioId: "learner-a" }),
     );
-    expect(mocks.enrollmentUpsert).toHaveBeenCalled();
+    expect(mocks.resolveOrCreateActiveEnrollment).toHaveBeenCalledWith(
+      { organizationId: "verification-org" },
+      expect.objectContaining({
+        participantId: "participant-new",
+        programVersionId: "verification-version",
+        channel: "web",
+      }),
+    );
   });
 });
