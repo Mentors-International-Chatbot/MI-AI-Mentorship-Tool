@@ -294,13 +294,7 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
     passingOverride: passingSchema.partial().optional(), // per-block tweak of config.assessment.passing
   }),
 
-  /**
-   * An inline quiz checkpoint. RESERVED for V2 delivery — present now so
-   * cartridges are forward-compatible and authors can place/order it today;
-   * the V1 runtime does not grade or gate on it yet. The validator may warn
-   * that a defined quiz_checkpoint won't run until V2, but placement and
-   * ordering are still meaningful and preserved on import.
-   */
+  /** An inline quiz checkpoint, rendered and graded by the player with retry. */
   z.object({
     ...blockBase,
     blockType: z.literal("quiz_checkpoint"),
