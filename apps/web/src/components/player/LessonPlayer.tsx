@@ -20,7 +20,13 @@ type Teach = BlockBase & { blockType: "teach"; content: string; expectsResponse?
 type Quiz = BlockBase & { blockType: "quiz_checkpoint"; title?: string; questions: Array<{ id: string; prompt: string; options?: string[]; graded: boolean }> };
 type Drag = BlockBase & { blockType: "drag_order"; prompt: string; items: string[] };
 type TeachBack = BlockBase & { blockType: "teach_back"; prompt: string };
-type Block = Teach | Quiz | Drag | TeachBack | BlockBase;
+type Media = BlockBase & { blockType: "media"; kind: string; config: Record<string, unknown>; caption?: string };
+type ResourceValue =
+  | { type: "weblink"; url: string; label: string; description?: string }
+  | { type: "textbook_reference"; title?: string; isbn?: string; chapter?: string; page?: string; callout?: string }
+  | { type: "mcp_connector"; connector: string; context?: string };
+type Resource = BlockBase & { blockType: "resource"; resource: ResourceValue };
+type Block = Teach | Quiz | Drag | TeachBack | Media | Resource | BlockBase;
 type ProgressItem = { blockId: string; completedAt: string | null; state?: { turnCount?: number; reviewPending?: boolean }; feedback?: unknown };
 type LessonDto = {
   lesson: { key: string; title: string; category?: string; keyConcepts: string[]; blocks: Block[] };
@@ -57,7 +63,7 @@ const TUTOR_CHIPS = ["Give me an example", "Can you rephrase that?"] as const;
  * could rewrite it.
  */
 type ThreadItem =
-  | { kind: "block"; key: string; content: string }
+  | { kind: "block"; key: string; content: string; externalLinks?: boolean }
   | { kind: "prompt"; key: string; content: string }
   | {
       kind: "tutor";
@@ -137,14 +143,70 @@ export function hydrateBlockProgress(progress: ProgressItem[]) {
   return { completed, submittedComplete, feedback };
 }
 
-function historyContent(block: Block): string | null {
+export function historyContent(block: Block): string | null {
   if (block.blockType === "teach") return (block as Teach).content;
   if (block.blockType === "teach_back") return (block as TeachBack).prompt;
   if (block.blockType === "drag_order") return (block as Drag).prompt;
   if (block.blockType === "quiz_checkpoint") {
     return (block as Quiz).questions.map((question) => `**${question.prompt}**`).join("\n\n");
   }
+  if (block.blockType === "media") {
+    const media = block as Media;
+    return [media.kind, media.caption].filter((value): value is string => value !== undefined).join("\n\n");
+  }
+  if (block.blockType === "resource") {
+    const resource = (block as Resource).resource;
+    if (resource.type === "weblink") {
+      return [resource.label, resource.description, `[${resource.label}](${resource.url})`]
+        .filter((value): value is string => value !== undefined)
+        .join("\n\n");
+    }
+    if (resource.type === "textbook_reference") {
+      return [resource.title, resource.isbn, resource.chapter, resource.page, resource.callout]
+        .filter((value): value is string => value !== undefined)
+        .join("\n\n");
+    }
+    return [resource.connector, resource.context]
+      .filter((value): value is string => value !== undefined)
+      .join("\n\n");
+  }
   return null;
+}
+
+function MediaBlock({ block }: { block: Media }) {
+  const kind = block.kind.trim() || "media";
+  return <>
+    <h2>{kind}</h2>
+    {block.caption && <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.caption}</ReactMarkdown>}
+    <p className="player-teachback-hint">This {kind} does not have an in-player preview yet.</p>
+  </>;
+}
+
+function ResourceBlock({ block }: { block: Resource }) {
+  const resource = block.resource;
+  if (resource.type === "weblink") {
+    return <>
+      <h2>{resource.label}</h2>
+      {resource.description && <ReactMarkdown remarkPlugins={[remarkGfm]}>{resource.description}</ReactMarkdown>}
+      <p><a href={resource.url} target="_blank" rel="noopener noreferrer">Open resource</a></p>
+    </>;
+  }
+  if (resource.type === "textbook_reference") {
+    return <>
+      <h2>{resource.title ?? "Textbook reference"}</h2>
+      {(resource.isbn || resource.chapter || resource.page) && <dl>
+        {resource.isbn && <><dt>ISBN</dt><dd>{resource.isbn}</dd></>}
+        {resource.chapter && <><dt>Chapter</dt><dd>{resource.chapter}</dd></>}
+        {resource.page && <><dt>Page</dt><dd>{resource.page}</dd></>}
+      </dl>}
+      {resource.callout && <ReactMarkdown remarkPlugins={[remarkGfm]}>{resource.callout}</ReactMarkdown>}
+    </>;
+  }
+  return <>
+    <h2>Connected resource</h2>
+    {resource.context && <ReactMarkdown remarkPlugins={[remarkGfm]}>{resource.context}</ReactMarkdown>}
+    <p className="player-teachback-hint">Connector: {resource.connector}</p>
+  </>;
 }
 
 export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey: string }) {
@@ -434,7 +496,12 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       if (!isDone && !isCurrent) break;
       if (isDone) {
         const history = historyContent(block);
-        if (history) items.push({ kind: "block", key: block.id, content: history });
+        if (history) items.push({
+          kind: "block",
+          key: block.id,
+          content: history,
+          externalLinks: block.blockType === "resource" && (block as Resource).resource.type === "weblink",
+        });
       }
       // An authored transition into this block, so a quiz that follows a
       // conversation arrives as part of the flow instead of materializing
@@ -568,7 +635,12 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           }
           return <div key={item.key} className={`player-message lesson ${item.kind === "prompt" ? "is-prompt" : ""}`}>
             <strong>{item.kind === "prompt" ? "AI Mentor" : "Lesson"}</strong>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={item.kind === "block" && item.externalLinks
+                ? { a: ({ node, ...props }) => { void node; return <a {...props} target="_blank" rel="noopener noreferrer" />; } }
+                : undefined}
+            >{item.content}</ReactMarkdown>
           </div>;
         })}
 
@@ -611,6 +683,8 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           <button disabled={busy || (current as Quiz).questions.some((q) => !answers[q.id])} onClick={() => advance(answers)}>{feedbackAllowsRetry(feedback[current.id]) ? "Try again" : (current as Quiz).questions.some((q) => q.graded) ? "Submit answer" : "Continue"}</button>
         </>}
         {current.blockType === "drag_order" && !submittedComplete.has(current.id) && <><h2>{(current as Drag).prompt}</h2><DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={order} strategy={verticalListSortingStrategy}><ol className="player-sort-list">{order.map((item, index) => <SortableOrderItem key={item} id={item} label={(current as Drag).items[item]} position={index} />)}</ol></SortableContext></DndContext><button disabled={busy} onClick={() => advance(order)}>Check order</button></>}
+        {current.blockType === "media" && !submittedComplete.has(current.id) && <><MediaBlock block={current as Media} /><button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button></>}
+        {current.blockType === "resource" && !submittedComplete.has(current.id) && <><ResourceBlock block={current as Resource} /><button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button></>}
         {/* The prompt is derived into the thread above, verbatim from the block
             body, and answered in the single input below. This card keeps only
             the heading, so the block still reads as a step. */}
