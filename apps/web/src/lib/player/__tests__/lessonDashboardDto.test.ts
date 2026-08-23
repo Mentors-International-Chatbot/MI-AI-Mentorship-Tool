@@ -151,12 +151,19 @@ describe("getLessonDto — learner with an active project", () => {
     );
   });
 
-  it("scopes progress reads to this learner and collection", async () => {
+  it("scopes progress reads to this learner's enrollment, not the collection at large", async () => {
+    // A.6.1 addendum: was socioId+collectionKey, which would have carried an
+    // archived enrollment's completed milestones into a fresh retake's
+    // dashboard. enrollmentId is strictly narrower — it still protects the
+    // original intent here (this learner's dashboard cannot be built from
+    // another socio's progress, since a socio's enrollments are never
+    // shared) while also isolating one enrollment from another of the same
+    // socio's in the same collection.
     await getLessonDto(access({ projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
 
     expect(mocks.milestoneProgressFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { socioId: "socio-a", collectionKey: "ai-essentials" },
+        where: { enrollmentId: "enrollment-a" },
         select: { milestoneKey: true },
       }),
     );

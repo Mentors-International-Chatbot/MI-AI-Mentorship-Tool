@@ -188,7 +188,7 @@ export async function playerTutorGrounding(socioId: string, context: ValidatedPl
   if (context.intent === "capstone" || (context.intent === "expand" && context.parentIntent === "capstone")) {
     const config = programVersionConfigSchema.parse(version.config);
     if (!config.outcome) return "Capstone: {}";
-    const currentMilestoneKeys = await playerMilestoneAvailabilitySnapshot(socioId, {
+    const currentMilestoneKeys = await playerMilestoneAvailabilitySnapshot({
       ...context,
       intent: "capstone",
       parentIntent: undefined,
@@ -276,7 +276,7 @@ export async function preparePlayerContext(
   if (!block) throw new PlayerError(404, "block_not_found", "Block not found");
   if (input.intent === "teach_back" && block.blockType !== "teach_back") throw new PlayerError(400, "invalid_context", "The selected block is not a teach-back");
   const existing = await playerRuntimeRepo.blockProgress.findUnique({
-    where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey: input.lessonKey, blockId: input.blockId } },
+    where: { enrollmentId_lessonKey_blockId: { enrollmentId: access.enrollmentId, lessonKey: input.lessonKey, blockId: input.blockId } },
   });
   const state = existing?.contentVersion === block.contentVersion && existing.state && typeof existing.state === "object" && !Array.isArray(existing.state)
     ? existing.state as { turnCount?: unknown } : {};
@@ -299,11 +299,14 @@ export async function recordPlayerTutorSuccess(socioId: string, context: Validat
     ...(completedAt ? { reviewPending: true } : {}),
   };
   await playerRuntimeRepo.blockProgress.upsert({
-    where: { socioId_collectionKey_lessonKey_blockId: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, blockId: context.blockId } },
+    where: { enrollmentId_lessonKey_blockId: { enrollmentId: context.enrollmentId, lessonKey: context.lessonKey, blockId: context.blockId } },
     // enrollmentId set only on create, never on update — see the doc comment
     // on BlockProgress.collectionKey (A.4): the row is pinned to whichever
     // enrollment first wrote it.
-    create: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, blockId: context.blockId, contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state, enrollmentId: context.enrollmentId },
+    // A.6 closing cleanup: socioId/collectionKey no longer populated here —
+    // this write's own reads (A.6.1's addendum) already moved to
+    // enrollmentId, so the columns would just be dead weight on new rows.
+    create: { lessonKey: context.lessonKey, blockId: context.blockId, contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state, enrollmentId: context.enrollmentId },
     update: { contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state },
   });
   if (context.teachBackTurn === 2) {
@@ -315,7 +318,7 @@ export async function recordPlayerTutorSuccess(socioId: string, context: Validat
     const index = rows.findIndex((row) => row.slug === context.lessonKey);
     const body = index >= 0 && rows[index].versions[0] ? lessonSchema.safeParse(rows[index].versions[0].body) : null;
     if (body?.success) {
-      const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, completedAt: { not: null } } });
+      const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: context.enrollmentId, lessonKey: context.lessonKey, completedAt: { not: null } } });
       const lessonComplete = body.data.blocks.every((block) => progress.some((item) => item.blockId === block.id && item.contentVersion === block.contentVersion));
       if (lessonComplete) await playerRuntimeRepo.lessonProgress.upsert({ where: { socioId_lessonNumber: { socioId, lessonNumber: index + 1 } }, create: { socioId, lessonNumber: index + 1, completedAt: new Date() }, update: { completedAt: new Date() } });
     }
@@ -347,8 +350,11 @@ async function getLessonDashboard(
     const project = await getCurrentLearnerProject(access);
     if (!project) return null;
 
+    // A.6.1 addendum: enrollment-scoped, not socioId+collectionKey — a
+    // retake must not show the dashboard as already complete from the
+    // archived enrollment's rows.
     const blockProgress = await playerRuntimeRepo.blockProgress.findMany({
-      where: { socioId: access.socioId, collectionKey: access.collectionKey },
+      where: { enrollmentId: access.enrollmentId },
     });
     const lessons = rows.map((row) => {
       const parsed = row.versions[0] ? lessonSchema.safeParse(row.versions[0].body) : null;
@@ -372,7 +378,7 @@ async function getLessonDashboard(
     if (outcome) {
       const reached = new Set(
         (await playerRuntimeRepo.milestoneProgress.findMany({
-          where: { socioId: access.socioId, collectionKey: access.collectionKey },
+          where: { enrollmentId: access.enrollmentId },
           select: { milestoneKey: true },
         })).map((item) => item.milestoneKey),
       );
@@ -453,7 +459,7 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
   if (index < 0 || !rows[index].versions[0]) throw new PlayerError(404, "lesson_not_found", "Lesson not found");
   const lesson = lessonSchema.parse(rows[index].versions[0].body);
   const progress = await playerRuntimeRepo.blockProgress.findMany({
-    where: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey },
+    where: { enrollmentId: access.enrollmentId, lessonKey },
   });
   const progressById = new Map(progress.map((item) => [item.blockId, item]));
   const dashboard = await getLessonDashboard(access, rows);
@@ -622,7 +628,7 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
   const block = lesson.blocks.find((item) => item.id === blockId);
   if (!block) throw new PlayerError(404, "block_not_found", "Block not found");
   const existing = await playerRuntimeRepo.blockProgress.findUnique({
-    where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
+    where: { enrollmentId_lessonKey_blockId: { enrollmentId: access.enrollmentId, lessonKey, blockId } },
   });
   if (options.acknowledgeReview) {
     if (existing?.contentVersion !== block.contentVersion || !existing.completedAt) {
@@ -645,7 +651,7 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
     // limit and shows the key. Legacy rows carry no attempt count; they are
     // complete, which is the only fact that matters here.
     const existingGrade = gradePlayerBlock(block, existing.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT));
-    const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey } });
+    const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: access.enrollmentId, lessonKey } });
     const lessonComplete = lesson.blocks.every((item) => progress.some((entry) => entry.blockId === item.id && entry.contentVersion === item.contentVersion && entry.completedAt));
     return {
       blockId,
@@ -672,13 +678,14 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
   const savedState = Object.keys(state).length > 0 ? state : undefined;
   const now = new Date();
   await playerRuntimeRepo.blockProgress.upsert({
-    where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
+    where: { enrollmentId_lessonKey_blockId: { enrollmentId: access.enrollmentId, lessonKey, blockId } },
     // enrollmentId set only on create, never on update — see A.4 note above.
-    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: savedState, enrollmentId: access.enrollmentId },
+    // A.6 closing cleanup: see recordPlayerTutorSuccess's identical note above.
+    create: { lessonKey, blockId, contentVersion: block.contentVersion, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: savedState, enrollmentId: access.enrollmentId },
     update: { contentVersion: block.contentVersion, startedAt: now, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: savedState },
   });
 
-  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey } });
+  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: access.enrollmentId, lessonKey } });
   const completeIds = new Set(progress.filter((item) => item.completedAt && lesson.blocks.some((blockItem) => blockItem.id === item.blockId && blockItem.contentVersion === item.contentVersion)).map((item) => item.blockId));
   const lessonComplete = lesson.blocks.every((item) => completeIds.has(item.id));
   if (lessonComplete) {
@@ -693,8 +700,8 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
 
 export async function getCourseProgress(access: PlayerAccess) {
   const rows = await lessonRows(access);
-  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId: access.socioId, collectionKey: access.collectionKey } });
-  const milestones = await playerRuntimeRepo.milestoneProgress.findMany({ where: { socioId: access.socioId, collectionKey: access.collectionKey }, orderBy: { reachedAt: "asc" } });
+  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: access.enrollmentId } });
+  const milestones = await playerRuntimeRepo.milestoneProgress.findMany({ where: { enrollmentId: access.enrollmentId }, orderBy: { reachedAt: "asc" } });
   return {
     lessons: rows.map((row) => {
       const lesson = row.versions[0] ? lessonSchema.parse(row.versions[0].body) : null;
@@ -744,7 +751,7 @@ export function milestoneStates(
 }
 
 /** One pre-response snapshot prevents marker N from unlocking marker N+1 in the same model reply. */
-export async function playerMilestoneAvailabilitySnapshot(socioId: string, context: ValidatedPlayerContext): Promise<ReadonlySet<string>> {
+export async function playerMilestoneAvailabilitySnapshot(context: ValidatedPlayerContext): Promise<ReadonlySet<string>> {
   if (context.intent !== "capstone") return new Set();
   const version = await playerRuntimeRepo.programVersion.findUnique({ where: { id: context.programVersionId }, select: { version: true, config: true } });
   if (!version) return new Set();
@@ -756,8 +763,8 @@ export async function playerMilestoneAvailabilitySnapshot(socioId: string, conte
     include: { versions: { where: { version: version.version }, take: 1 } },
   });
   const [progress, milestoneProgress] = await Promise.all([
-    playerRuntimeRepo.blockProgress.findMany({ where: { socioId, collectionKey: context.collectionKey, completedAt: { not: null } } }),
-    playerRuntimeRepo.milestoneProgress.findMany({ where: { socioId, collectionKey: context.collectionKey } }),
+    playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: context.enrollmentId, completedAt: { not: null } } }),
+    playerRuntimeRepo.milestoneProgress.findMany({ where: { enrollmentId: context.enrollmentId } }),
   ]);
   const completedLessonKeys = new Set(lessons.flatMap((lesson) => {
     const body = lesson.versions[0] ? lessonSchema.safeParse(lesson.versions[0].body) : null;
@@ -836,9 +843,10 @@ export async function markTeachBackComplete(access: PlayerAccess, lessonKey: str
   const block = lesson.blocks.find((item) => item.id === blockId && item.blockType === "teach_back");
   if (!block) throw new PlayerError(404, "block_not_found", "Teach-back block not found");
   await playerRuntimeRepo.blockProgress.upsert({
-    where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
+    where: { enrollmentId_lessonKey_blockId: { enrollmentId: access.enrollmentId, lessonKey, blockId } },
     // enrollmentId set only on create, never on update — see A.4 note above.
-    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: new Date(), score: 1, state, enrollmentId: access.enrollmentId },
+    // A.6 closing cleanup: see recordPlayerTutorSuccess's identical note above.
+    create: { lessonKey, blockId, contentVersion: block.contentVersion, completedAt: new Date(), score: 1, state, enrollmentId: access.enrollmentId },
     update: { contentVersion: block.contentVersion, completedAt: new Date(), score: 1, state },
   });
 }

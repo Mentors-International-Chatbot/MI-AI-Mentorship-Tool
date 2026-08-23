@@ -37,11 +37,18 @@ import { resolveLearnerHome } from "../learnerHome";
  * enrollment instead of asking "does the one matching curriculumCollectionKey
  * exist."
  */
-function socioWithEnrollments(enrollments: Array<{ id: string; programVersionId: string; collectionKey: string }>, curriculumCollectionKey: string | null = "ai-essentials") {
+function socioWithEnrollments(enrollments: Array<{ id: string; programVersionId: string; collectionKey: string; listed?: boolean }>, curriculumCollectionKey: string | null = "ai-essentials") {
   return {
     id: "learner-1",
     curriculumCollectionKey,
-    participantProfile: { id: "participant-1", enrollments },
+    participantProfile: {
+      id: "participant-1",
+      enrollments: enrollments.map(({ listed, ...enrollment }) => ({
+        ...enrollment,
+        // D4: mirrors resolveListed()'s source of truth (ProgramVersion.metadata.listed).
+        programVersion: listed === undefined ? null : { metadata: { listed } },
+      })),
+    },
   };
 }
 
@@ -173,6 +180,41 @@ describe("resolveLearnerHome version pinning", () => {
       expect(result.courses).toHaveLength(2);
       expect(result.courses.map((c) => c.courseCode).sort()).toEqual(["AIESS", "SKILLS"]);
     }
+  });
+
+  it("A.6.6: excludes an unlisted course (MI2024) from the choose-list, collapsing to a direct redirect for the one remaining listed course", async () => {
+    mocks.socioFindUnique.mockResolvedValueOnce(socioWithEnrollments([
+      { id: "enrollment-1", programVersionId: "mi2024-version", collectionKey: "mi-colombia-curriculum", listed: false },
+      { id: "enrollment-2", programVersionId: "skills-version", collectionKey: "skills-tool-calls", listed: true },
+    ]));
+    mocks.programVersionFindFirst.mockImplementation(async (args: { where: { id: string } }) => {
+      if (args.where.id === "skills-version") {
+        return { id: "skills-version", status: "published", metadata: {}, config: {}, program: { organizationId: "org-1" }, collection: { lessons: [] } };
+      }
+      return null;
+    });
+    mocks.resolveDelivery.mockReturnValue({ surface: "player", supportedChannels: ["web"] });
+    mocks.learnerProjectSelectionRequired.mockResolvedValue(false);
+    mocks.diagnosticAttemptCount.mockResolvedValue(1);
+
+    const result = await resolveLearnerHome("learner-1");
+
+    expect(result.kind).toBe("redirect");
+    // MI2024's programVersion (mi2024-version) is never even resolved — the
+    // unlisted enrollment is filtered out before resolveCoursePath runs.
+    expect(mocks.programVersionFindFirst).not.toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "mi2024-version" }) }));
+  });
+
+  it("A.6.6: a learner whose only active enrollments are all unlisted falls back like zero enrollments, not an empty choose-list", async () => {
+    mocks.socioFindUnique.mockResolvedValueOnce(socioWithEnrollments([
+      { id: "enrollment-1", programVersionId: "mi2024-version", collectionKey: "mi-colombia-curriculum", listed: false },
+      { id: "enrollment-2", programVersionId: "other-unlisted-version", collectionKey: "some-other-course", listed: false },
+    ]));
+
+    const result = await resolveLearnerHome("learner-1");
+
+    expect(result).toEqual({ kind: "redirect", path: "/join?error=not-enrolled" });
+    expect(mocks.programVersionFindFirst).not.toHaveBeenCalled();
   });
 
   it("still resolves straight through when exactly one ACTIVE enrollment exists (unchanged UX)", async () => {

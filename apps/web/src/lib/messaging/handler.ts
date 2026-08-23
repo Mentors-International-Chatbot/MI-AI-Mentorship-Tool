@@ -661,7 +661,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         const declared = await resolveCourseMilestones(scope);
         const declaredKeys = new Set(declared.map((m) => m.key));
         const availableAtResponseStart = playerContext
-            ? await playerMilestoneAvailabilitySnapshot(socio.id, playerContext)
+            ? await playerMilestoneAvailabilitySnapshot(playerContext)
             : null;
 
         for (const key of aiResponse.markers.milestones) {

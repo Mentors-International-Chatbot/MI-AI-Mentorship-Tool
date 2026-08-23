@@ -3,6 +3,7 @@ import { resolveDelivery } from "@/lib/journey-package/delivery";
 import { lessonSchema } from "@/lib/journey-package/journey-package.schema";
 import { programVersionConfigSchema } from "@/lib/journey-package/program-version-config.schema";
 import { learnerProjectSelectionRequired } from "@/lib/player/learnerProject";
+import { resolveListed } from "@/lib/journey-package/listed";
 import { courseCodeForCollectionKey } from "./resolver";
 
 /**
@@ -73,7 +74,12 @@ async function resolveCoursePath(
     const attempts = await playerRuntimeRepo.diagnosticAttempt.count({ where: { socioId, programVersionId: version.id } });
     if (attempts === 0) return `/learn/${courseCode}/diagnostic`;
   }
-  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId, collectionKey, completedAt: { not: null } } });
+  // A.6.1 addendum: scoped to this specific enrollment, not socioId+
+  // collectionKey — a retake (D2) must show the new enrollment as freshly
+  // started, not carrying forward the archived enrollment's completed
+  // lessons. The old enrollment's rows still exist, just unreachable from
+  // this query; nothing is deleted.
+  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: enrollment.id, completedAt: { not: null } } });
   let lastLessonSlug: string | undefined;
   for (const row of version.collection.lessons) {
     if (!row.versions[0]) continue;
@@ -104,7 +110,10 @@ export async function resolveLearnerHome(
       participantProfile: {
         select: {
           id: true,
-          enrollments: { where: { status: "active" }, select: { id: true, programVersionId: true, collectionKey: true } },
+          enrollments: {
+            where: { status: "active" },
+            select: { id: true, programVersionId: true, collectionKey: true, programVersion: { select: { metadata: true } } },
+          },
         },
       },
     },
@@ -133,10 +142,28 @@ export async function resolveLearnerHome(
   }
 
   if (activeEnrollments.length === 1) {
+    // A lone enrollment is never being chosen FROM a list, so `listed`
+    // (a course-browsing concern — D4) does not apply here. MI2024 learners
+    // with no other course still reach it normally from /home.
     return { kind: "redirect", path: await resolveCoursePath(socioId, channel, activeEnrollments[0]) };
   }
 
-  const courses = await Promise.all(activeEnrollments.map(async (enrollment) => ({
+  // D4: MI2024 (and any other unlisted course) must not appear in the
+  // choose-list A.5 built for genuinely multi-course learners — see the A.5
+  // report's finding. Filtering can collapse the >1 case back down to 1 or
+  // 0 listed options; degrade the same way the un-filtered counts above do
+  // rather than ever returning an empty `choose` list.
+  const listedEnrollments = activeEnrollments.filter((enrollment) => resolveListed(enrollment.programVersion?.metadata));
+
+  if (listedEnrollments.length === 0) {
+    return { kind: "redirect", path: "/join?error=not-enrolled" };
+  }
+
+  if (listedEnrollments.length === 1) {
+    return { kind: "redirect", path: await resolveCoursePath(socioId, channel, listedEnrollments[0]) };
+  }
+
+  const courses = await Promise.all(listedEnrollments.map(async (enrollment) => ({
     courseCode: courseCodeForCollectionKey(enrollment.collectionKey ?? "unknown"),
     path: await resolveCoursePath(socioId, channel, enrollment),
   })));

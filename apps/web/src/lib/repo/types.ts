@@ -466,9 +466,11 @@ export interface Repo {
     // ─── Milestone progress ────────────────────────────────────────────────
     /**
      * Records that a participant reached a milestone. Idempotent on
-     * (socioId, collectionKey, milestoneKey) — the AI can emit the same marker
-     * twice across a conversation and the first `reachedAt` is the true one, so
-     * a repeat must never move it.
+     * (enrollmentId, milestoneKey) as of A.6.1 — the AI can emit the same
+     * marker twice within one enrollment and the first `reachedAt` is the
+     * true one, so a repeat must never move it. A second enrollment reaching
+     * the same milestone gets its own fresh row rather than colliding with
+     * the first enrollment's.
      */
     recordMilestoneReached(data: {
         socioId: string;

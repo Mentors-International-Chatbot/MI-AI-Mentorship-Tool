@@ -583,6 +583,12 @@ model Enrollment {
   // 20260821000000_add_enrollment_collection_key/migration.sql, following the
   // learner_projects_current_enrollment_key precedent
   // (20260814010000_add_learner_projects/migration.sql).
+  //
+  // A.6.3: collectionKey also carries a CHECK constraint, likewise raw SQL
+  // only (Prisma schema syntax cannot express CHECK either) — "NOT NULL
+  // unless status = 'dropped'", admitting the 3 known pre-Stage-2 dangling
+  // rows without leaving the column silently, unboundedly nullable. See
+  // 20260823010000_enrollment_collection_key_check/migration.sql.
   @@map("enrollments")
 }
 
@@ -736,17 +742,20 @@ model LessonVersion {
 /// compatibility aggregate and is intentionally not changed by this model.
 model BlockProgress {
   id             String    @id @default(uuid())
-  /// DEPRECATED (A.6 candidate, Platform Restructure Phase A / A.4): learner
-  /// identity is now reachable via enrollmentId -> participant -> socioId.
-  /// Kept for one full verification cycle; new code should prefer
-  /// enrollmentId. Not dropped here — A.6 is a separate migration.
-  socioId        String    @map("socio_id")
-  /// DEPRECATED (A.6 candidate): course identity is now enrollmentId's FK
-  /// chain (programVersionId -> collectionId -> slug), set once at row
-  /// creation and never rewritten on update (see A.4 write-path notes on
-  /// completeBlock/recordPlayerTutorSuccess/markTeachBackComplete). Kept for
-  /// one full verification cycle.
-  collectionKey  String    @map("collection_key")
+  /// DEPRECATED (A.6, Platform Restructure Phase A): learner identity is now
+  /// reachable via enrollmentId -> participant -> socioId. Made nullable in
+  /// A.6's closing cleanup — the player surface (this table's only writer)
+  /// stopped populating it once its own reads moved to enrollmentId
+  /// (A.6.1 addendum). NOT droppable yet: A.6's FINAL-step investigation
+  /// found live, non-player readers still keyed on this column
+  /// (learnerProjectSelectionRequired's grandfathering check, the LTI
+  /// instructor overview) — deferred to Phase A.7. Old rows keep whatever
+  /// value they already had; only new rows are null.
+  socioId        String?   @map("socio_id")
+  /// DEPRECATED (A.6): course identity is now enrollmentId's FK chain
+  /// (programVersionId -> collectionId -> slug). Made nullable alongside
+  /// socioId above, same reasoning — see that comment.
+  collectionKey  String?   @map("collection_key")
   lessonKey      String    @map("lesson_key")
   blockId        String    @map("block_id")
   contentVersion Int       @default(1) @map("content_version")
@@ -757,22 +766,24 @@ model BlockProgress {
   state          Json?
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
-  /// A.4. Nullable: backfilled rows and any row from before this stage may
-  /// have none. Set once at creation by the three write paths in
-  /// player/service.ts; never rewritten by an update — see the doc comment
-  /// on `collectionKey` above for why, and the retake-collision note this
-  /// implies (@@unique below is not yet enrollment-scoped; A.6's job).
+  /// A.4. Set once at creation by the three write paths in player/service.ts;
+  /// never rewritten by an update. Guaranteed non-null on every row the
+  /// player surface writes (resolvePlayerAccess never returns a PlayerAccess
+  /// without one) — the ? is for pre-A.4 rows and defensiveness, not an
+  /// expected gap.
   enrollmentId   String?   @map("enrollment_id")
 
-  socio      Socio       @relation(fields: [socioId], references: [id], onDelete: Cascade)
+  socio      Socio?      @relation(fields: [socioId], references: [id], onDelete: Cascade)
   enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
 
-  // NOT YET enrollment-scoped — see A.4 report. A second enrollment in the
-  // same collection (a retake) writing the same (lessonKey, blockId) would
-  // collide with this constraint and overwrite the first attempt's row
-  // instead of creating a new one. A.6 must widen this to include
-  // enrollmentId before retakes are safe.
-  @@unique([socioId, collectionKey, lessonKey, blockId], map: "block_progress_identity_key")
+  // A.6.1: widened to enrollmentId, dropping socioId/collectionKey from the
+  // constraint entirely (enrollmentId's FK chain already implies both). A
+  // second enrollment in the same collection now gets its own identity row
+  // per (lessonKey, blockId) instead of colliding with the first attempt's.
+  // Progress READS (findMany by socioId+collectionKey in player/service.ts
+  // and learnerHome.ts) are deliberately left unchanged by this stage — see
+  // the A.6.1 report for why that's a separate, product-level decision.
+  @@unique([enrollmentId, lessonKey, blockId], map: "block_progress_identity_key")
   @@index([socioId, collectionKey, completedAt])
   @@index([enrollmentId])
   @@map("block_progress")
@@ -950,12 +961,12 @@ model AssessmentSession {
   enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   messages   Message[]
 
-  // attemptNumber already differentiates retakes (a new attempt increments
-  // it), so — unlike BlockProgress/MilestoneProgress — a second enrollment
-  // does not collide with this constraint. It is still not enrollment-aware:
-  // attemptNumber's counter continues across enrollments rather than
-  // resetting per-enrollment, a related but different gap. See A.4 report.
-  @@unique([socioId, lessonKey, attemptNumber])
+  // A.6.2 — decided: retakes get fresh attempts. Widened to enrollmentId,
+  // dropping socioId, matching A.6.1's BlockProgress/MilestoneProgress
+  // approach. attemptNumber is now computed per-enrollment (see
+  // createAssessmentSession.ts), so a new enrollment's first attempt is
+  // numbered 1 regardless of how many attempts a prior enrollment logged.
+  @@unique([enrollmentId, lessonKey, attemptNumber])
   @@index([organizationId])
   @@index([socioId, status])
   @@index([enrollmentId])
@@ -1006,11 +1017,14 @@ model MilestoneProgress {
   socio      Socio       @relation(fields: [socioId], references: [id])
   enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
 
-  // NOT YET enrollment-scoped — see the model doc comment above and the A.4
-  // report. Same retake-collision shape as BlockProgress: a second
-  // enrollment in this collection reaching the same milestoneKey would hit
-  // this constraint's `update: {}` no-op instead of recording a fresh reach.
-  @@unique([socioId, collectionKey, milestoneKey])
+  // A.6.1: widened to enrollmentId (dropping socioId/collectionKey from the
+  // constraint), matching BlockProgress. A second enrollment reaching the
+  // same milestoneKey now creates a fresh row rather than hitting the
+  // `update: {}` no-op on the first enrollment's row. enrollmentId is
+  // nullable here (best-effort chat-surface resolution can fail) —
+  // recordMilestoneReached's null branch does not use this compound key;
+  // see its implementation for why.
+  @@unique([enrollmentId, milestoneKey])
   @@index([organizationId])
   @@index([socioId, collectionKey])
   @@index([enrollmentId])

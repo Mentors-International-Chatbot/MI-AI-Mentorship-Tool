@@ -286,7 +286,16 @@ export async function createAssessmentSession(
 
   // ─── 4. Check for existing open session ───────────────────────────────────
   const existingSessions = await repo.getAssessmentSessionsForSocio(ctx, socioId);
-  const openSession = existingSessions.find(
+  // A.6.2: scope to the current enrollment when the caller has one — every
+  // player-surface gate does — so a retake's open-session check and attempt
+  // count start fresh instead of inheriting the prior enrollment's history.
+  // Chat-surface callers with no course signal to resolve an enrollmentId
+  // from (the /api/assessment/start route — see A.6.5) keep the pre-A.6.2
+  // lifetime-by-socio scope; that gap is deferred, not silently changed here.
+  const scopedSessions = enrollmentId
+    ? existingSessions.filter((s) => s.enrollmentId === enrollmentId)
+    : existingSessions;
+  const openSession = scopedSessions.find(
     (s) => s.lessonKey === lessonKey && s.blockId === blockId && s.status !== 'completed'
   );
 
@@ -297,7 +306,7 @@ export async function createAssessmentSession(
   }
 
   // ─── 5. Determine attempt number ──────────────────────────────────────────
-  const completedSessions = existingSessions.filter(
+  const completedSessions = scopedSessions.filter(
     (s) => s.lessonKey === lessonKey && s.blockId === blockId && s.status === 'completed'
   );
   const attemptNumber = completedSessions.length + 1;

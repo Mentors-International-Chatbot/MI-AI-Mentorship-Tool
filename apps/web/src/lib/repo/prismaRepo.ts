@@ -981,25 +981,47 @@ export const prismaRepo: Repo = {
         // must not move `reachedAt`. The first time they reported doing it is
         // the fact worth keeping. enrollmentId is likewise create-only — see
         // the MilestoneProgress.enrollmentId doc comment (A.4).
-        const row = await prisma.milestoneProgress.upsert({
-            where: {
-                socioId_collectionKey_milestoneKey: {
+        //
+        // A.6.1 widened the identity constraint to (enrollmentId,
+        // milestoneKey) so a second enrollment reaching the same milestone
+        // creates a fresh row instead of no-op'ing on the first enrollment's.
+        // That constraint can't back a `upsert.where` when enrollmentId is
+        // null (Postgres does not treat two NULLs as colliding, so a
+        // null-keyed upsert can't find "the" existing row) — the best-effort
+        // unresolved case above falls back to the pre-A.6.1 dedupe shape
+        // instead, via an explicit findFirst + create.
+        const row = enrollmentId
+            ? await prisma.milestoneProgress.upsert({
+                where: {
+                    enrollmentId_milestoneKey: {
+                        enrollmentId,
+                        milestoneKey: data.milestoneKey,
+                    },
+                },
+                update: {},
+                create: {
                     socioId: data.socioId,
+                    organizationId: data.organizationId,
                     collectionKey: data.collectionKey,
                     milestoneKey: data.milestoneKey,
+                    source: data.source ?? 'ai_marker',
+                    evidence: data.evidence ?? null,
+                    enrollmentId,
                 },
-            },
-            update: {},
-            create: {
-                socioId: data.socioId,
-                organizationId: data.organizationId,
-                collectionKey: data.collectionKey,
-                milestoneKey: data.milestoneKey,
-                source: data.source ?? 'ai_marker',
-                evidence: data.evidence ?? null,
-                enrollmentId,
-            },
-        });
+            })
+            : (await prisma.milestoneProgress.findFirst({
+                where: { socioId: data.socioId, collectionKey: data.collectionKey, milestoneKey: data.milestoneKey, enrollmentId: null },
+            })) ?? (await prisma.milestoneProgress.create({
+                data: {
+                    socioId: data.socioId,
+                    organizationId: data.organizationId,
+                    collectionKey: data.collectionKey,
+                    milestoneKey: data.milestoneKey,
+                    source: data.source ?? 'ai_marker',
+                    evidence: data.evidence ?? null,
+                    enrollmentId: null,
+                },
+            }));
         return {
             id: row.id,
             socioId: row.socioId,
