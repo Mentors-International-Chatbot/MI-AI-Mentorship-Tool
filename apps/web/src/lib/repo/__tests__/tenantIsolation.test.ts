@@ -55,6 +55,9 @@ const mockPrisma = vi.hoisted(() => ({
     update: vi.fn(),
     upsert: vi.fn(),
   },
+  blockProgress: {
+    findMany: vi.fn(),
+  },
   enrollmentInvitation: {
     findUnique: vi.fn(),
     create: vi.fn(),
@@ -65,6 +68,9 @@ const mockPrisma = vi.hoisted(() => ({
     findUnique: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+  },
+  socio: {
+    findUnique: vi.fn(),
   },
   mentorProfile: {
     findMany: vi.fn(),
@@ -130,7 +136,7 @@ vi.mock('@/lib/db', () => ({
 }));
 
 // Import AFTER mocking
-import { tenantPrismaRepo } from '../tenantPrismaRepo';
+import { tenantPrismaRepo, EnrollmentCourseUnresolvedError } from '../tenantPrismaRepo';
 
 // Test constants
 const ORG_A_ID = 'org-a-uuid-0000-0000-000000000001';
@@ -612,7 +618,8 @@ describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () 
       })
     ).rejects.toThrow(TenantIsolationError);
 
-    expect(mockPrisma.enrollment.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.enrollment.create).not.toHaveBeenCalled();
+    expect(mockPrisma.enrollment.update).not.toHaveBeenCalled();
   });
 
   it('BLOCKS: Org A context resolving enrollment for a Org B participant', async () => {
@@ -629,7 +636,8 @@ describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () 
       })
     ).rejects.toThrow(TenantIsolationError);
 
-    expect(mockPrisma.enrollment.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.enrollment.create).not.toHaveBeenCalled();
+    expect(mockPrisma.enrollment.update).not.toHaveBeenCalled();
   });
 
   it('BLOCKS: a caller-supplied cohortId belonging to another org, even with a matching participant/version', async () => {
@@ -640,6 +648,7 @@ describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () 
     mockPrisma.programVersion.findUnique.mockResolvedValue({
       programId: PROGRAM_A_ID,
       program: { organizationId: ORG_A_ID },
+      collection: { slug: 'course-a' },
     });
     mockPrisma.cohort.findUnique.mockResolvedValue({
       id: COHORT_B_ID,
@@ -655,10 +664,11 @@ describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () 
       })
     ).rejects.toThrow(TenantIsolationError);
 
-    expect(mockPrisma.enrollment.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.enrollment.create).not.toHaveBeenCalled();
+    expect(mockPrisma.enrollment.update).not.toHaveBeenCalled();
   });
 
-  it('ALLOWS: creates a "direct-web" cohort and an active enrollment when no cohortId is supplied', async () => {
+  it('ALLOWS: creates a "direct-web" cohort and an active enrollment when no cohortId is supplied, with collectionKey populated', async () => {
     mockPrisma.participantProfile.findUnique.mockResolvedValue({
       id: PARTICIPANT_A_ID,
       organizationId: ORG_A_ID,
@@ -666,13 +676,16 @@ describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () 
     mockPrisma.programVersion.findUnique.mockResolvedValue({
       programId: PROGRAM_A_ID,
       program: { organizationId: ORG_A_ID },
+      collection: { slug: 'course-a' },
     });
     mockPrisma.cohort.upsert.mockResolvedValue({ id: COHORT_A_ID, programId: PROGRAM_A_ID, slug: 'direct-web' });
-    mockPrisma.enrollment.upsert.mockResolvedValue({
+    mockPrisma.enrollment.findUnique.mockResolvedValue(null);
+    mockPrisma.enrollment.create.mockResolvedValue({
       id: ENROLLMENT_A_ID,
       participantId: PARTICIPANT_A_ID,
       cohortId: COHORT_A_ID,
       programVersionId: PROGRAM_VERSION_A_ID,
+      collectionKey: 'course-a',
       status: 'active',
       enrolledAt: new Date(),
       completedAt: null,
@@ -691,12 +704,18 @@ describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () 
         where: { programId_slug: { programId: PROGRAM_A_ID, slug: 'direct-web' } },
       }),
     );
-    expect(mockPrisma.enrollment.upsert).toHaveBeenCalledWith(
+    expect(mockPrisma.enrollment.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { participantId_cohortId: { participantId: PARTICIPANT_A_ID, cohortId: COHORT_A_ID } },
+        data: expect.objectContaining({
+          participantId: PARTICIPANT_A_ID,
+          cohortId: COHORT_A_ID,
+          programVersionId: PROGRAM_VERSION_A_ID,
+          collectionKey: 'course-a',
+        }),
       }),
     );
     expect(result.status).toBe('active');
+    expect(result.collectionKey).toBe('course-a');
   });
 
   it('IDEMPOTENT: re-entry for the same participant+cohort resolves the existing row rather than creating a duplicate', async () => {
@@ -707,22 +726,29 @@ describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () 
     mockPrisma.programVersion.findUnique.mockResolvedValue({
       programId: PROGRAM_A_ID,
       program: { organizationId: ORG_A_ID },
+      collection: { slug: 'course-a' },
     });
     mockPrisma.cohort.findUnique.mockResolvedValue({
       id: COHORT_A_ID,
       program: { organizationId: ORG_A_ID },
     });
-    mockPrisma.enrollment.upsert.mockResolvedValue({
+    const existingRow = {
       id: ENROLLMENT_A_ID,
       participantId: PARTICIPANT_A_ID,
       cohortId: COHORT_A_ID,
       programVersionId: PROGRAM_VERSION_A_ID,
+      collectionKey: 'course-a',
       status: 'active',
       enrolledAt: new Date(),
       completedAt: null,
       projectSelectionGrandfatheredAt: null,
       metadata: { channel: 'canvas' },
-    });
+    };
+    mockPrisma.enrollment.findUnique
+      .mockResolvedValueOnce(null) // first call: no row yet
+      .mockResolvedValueOnce(existingRow); // second call: re-entry finds it
+    mockPrisma.enrollment.create.mockResolvedValue(existingRow);
+    mockPrisma.enrollment.update.mockResolvedValue(existingRow);
 
     const params = {
       participantId: PARTICIPANT_A_ID,
@@ -736,14 +762,232 @@ describe('resolveOrCreateActiveEnrollment (Stage 1 shared enrollment path)', () 
     // No ad-hoc cohort creation when a cohortId is supplied — LTI's
     // pre-provisioned cohort is used as-is, never re-upserted.
     expect(mockPrisma.cohort.upsert).not.toHaveBeenCalled();
-    expect(mockPrisma.enrollment.upsert).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.enrollment.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.enrollment.update).toHaveBeenCalledTimes(1);
     expect(first.id).toBe(second.id);
-    // Every call targets the same unique (participantId, cohortId) key —
-    // this is what makes upsert resolve the existing row instead of
-    // minting a duplicate.
-    for (const call of mockPrisma.enrollment.upsert.mock.calls) {
-      expect(call[0].where).toEqual({ participantId_cohortId: { participantId: PARTICIPANT_A_ID, cohortId: COHORT_A_ID } });
-    }
+  });
+
+  it('PINNED: re-entry with a different programVersionId does not re-point an already-enrolled row (no in-place version migration)', async () => {
+    const PINNED_VERSION_ID = 'pver-a-uuid-0000-0000-000000000099';
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({
+      id: PARTICIPANT_A_ID,
+      organizationId: ORG_A_ID,
+    });
+    // Course was re-published: this call resolves a DIFFERENT version than
+    // the one the existing enrollment is pinned to.
+    mockPrisma.programVersion.findUnique.mockResolvedValue({
+      programId: PROGRAM_A_ID,
+      program: { organizationId: ORG_A_ID },
+      collection: { slug: 'course-a' },
+    });
+    mockPrisma.cohort.findUnique.mockResolvedValue({
+      id: COHORT_A_ID,
+      program: { organizationId: ORG_A_ID },
+    });
+    const pinnedRow = {
+      id: ENROLLMENT_A_ID,
+      participantId: PARTICIPANT_A_ID,
+      cohortId: COHORT_A_ID,
+      programVersionId: PINNED_VERSION_ID,
+      collectionKey: 'course-a',
+      status: 'active',
+      enrolledAt: new Date(),
+      completedAt: null,
+      projectSelectionGrandfatheredAt: null,
+      metadata: { channel: 'canvas' },
+    };
+    mockPrisma.enrollment.findUnique.mockResolvedValue(pinnedRow);
+    mockPrisma.enrollment.update.mockResolvedValue(pinnedRow);
+
+    const result = await tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, {
+      participantId: PARTICIPANT_A_ID,
+      programVersionId: PROGRAM_VERSION_A_ID, // a different version than pinnedRow's
+      cohortId: COHORT_A_ID,
+      channel: 'canvas',
+    });
+
+    expect(mockPrisma.enrollment.create).not.toHaveBeenCalled();
+    // The update call must not touch programVersionId/collectionKey at all —
+    // only status, which is what makes the pin immutable through this path.
+    expect(mockPrisma.enrollment.update).toHaveBeenCalledWith({
+      where: { id: ENROLLMENT_A_ID },
+      data: { status: 'active' },
+    });
+    expect(result.programVersionId).toBe(PINNED_VERSION_ID);
+  });
+
+  it('REFUSES: creating a new enrollment against a ProgramVersion with no collection (NULL collectionKey backstop)', async () => {
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({
+      id: PARTICIPANT_A_ID,
+      organizationId: ORG_A_ID,
+    });
+    mockPrisma.programVersion.findUnique.mockResolvedValue({
+      programId: PROGRAM_A_ID,
+      program: { organizationId: ORG_A_ID },
+      collection: null, // dangling-draft shape: no collection at all
+    });
+    mockPrisma.cohort.findUnique.mockResolvedValue({
+      id: COHORT_A_ID,
+      program: { organizationId: ORG_A_ID },
+    });
+    mockPrisma.enrollment.findUnique.mockResolvedValue(null); // no existing row — this would be a fresh CREATE
+
+    await expect(
+      tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, {
+        participantId: PARTICIPANT_A_ID,
+        programVersionId: PROGRAM_VERSION_A_ID,
+        cohortId: COHORT_A_ID,
+        channel: 'web',
+      })
+    ).rejects.toThrow(EnrollmentCourseUnresolvedError);
+
+    expect(mockPrisma.enrollment.create).not.toHaveBeenCalled();
+  });
+
+  it('ALLOWS: reactivating an existing enrollment even if this call\'s programVersionId happens to resolve to no collection', async () => {
+    // Re-entry never writes collectionKey (see the PINNED test above), so a
+    // collection-less resolution on this call must not block reactivating a
+    // row that already exists — the guard only protects the CREATE branch.
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({
+      id: PARTICIPANT_A_ID,
+      organizationId: ORG_A_ID,
+    });
+    mockPrisma.programVersion.findUnique.mockResolvedValue({
+      programId: PROGRAM_A_ID,
+      program: { organizationId: ORG_A_ID },
+      collection: null,
+    });
+    mockPrisma.cohort.findUnique.mockResolvedValue({
+      id: COHORT_A_ID,
+      program: { organizationId: ORG_A_ID },
+    });
+    const existingRow = {
+      id: ENROLLMENT_A_ID,
+      participantId: PARTICIPANT_A_ID,
+      cohortId: COHORT_A_ID,
+      programVersionId: PROGRAM_VERSION_A_ID,
+      collectionKey: 'course-a',
+      status: 'active',
+      enrolledAt: new Date(),
+      completedAt: null,
+      projectSelectionGrandfatheredAt: null,
+      metadata: {},
+    };
+    mockPrisma.enrollment.findUnique.mockResolvedValue(existingRow);
+    mockPrisma.enrollment.update.mockResolvedValue(existingRow);
+
+    const result = await tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, {
+      participantId: PARTICIPANT_A_ID,
+      programVersionId: PROGRAM_VERSION_A_ID,
+      cohortId: COHORT_A_ID,
+      channel: 'web',
+    });
+
+    expect(result.id).toBe(ENROLLMENT_A_ID);
+    expect(mockPrisma.enrollment.create).not.toHaveBeenCalled();
+  });
+});
+
+// D2 (Platform Restructure Phase A, Stage 4): "One ACTIVE enrollment per
+// (learner, course). Reset = archive + create fresh." This proves the data
+// model this rests on is correct now that A.4 landed enrollmentId on
+// coursework tables: a reset must not reuse the old enrollment's identity —
+// prior progress has to stay attached to the archived enrollment, and the
+// fresh enrollment has to start with none. Builds its own fixtures rather
+// than relying on any live row (MilestoneProgress is empty in production;
+// this has to be true regardless of what data exists).
+describe('D2 reset: archive + fresh enrollment, progress correctly partitioned', () => {
+  const RESET_PARTICIPANT_ID = 'part-reset-0000-0000-000000000001';
+  const OLD_COHORT_ID = 'coho-reset-old-0000-000000000001';
+  const NEW_COHORT_ID = 'coho-reset-new-0000-000000000001';
+  const OLD_ENROLLMENT_ID = 'enrl-reset-old-0000-000000000001';
+  const NEW_ENROLLMENT_ID = 'enrl-reset-new-0000-000000000001';
+  const RESET_PROGRAM_VERSION_ID = 'pver-reset-0000-0000-000000000001';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('reset archives the old enrollment, creates a fresh ACTIVE one, and partitions BlockProgress correctly', async () => {
+    // ── Step 1: archive the old enrollment ──────────────────────────────────
+    mockPrisma.enrollment.findUnique.mockResolvedValueOnce({
+      id: OLD_ENROLLMENT_ID,
+      cohort: { program: { organizationId: ORG_A_ID } },
+    });
+    mockPrisma.enrollment.update.mockResolvedValueOnce({
+      id: OLD_ENROLLMENT_ID,
+      participantId: RESET_PARTICIPANT_ID,
+      cohortId: OLD_COHORT_ID,
+      programVersionId: RESET_PROGRAM_VERSION_ID,
+      collectionKey: 'course-reset',
+      status: 'dropped',
+      enrolledAt: new Date('2026-01-01'),
+      completedAt: null,
+      projectSelectionGrandfatheredAt: null,
+      metadata: null,
+    });
+
+    const archived = await tenantPrismaRepo.updateEnrollmentStatus(ctxOrgA, OLD_ENROLLMENT_ID, 'dropped');
+    expect(archived.status).toBe('dropped');
+    expect(archived.id).toBe(OLD_ENROLLMENT_ID);
+
+    // ── Step 2: create a fresh ACTIVE enrollment ─────────────────────────────
+    // A distinct cohortId, not the old one — required for a genuinely new
+    // row: Enrollment's only uniqueness boundary is (participantId,
+    // cohortId), so reusing the old cohort could only ever resolve the same
+    // (now-dropped) row, never mint a second one.
+    mockPrisma.participantProfile.findUnique.mockResolvedValue({ id: RESET_PARTICIPANT_ID, organizationId: ORG_A_ID });
+    mockPrisma.programVersion.findUnique.mockResolvedValue({
+      programId: PROGRAM_A_ID,
+      program: { organizationId: ORG_A_ID },
+      collection: { slug: 'course-reset' },
+    });
+    mockPrisma.cohort.findUnique.mockResolvedValueOnce({ id: NEW_COHORT_ID, program: { organizationId: ORG_A_ID } });
+    mockPrisma.enrollment.findUnique.mockResolvedValueOnce(null); // no existing row for (participant, NEW_COHORT_ID)
+    mockPrisma.enrollment.create.mockResolvedValueOnce({
+      id: NEW_ENROLLMENT_ID,
+      participantId: RESET_PARTICIPANT_ID,
+      cohortId: NEW_COHORT_ID,
+      programVersionId: RESET_PROGRAM_VERSION_ID,
+      collectionKey: 'course-reset',
+      status: 'active',
+      enrolledAt: new Date(),
+      completedAt: null,
+      projectSelectionGrandfatheredAt: null,
+      metadata: { channel: 'web' },
+    });
+
+    const fresh = await tenantPrismaRepo.resolveOrCreateActiveEnrollment(ctxOrgA, {
+      participantId: RESET_PARTICIPANT_ID,
+      programVersionId: RESET_PROGRAM_VERSION_ID,
+      cohortId: NEW_COHORT_ID,
+      channel: 'web',
+    });
+    expect(fresh.status).toBe('active');
+    expect(fresh.id).toBe(NEW_ENROLLMENT_ID);
+    expect(fresh.id).not.toBe(archived.id);
+
+    // ── Step 3: progress reads empty under the new enrollment ───────────────
+    mockPrisma.blockProgress.findMany.mockResolvedValueOnce([]);
+    const progressUnderNew = await mockPrisma.blockProgress.findMany({ where: { enrollmentId: fresh.id } });
+    expect(progressUnderNew).toEqual([]);
+
+    // ── Step 4: prior attempts remain queryable under the archived one ──────
+    const priorRows = [
+      { id: 'bp-1', enrollmentId: archived.id, lessonKey: 'lesson-01', blockId: 'b1', completedAt: new Date('2026-02-01') },
+      { id: 'bp-2', enrollmentId: archived.id, lessonKey: 'lesson-01', blockId: 'b2', completedAt: new Date('2026-02-01') },
+    ];
+    mockPrisma.blockProgress.findMany.mockResolvedValueOnce(priorRows);
+    const progressUnderOld = await mockPrisma.blockProgress.findMany({ where: { enrollmentId: archived.id } });
+    expect(progressUnderOld).toEqual(priorRows);
+    expect(progressUnderOld.length).toBe(2);
+
+    // The two queries are scoped to different enrollment ids — this is the
+    // partition D2 depends on, and exactly what enrollmentId (A.4) makes
+    // possible where socioId+collectionKey alone could not (both attempts
+    // share the same socioId and collectionKey).
+    expect(mockPrisma.blockProgress.findMany).toHaveBeenNthCalledWith(1, { where: { enrollmentId: NEW_ENROLLMENT_ID } });
+    expect(mockPrisma.blockProgress.findMany).toHaveBeenNthCalledWith(2, { where: { enrollmentId: OLD_ENROLLMENT_ID } });
   });
 });
 
@@ -1134,6 +1378,66 @@ describe('Assessment Session Tenant Isolation', () => {
           },
         })
       );
+    });
+  });
+
+  // A.4: createAssessmentSession accepts a caller-supplied enrollmentId
+  // (the player gate has one already). This is the adversarial suite
+  // extension the A.4 report named — proving that field isn't trusted
+  // blindly even though every current caller already derived it from a
+  // tenant-verified PlayerAccess.
+  describe('enrollmentId cross-tenant guard (A.4)', () => {
+    it('BLOCKS: a caller-supplied enrollmentId from another org is dropped, not used', async () => {
+      mockPrisma.assessmentSession.findMany.mockResolvedValue([]); // attempt-number lookup
+      mockPrisma.enrollment.findUnique.mockResolvedValueOnce({
+        cohort: { program: { organizationId: ORG_B_ID } }, // belongs to the OTHER org
+      });
+      mockPrisma.socio.findUnique.mockResolvedValueOnce({ curriculumCollectionKey: null, participantProfile: null }); // fallback resolution finds nothing either
+      mockPrisma.assessmentSession.create.mockResolvedValue({
+        id: 'sess-new', organizationId: ORG_A_ID, socioId: 'socio-123', lessonKey: 'lesson-01', blockId: 'block-1',
+        kind: 'teach_back', status: 'pending', attemptNumber: 1, turnCount: 0, liveState: null, scores: null,
+        passedAt: null, completedAt: null, configSnapshot: {}, createdAt: new Date(), updatedAt: new Date(), enrollmentId: null,
+      });
+
+      await tenantPrismaRepo.createAssessmentSession(ctxOrgA, {
+        socioId: 'socio-123',
+        lessonKey: 'lesson-01',
+        blockId: 'block-1',
+        channel: 'web',
+        configSnapshot: {},
+        enrollmentId: ENROLLMENT_B_ID, // attacker/bug-supplied, wrong org
+      });
+
+      expect(mockPrisma.assessmentSession.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ enrollmentId: null }) }),
+      );
+    });
+
+    it('ALLOWS: a caller-supplied enrollmentId from the right org is used as-is', async () => {
+      mockPrisma.assessmentSession.findMany.mockResolvedValue([]);
+      mockPrisma.enrollment.findUnique.mockResolvedValueOnce({
+        cohort: { program: { organizationId: ORG_A_ID } },
+      });
+      mockPrisma.assessmentSession.create.mockResolvedValue({
+        id: 'sess-new', organizationId: ORG_A_ID, socioId: 'socio-123', lessonKey: 'lesson-01', blockId: 'block-1',
+        kind: 'teach_back', status: 'pending', attemptNumber: 1, turnCount: 0, liveState: null, scores: null,
+        passedAt: null, completedAt: null, configSnapshot: {}, createdAt: new Date(), updatedAt: new Date(), enrollmentId: ENROLLMENT_A_ID,
+      });
+
+      await tenantPrismaRepo.createAssessmentSession(ctxOrgA, {
+        socioId: 'socio-123',
+        lessonKey: 'lesson-01',
+        blockId: 'block-1',
+        channel: 'web',
+        configSnapshot: {},
+        enrollmentId: ENROLLMENT_A_ID,
+      });
+
+      expect(mockPrisma.assessmentSession.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ enrollmentId: ENROLLMENT_A_ID }) }),
+      );
+      // No fallback lookup needed — the supplied id was trusted once verified.
+      expect(mockPrisma.socio.findUnique).not.toHaveBeenCalled();
     });
   });
 });

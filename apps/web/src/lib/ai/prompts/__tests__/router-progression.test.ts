@@ -100,6 +100,7 @@ function createMockSession(overrides: Partial<AssessmentSession> = {}): Assessme
     configSnapshot: { blocking: true },
     createdAt: new Date(),
     updatedAt: new Date(),
+    enrollmentId: null,
     ...overrides,
   };
 }

@@ -95,4 +95,35 @@ describe("resolvePlayerAccess enrollment identity", () => {
 
     expect(access.enrollmentId).toBe("canvas-context");
   });
+
+  it("resolves the exact version pinned by the enrollment, never a separate 'latest published' query (Stage 2 pinning invariant)", async () => {
+    // Deliberately an OLDER version than whatever might be "latest published"
+    // — the mocked playerRuntimeRepo below exposes no `programVersion`
+    // delegate at all, so if this path ever issued an independent
+    // "latest published" lookup, it would throw here rather than silently
+    // floating an enrolled learner to a newer version.
+    const pinnedOldVersion = {
+      id: "old-version",
+      version: "1",
+      status: "archived",
+      config: {},
+      metadata: {},
+      collection: { slug: "ai-essentials" },
+      program: { organizationId: "org-1" },
+    };
+    mocks.socioFindUnique.mockResolvedValue({
+      id: "learner-1",
+      curriculumCollectionKey: "ai-essentials",
+      participantProfile: {
+        id: "participant-1",
+        enrollments: [{ id: "pinned-enrollment", cohortId: "cohort-1", programVersionId: "old-version", status: "active" }],
+      },
+    });
+    mocks.enrollmentFindFirst.mockResolvedValue({ id: "pinned-enrollment", programVersion: pinnedOldVersion });
+
+    const access = await resolvePlayerAccess(webIdentity, "AIESS");
+
+    expect(access.programVersionId).toBe("old-version");
+    expect(access.programVersion).toBe("1");
+  });
 });

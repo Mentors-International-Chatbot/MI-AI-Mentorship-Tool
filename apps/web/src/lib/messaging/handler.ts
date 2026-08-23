@@ -148,8 +148,16 @@ function runPassiveAnalysis(params: {
     aiResponse: string;
     /** Already scored by the merged analysis pass. No LLM work left to do. */
     sentiment?: SentimentResult | null;
+    /**
+     * A.5: the enrollment-derived course for this turn (playerContext.collectionKey
+     * when this is a player turn). Passed through to extractAndStoreContext so a
+     * multi-enrolled learner's background context extraction runs against the
+     * course they're actually in, not whatever socio.curriculumCollectionKey
+     * currently names. Undefined for chat turns, which stay on that legacy field.
+     */
+    collectionKey?: string;
 }): void {
-    const { policy, socioId, userMessageId, userMessage, aiResponse, sentiment } = params;
+    const { policy, socioId, userMessageId, userMessage, aiResponse, sentiment, collectionKey } = params;
 
     // Sentiment is no longer computed here. It rides along with the sensing
     // call that already had to run (see ai/sensing/senseAndScore.ts), so this
@@ -163,7 +171,7 @@ function runPassiveAnalysis(params: {
     }
 
     if (policy.contextExtraction) {
-        extractAndStoreContext(socioId, userMessage, aiResponse).catch(err =>
+        extractAndStoreContext(socioId, userMessage, aiResponse, collectionKey).catch(err =>
             console.error('[ContextExtractor] Background extraction failed:', err)
         );
     }
@@ -375,6 +383,18 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
                 : Number(promptOverridesRaw.feedbackLessonNum) || 0;
 
         if (rating >= 1 && rating <= 10) {
+            // A.4 (Platform Restructure Phase A, Stage 4): SocioFeedback
+            // deliberately has no enrollmentId/collectionKey, unlike
+            // BlockProgress/MilestoneProgress/AssessmentSession. This is the
+            // table's only writer, and it never captures which course the
+            // feedback was about — lessonNum is this chat flow's own numeric
+            // scheme, predating multi-course. A backfill can only guess the
+            // course from the socio's CURRENT curriculumCollectionKey, which
+            // may differ from what it was when this feedback was given (0
+            // rows existed as of the A.4 investigation, so nothing to guess
+            // against yet). If this table ever needs multi-course
+            // correctness, fix it HERE: capture collectionKey/enrollmentId
+            // at write time, below, before adding a column to backfill.
             await repo.createFeedback({
                 socioId: socio.id,
                 lessonNum,
@@ -446,7 +466,16 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
         };
     }
 
-    const collectionKey = socio.curriculumCollectionKey;
+    // A.5 (Platform Restructure Phase A, Stage 5): prefer the enrollment-derived
+    // collectionKey a player turn already resolved via resolvePlayerAccess.
+    // Before this fix, a player turn silently discarded it here and re-derived
+    // from socio.curriculumCollectionKey — the single legacy field — for the
+    // actual AI generation call this feeds. Unreachable before the Stage 5
+    // gate flip (the old gate made it impossible to hold a playerContext for a
+    // course curriculumCollectionKey didn't already name), but the flip alone
+    // would have turned this into a live, silent content mismatch for any
+    // multi-enrolled learner: valid access to course B, course A's prompt.
+    const collectionKey = playerContext?.collectionKey ?? socio.curriculumCollectionKey;
 
     // Require curriculum key - no silent fallback
     if (!collectionKey) {
@@ -548,6 +577,10 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
                     lessonKey: gate.lessonKey,
                     blockId: gate.blockId,
                     channel: socio.channelType,
+                    // A.4/A.5: present for player-surface gates, undefined for
+                    // chat — createAssessmentSession resolves both itself then.
+                    enrollmentId: playerContext?.enrollmentId,
+                    collectionKey: playerContext?.collectionKey,
                 });
                 sessionId = newSession.id;
                 console.log(`[MessageHandler] Created assessment session ${sessionId} for socio ${socio.id}, block ${gate.blockId}, org ${organizationId}`);
@@ -654,6 +687,10 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
                 milestoneKey: key,
                 source: 'ai_marker',
                 evidence: message,
+                // A.4: the player surface always has one; chat has no
+                // PlayerAccess/context, so recordMilestoneReached resolves it
+                // itself when this is undefined.
+                enrollmentId: playerContext?.enrollmentId,
             });
             queueMilestoneGrade(socio.id, collectionKey).catch((error) =>
                 console.error(`[LTI Grade] queue failed for socio=${socio.id} milestone=${key}:`, error)
@@ -822,6 +859,7 @@ export async function handleIncomingMessage(input: HandleMessageInput): Promise<
             userMessage: message,
             aiResponse: responseText,
             sentiment: aiResponse.sentiment,
+            collectionKey: playerContext?.collectionKey,
         });
         if (playerContext && aiResponse.sensedDimensions && aiResponse.dimensionState) {
             persistPlayerObservations({

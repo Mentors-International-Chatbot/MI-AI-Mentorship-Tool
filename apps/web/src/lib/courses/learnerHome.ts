@@ -5,53 +5,65 @@ import { programVersionConfigSchema } from "@/lib/journey-package/program-versio
 import { learnerProjectSelectionRequired } from "@/lib/player/learnerProject";
 import { courseCodeForCollectionKey } from "./resolver";
 
-export async function resolveLearnerHome(
+/**
+ * A.5 (Platform Restructure Phase A, Stage 5). resolveLearnerHome used to
+ * return a single destination string, silently picking whichever course
+ * `Socio.curriculumCollectionKey` happened to name and leaving any other
+ * ACTIVE enrollment unreachable from /home. This is the tie-break decision
+ * from the Stage 5 report: no "most recently enrolled" default — that just
+ * re-implements the single-course model with a nicer fallback. Zero or one
+ * ACTIVE enrollment still resolves straight through (today's UX, unchanged).
+ * More than one returns the list; the caller decides how to render it.
+ */
+export type LearnerHomeResolution =
+  | { kind: "redirect"; path: string }
+  | { kind: "choose"; courses: { courseCode: string; path: string }[] };
+
+type ActiveEnrollment = { id: string; programVersionId: string | null; collectionKey: string | null };
+
+/**
+ * Resolves the next-step path for ONE specific enrollment. This is the full
+ * per-course logic (project setup / diagnostic / next incomplete lesson /
+ * capstone) that resolveLearnerHome used to run against the single
+ * curriculumCollectionKey-derived course; it is now parameterized by a real
+ * Enrollment row so it produces the right destination for whichever course
+ * this is, independent of what curriculumCollectionKey currently names.
+ */
+async function resolveCoursePath(
   socioId: string,
-  channel: "web" | "canvas" = "web",
-  programVersionId?: string,
+  channel: "web" | "canvas",
+  enrollment: ActiveEnrollment,
 ): Promise<string> {
-  const socio = await playerRuntimeRepo.socio.findUnique({ where: { id: socioId }, select: { curriculumCollectionKey: true, participantProfile: { select: { id: true } } } });
-  if (!socio?.curriculumCollectionKey) return "/join";
-  const enrollment = socio.participantProfile ? await playerRuntimeRepo.enrollment.findFirst({
-    where: {
-      participantId: socio.participantProfile.id,
-      status: "active",
-      programVersion: { status: { in: ["published", "archived"] }, collection: { slug: socio.curriculumCollectionKey } },
-      ...(programVersionId ? { programVersionId } : {}),
-    },
-    orderBy: { enrolledAt: "desc" },
-    select: { id: true, programVersionId: true },
-  }) : null;
-  const selectedVersionId = programVersionId ?? enrollment?.programVersionId ?? undefined;
+  const collectionKey = enrollment.collectionKey;
+  // Should not happen for an ACTIVE enrollment (the A.4 write-time guard
+  // refuses to create one with a null collectionKey; the only null rows are
+  // the pre-Stage-2 dangling-draft ones, all 'dropped' after A.3, never
+  // 'active'). Defensive rather than a crash if it ever does.
+  if (!collectionKey || !enrollment.programVersionId) return "/join?error=not-enrolled";
+
   const version = await playerRuntimeRepo.programVersion.findFirst({
-    where: {
-      ...(selectedVersionId ? { id: selectedVersionId } : {}),
-      status: selectedVersionId ? { in: ["published", "archived"] } : "published",
-      collection: { slug: socio.curriculumCollectionKey },
-    },
+    where: { id: enrollment.programVersionId, status: { in: ["published", "archived"] } },
     include: {
       program: { select: { organizationId: true } },
       collection: { include: { lessons: { orderBy: { orderIndex: "asc" }, include: { versions: { where: { active: true }, take: 1 } } } } },
     },
-    orderBy: selectedVersionId ? undefined : { publishedAt: "desc" },
   });
   // AI Essentials is a versioned player course. A curriculum key without a
   // published version must not fall through resolveDelivery(undefined), whose
   // legacy default is chat, or the learner is silently sent to the wrong UI.
-  if (socio.curriculumCollectionKey === "ai-essentials" && !version) {
+  if (collectionKey === "ai-essentials" && !version) {
     return "/join?error=no-published-course";
   }
   const delivery = resolveDelivery(version?.metadata);
   if (delivery.surface === "chat") return "/chat";
-  if (!enrollment || enrollment.programVersionId !== version?.id) return "/join?error=not-enrolled";
   if (!delivery.supportedChannels.includes(channel)) return "/join?error=channel-not-supported";
   if (!version?.collection) return "/join";
-  const courseCode = courseCodeForCollectionKey(socio.curriculumCollectionKey);
+  const courseCode = courseCodeForCollectionKey(collectionKey);
   const config = programVersionConfigSchema.parse(version.config);
   if (await learnerProjectSelectionRequired({
     organizationId: version.program.organizationId,
     enrollmentId: enrollment.id,
-    collectionKey: socio.curriculumCollectionKey,
+    collectionKey,
     config,
   })) {
     return `/learn/${encodeURIComponent(courseCode)}/project-setup`;
@@ -61,7 +73,7 @@ export async function resolveLearnerHome(
     const attempts = await playerRuntimeRepo.diagnosticAttempt.count({ where: { socioId, programVersionId: version.id } });
     if (attempts === 0) return `/learn/${courseCode}/diagnostic`;
   }
-  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId, collectionKey: socio.curriculumCollectionKey, completedAt: { not: null } } });
+  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { socioId, collectionKey, completedAt: { not: null } } });
   let lastLessonSlug: string | undefined;
   for (const row of version.collection.lessons) {
     if (!row.versions[0]) continue;
@@ -78,4 +90,55 @@ export async function resolveLearnerHome(
   // offer, so that case keeps the original route.
   if (!config.outcome && lastLessonSlug) return `/learn/${courseCode}/${lastLessonSlug}`;
   return `/learn/${courseCode}/capstone`;
+}
+
+export async function resolveLearnerHome(
+  socioId: string,
+  channel: "web" | "canvas" = "web",
+  programVersionId?: string,
+): Promise<LearnerHomeResolution> {
+  const socio = await playerRuntimeRepo.socio.findUnique({
+    where: { id: socioId },
+    select: {
+      curriculumCollectionKey: true,
+      participantProfile: {
+        select: {
+          id: true,
+          enrollments: { where: { status: "active" }, select: { id: true, programVersionId: true, collectionKey: true } },
+        },
+      },
+    },
+  });
+
+  const activeEnrollments = socio?.participantProfile?.enrollments ?? [];
+
+  // A caller with a specific version in mind (LTI: identity.programVersionId,
+  // resolved from the Canvas launch context) is asking about ONE course —
+  // never ambiguous, never a list, regardless of how many other ACTIVE
+  // enrollments this socio has elsewhere.
+  if (programVersionId) {
+    const pinned = activeEnrollments.find((e) => e.programVersionId === programVersionId);
+    if (!pinned) return { kind: "redirect", path: "/join?error=not-enrolled" };
+    return { kind: "redirect", path: await resolveCoursePath(socioId, channel, pinned) };
+  }
+
+  if (activeEnrollments.length === 0) {
+    // DEPRECATED fallback (A.6 removes this branch — see the
+    // curriculumCollectionKey doc comment on the Socio model). No active
+    // enrollment exists to resolve anything from; curriculumCollectionKey is
+    // read only to distinguish "never selected a course" from "selected one,
+    // but has no matching active enrollment" in the response, never to grant
+    // a destination. Post-A.3, no active socio should hit the second case.
+    return { kind: "redirect", path: socio?.curriculumCollectionKey ? "/join?error=not-enrolled" : "/join" };
+  }
+
+  if (activeEnrollments.length === 1) {
+    return { kind: "redirect", path: await resolveCoursePath(socioId, channel, activeEnrollments[0]) };
+  }
+
+  const courses = await Promise.all(activeEnrollments.map(async (enrollment) => ({
+    courseCode: courseCodeForCollectionKey(enrollment.collectionKey ?? "unknown"),
+    path: await resolveCoursePath(socioId, channel, enrollment),
+  })));
+  return { kind: "choose", courses };
 }

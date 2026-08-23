@@ -59,6 +59,7 @@ function toSocio(p: PrismaSocio): Socio {
         aiPaused: p.aiPaused,
         mentorId: p.mentorId,
         curriculumCollectionKey: p.curriculumCollectionKey,
+        archivedAt: p.archivedAt,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
     };
@@ -435,6 +436,7 @@ export const prismaRepo: Repo = {
                 currentMessageIndex: { gt: 0 },
                 remindersSent: { lt: maxReminders },
                 lastInteractionAt: { lt: cutoff },
+                socio: { archivedAt: null }, // A.3: never remind an archived socio
             },
             include: { socio: true },
         });
@@ -478,7 +480,7 @@ export const prismaRepo: Repo = {
     /** Cross-tenant by design — platform admin only. See RepoInterface docs. */
     async getSociosAcrossAllOrganizations() {
         const socios = await prisma.socio.findMany({
-            where: { status: 'ACTIVE' },
+            where: { status: 'ACTIVE', archivedAt: null }, // A.3: archived socios (status stays ACTIVE) excluded
             orderBy: { updatedAt: 'desc' },
         });
         return socios.map(toSocio);
@@ -930,12 +932,55 @@ export const prismaRepo: Repo = {
         return toSocio(socio);
     },
 
+    async archiveSocio(socioId) {
+        const existing = await prisma.socio.findUnique({ where: { id: socioId } });
+        if (!existing) throw new Error('Socio not found');
+        if (existing.archivedAt) return toSocio(existing);
+        const socio = await prisma.socio.update({
+            where: { id: socioId },
+            data: { archivedAt: new Date() },
+        });
+        return toSocio(socio);
+    },
+
     // ─── Assessment Session Methods ─────────────────────────────────────────────
 
     async recordMilestoneReached(data) {
+        // A.4: prefer the caller's enrollmentId (the player surface always
+        // has one, via ValidatedPlayerContext). Chat-surface markers have no
+        // PlayerAccess/context to carry one, so resolve it here — same
+        // participant+collectionKey lookup the A.4 backfill used, preferring
+        // an ACTIVE enrollment. Best-effort: null is a valid outcome (e.g. an
+        // unanchored socio), matching the nullable column.
+        // Defense in depth: a caller-supplied enrollmentId is verified
+        // against data.organizationId rather than trusted — see the matching
+        // note in tenantPrismaRepo.createAssessmentSession. Cross-org IDs are
+        // dropped, not thrown, and fall through to internal resolution.
+        let enrollmentId = data.enrollmentId ?? null;
+        if (enrollmentId) {
+            const owner = await prisma.enrollment.findUnique({
+                where: { id: enrollmentId },
+                select: { cohort: { select: { program: { select: { organizationId: true } } } } },
+            });
+            if (!owner || owner.cohort.program.organizationId !== data.organizationId) {
+                enrollmentId = null;
+            }
+        }
+        if (!enrollmentId) {
+            const socio = await prisma.socio.findUnique({ where: { id: data.socioId }, select: { participantProfile: { select: { id: true } } } });
+            if (socio?.participantProfile) {
+                const candidates = await prisma.enrollment.findMany({
+                    where: { participantId: socio.participantProfile.id, collectionKey: data.collectionKey },
+                    orderBy: { enrolledAt: 'desc' },
+                });
+                enrollmentId = (candidates.find((c) => c.status === 'active') ?? candidates[0])?.id ?? null;
+            }
+        }
+
         // upsert with an empty update: a second marker for the same milestone
         // must not move `reachedAt`. The first time they reported doing it is
-        // the fact worth keeping.
+        // the fact worth keeping. enrollmentId is likewise create-only — see
+        // the MilestoneProgress.enrollmentId doc comment (A.4).
         const row = await prisma.milestoneProgress.upsert({
             where: {
                 socioId_collectionKey_milestoneKey: {
@@ -952,6 +997,7 @@ export const prismaRepo: Repo = {
                 milestoneKey: data.milestoneKey,
                 source: data.source ?? 'ai_marker',
                 evidence: data.evidence ?? null,
+                enrollmentId,
             },
         });
         return {
@@ -963,6 +1009,7 @@ export const prismaRepo: Repo = {
             reachedAt: row.reachedAt,
             source: row.source,
             evidence: row.evidence,
+            enrollmentId: row.enrollmentId,
         };
     },
 
@@ -980,6 +1027,7 @@ export const prismaRepo: Repo = {
             reachedAt: r.reachedAt,
             source: r.source,
             evidence: r.evidence,
+            enrollmentId: r.enrollmentId,
         }));
     },
 
@@ -1011,6 +1059,7 @@ export const prismaRepo: Repo = {
             configSnapshot: s.configSnapshot as Record<string, unknown>,
             createdAt: s.createdAt,
             updatedAt: s.updatedAt,
+            enrollmentId: s.enrollmentId,
         }));
     },
 };

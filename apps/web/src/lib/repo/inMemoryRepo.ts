@@ -76,6 +76,7 @@ export const inMemoryRepo: Repo = {
             aiPaused: false,
             mentorId: null,
             curriculumCollectionKey: null,
+            archivedAt: null,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
@@ -636,6 +637,11 @@ export const inMemoryRepo: Repo = {
             reachedAt: new Date(),
             source: data.source ?? 'ai_marker',
             evidence: data.evidence ?? null,
+            // A.4: unlike prismaRepo, this fake does not simulate the
+            // participant+collectionKey DB fallback lookup — it only passes
+            // through what the caller supplied. Tests exercising that
+            // fallback specifically must mock prismaRepo directly.
+            enrollmentId: data.enrollmentId ?? null,
         };
         milestoneProgress.set(key, row);
         return row;
@@ -651,6 +657,13 @@ export const inMemoryRepo: Repo = {
         const socio = sociosById.get(socioId);
         if (!socio) throw new Error("Socio not found");
         socio.curriculumCollectionKey = collectionKey;
+        return socio;
+    },
+
+    async archiveSocio(socioId) {
+        const socio = sociosById.get(socioId);
+        if (!socio) throw new Error("Socio not found");
+        if (!socio.archivedAt) socio.archivedAt = new Date();
         return socio;
     },
 };

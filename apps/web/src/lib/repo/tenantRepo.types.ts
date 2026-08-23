@@ -65,6 +65,14 @@ export type Enrollment = {
   participantId: string;
   cohortId: string;
   programVersionId: string | null;
+  /**
+   * Denormalized course identity (ContentCollection.slug), derived from
+   * programVersionId at write time. Null only for rows whose programVersionId
+   * points at a ProgramVersion with no collection (the pre-Stage-2 dangling
+   * draft rows — see A.3). Kept in sync exclusively by
+   * resolveOrCreateActiveEnrollment; never write it elsewhere.
+   */
+  collectionKey: string | null;
   status: 'active' | 'paused' | 'completed' | 'dropped';
   enrolledAt: Date;
   completedAt: Date | null;
@@ -259,6 +267,8 @@ export type AssessmentSession = {
   configSnapshot: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
+  /** A.4. Null for pre-Stage-4 rows and any row whose socio has no resolvable enrollment. */
+  enrollmentId: string | null;
 };
 
 export type AssessmentMessage = {
@@ -538,6 +548,16 @@ export interface TenantRepo {
       channel: string; // delivery channel (whatsapp/web)
       configSnapshot: Record<string, unknown>;
       attemptNumber?: number;
+      /**
+       * A.4. Pass it when the caller already has it (the player surface's
+       * gate does, via ValidatedPlayerContext.enrollmentId). When omitted,
+       * resolved internally via the socio's curriculumCollectionKey +
+       * participant lookup, preferring an ACTIVE enrollment — covers both
+       * the chat-surface gate trigger and the standalone
+       * /api/assessment/start retake path, neither of which carries a
+       * PlayerAccess.
+       */
+      enrollmentId?: string;
     }
   ): Promise<AssessmentSession>;
   getAssessmentSessionById(ctx: TenantContext, sessionId: string): Promise<AssessmentSession | null>;

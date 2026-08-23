@@ -40,10 +40,12 @@ describe('buildSocioWhere — composition', () => {
   });
 
   it('ignores pagination — rollups must not be per-page', () => {
-    expect(where('page=3&pageSize=50')).toEqual({});
+    expect(where('page=3&pageSize=50')).toEqual({ archivedAt: null });
   });
 
-  it('builds an empty where for no filters', () => {
-    expect(where('')).toEqual({});
+  it('builds a where with only the unconditional archived exclusion for no filters', () => {
+    // A.3: archivedAt: null is unconditional (no "show archived" toggle
+    // exists yet), so "no filters" is no longer a truly empty where.
+    expect(where('')).toEqual({ archivedAt: null });
   });
 });

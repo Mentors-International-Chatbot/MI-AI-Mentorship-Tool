@@ -25,7 +25,11 @@ export function buildSocioWhere(params: URLSearchParams): Prisma.SocioWhereInput
   const lessonNumber = params.get('lessonNumber'); // lesson number
   const collectionKey = params.get('collectionKey');
 
-  const where: Prisma.SocioWhereInput = {};
+  // A.3: archived socios (status stays whatever it was — archival is a
+  // separate concern, see Socio.archivedAt) never appear in the admin list
+  // or its rollups by default. There is no "show archived" toggle yet, so
+  // this is unconditional, not gated on a query param.
+  const where: Prisma.SocioWhereInput = { archivedAt: null };
 
   if (status) {
     where.status = status as Prisma.SocioWhereInput['status'];

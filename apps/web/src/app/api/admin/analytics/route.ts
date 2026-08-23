@@ -26,26 +26,30 @@ export async function GET() {
     totalMessages,
     financialWeeks,
   ] = await Promise.all([
-    // Socios by onboarding status
+    // Socios by onboarding status. A.3: archived excluded — an archived
+    // socio's status stays whatever it was (archival is a separate concern),
+    // so without this an archived test account inflates its status bucket.
     prisma.socio.groupBy({
       by: ['status'],
+      where: { archivedAt: null },
       _count: { id: true },
     }),
 
-    prisma.socio.count(),
+    prisma.socio.count({ where: { archivedAt: null } }), // A.3
 
-    // Lesson completion funnel: how many socios completed each lesson
+    // Lesson completion funnel: how many socios completed each lesson.
+    // A.3: relation filter, since this table has no archivedAt of its own.
     prisma.lessonProgress.groupBy({
       by: ['lessonNumber'],
-      where: { completedAt: { not: null } },
+      where: { completedAt: { not: null }, socio: { archivedAt: null } },
       _count: { id: true },
       orderBy: { lessonNumber: 'asc' },
     }),
 
-    // Average understanding score by lesson
+    // Average understanding score by lesson. A.3: see lessonFunnel above.
     prisma.lessonProgress.groupBy({
       by: ['lessonNumber'],
-      where: { understanding: { not: null } },
+      where: { understanding: { not: null }, socio: { archivedAt: null } },
       _avg: { understanding: true },
       orderBy: { lessonNumber: 'asc' },
     }),
@@ -62,10 +66,11 @@ export async function GET() {
       },
     }),
 
-    // Flag counts by level (unresolved)
+    // Flag counts by level (unresolved). A.3: an archived test account's
+    // stray flag must not count toward the live triage dashboard.
     prisma.socioFlag.groupBy({
       by: ['level'],
-      where: activeFlagWhere(),
+      where: { ...activeFlagWhere(), socio: { archivedAt: null } },
       _count: { id: true },
     }),
 
@@ -106,8 +111,10 @@ export async function GET() {
     prisma.socio.count({ where: { participantProfile: null, channelType: 'whatsapp' } }),
   ]);
 
-  // Compute avg messages per socio per week
-  const activeSocioCount = await prisma.socio.count({ where: { status: 'ACTIVE' } });
+  // Compute avg messages per socio per week. A.3: archived excluded from the
+  // roster-size denominator, or 3 dormant test accounts understate everyone
+  // else's engagement.
+  const activeSocioCount = await prisma.socio.count({ where: { status: 'ACTIVE', archivedAt: null } });
   const avgMessagesPerSocio = activeSocioCount > 0
     ? Math.round((messagesThisWeek / activeSocioCount) * 10) / 10
     : 0;

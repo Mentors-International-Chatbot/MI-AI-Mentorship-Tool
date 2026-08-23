@@ -30,7 +30,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.verifySession.mockResolvedValue(session);
   mocks.getCourseMeta.mockResolvedValue({ courseName: 'AI Essentials', mentorName: 'Tutor', displayName: 'AI Essentials' });
-  mocks.resolveLearnerHome.mockResolvedValue('/learn/AIESS/first');
+  mocks.resolveLearnerHome.mockResolvedValue({ kind: 'redirect', path: '/learn/AIESS/first' });
 });
 
 describe('/api/auth/me session diagnostics', () => {
@@ -52,7 +52,7 @@ describe('/api/auth/me session diagnostics', () => {
       language: 'en',
       curriculumCollectionKey: 'ai-essentials',
     });
-    mocks.resolveLearnerHome.mockResolvedValue('/join?error=no-published-course');
+    mocks.resolveLearnerHome.mockResolvedValue({ kind: 'redirect', path: '/join?error=no-published-course' });
 
     const response = await GET();
 
@@ -61,6 +61,27 @@ describe('/api/auth/me session diagnostics', () => {
       curriculumCollectionKey: 'ai-essentials',
       homePath: '/join?error=no-published-course',
       enrollmentIssue: 'no-published-course',
+    });
+  });
+
+  it('A.5: more than one ACTIVE enrollment reports no homePath and no enrollmentIssue, not an error — join/page.tsx falls back to /home', async () => {
+    mocks.getSocio.mockResolvedValue({
+      id: session.userId,
+      language: 'en',
+      curriculumCollectionKey: 'ai-essentials',
+    });
+    mocks.resolveLearnerHome.mockResolvedValue({
+      kind: 'choose',
+      courses: [{ courseCode: 'AIESS', path: '/learn/AIESS/first' }, { courseCode: 'SKILLS', path: '/learn/SKILLS/first' }],
+    });
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      curriculumCollectionKey: 'ai-essentials',
+      homePath: null,
+      enrollmentIssue: null,
     });
   });
 

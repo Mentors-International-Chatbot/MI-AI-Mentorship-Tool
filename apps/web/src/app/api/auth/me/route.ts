@@ -45,8 +45,15 @@ export async function GET() {
       courseName = meta.courseName;
       mentorName = meta.mentorName;
       displayName = meta.displayName;
-      homePath = await resolveLearnerHome(socio.id);
-      const joinError = homePath.match(/^\/join\?error=(not-enrolled|no-published-course|channel-not-supported)$/u)?.[1];
+      const resolution = await resolveLearnerHome(socio.id);
+      // A.5: more than one ACTIVE enrollment has no single homePath to give —
+      // this is not an enrollment error, so it must not set enrollmentIssue.
+      // join/page.tsx already falls back to '/home' whenever homePath is
+      // falsy (`data.homePath || '/home'`, twice), and /home is the one place
+      // that now knows how to render the course list. Reusing that existing
+      // fallback avoids needing new picker UI in two places.
+      homePath = resolution.kind === 'redirect' ? resolution.path : null;
+      const joinError = homePath?.match(/^\/join\?error=(not-enrolled|no-published-course|channel-not-supported)$/u)?.[1];
       if (joinError === 'not-enrolled' || joinError === 'no-published-course' || joinError === 'channel-not-supported') {
         enrollmentIssue = joinError;
       }

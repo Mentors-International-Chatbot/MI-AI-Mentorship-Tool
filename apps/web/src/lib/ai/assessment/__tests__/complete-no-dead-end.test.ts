@@ -75,6 +75,7 @@ const createMockTenantRepo = (): TenantRepo => ({
     configSnapshot: { blocking: true },
     createdAt: new Date(),
     updatedAt: new Date(),
+    enrollmentId: null,
   } as AssessmentSession)),
   getMetricDefinitions: vi.fn().mockResolvedValue([]),
   getMetricDefinitionByKey: vi.fn().mockResolvedValue(null),

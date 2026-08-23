@@ -65,7 +65,24 @@ model Socio {
   aiPaused            Boolean          @default(false) @map("ai_paused")
   metadata            Json?
   mentorId            String?          @map("mentor_id")
+  /// Still authoritative for the frozen chat surface (D1) — /chat routing,
+  /// messaging/handler.ts content selection, onboarding script lookup. NOT
+  /// deprecated there. DEPRECATED (A.6 candidate, A.5) specifically as a
+  /// player-access GATE: resolvePlayerAccess now grants on Enrollment alone
+  /// and only reads this field for a diagnostic log line on enrollment-miss,
+  /// never to grant. Do not add a new player-surface read of this field.
   curriculumCollectionKey String?      @map("curriculum_collection_key")
+  /// Soft-archive marker (A.3). Deliberately NOT a `status` enum value:
+  /// `OnboardingStatus` is the onboarding funnel (NEW..ACTIVE), a closed set
+  /// several switch statements exhaustively match on
+  /// (`onboarding/service.ts`); repurposing it for account lifecycle would
+  /// conflate two different concerns and risk an unhandled-case fallthrough.
+  /// A separate nullable timestamp is the same pattern already used
+  /// elsewhere in this schema for soft state (completedAt, resolvedAt,
+  /// reachedAt). Non-null = archived; every dashboard/listing/aggregate-count
+  /// read path must filter `archivedAt: null` — see A.3 report for the full
+  /// list of call sites this required.
+  archivedAt          DateTime?        @map("archived_at")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
@@ -523,11 +540,24 @@ model Cohort {
   @@map("cohorts")
 }
 
+/// `collectionKey` is a denormalized course identity, derived from
+/// `programVersionId` -> `ProgramVersion.collectionId` -> `ContentCollection.slug`.
+/// It exists because a course spans multiple ProgramVersions over time and
+/// `participantId` (the learner identity Enrollment already keys on — there is
+/// no separate `learnerId`) + `programVersionId` alone cannot express "one
+/// ACTIVE enrollment per learner per COURSE" (see the partial unique index
+/// below). It must be kept in sync with `programVersionId` by every writer;
+/// the only live writer is `resolveOrCreateActiveEnrollment`
+/// (Platform Restructure Phase A, Stage 1/2) — do not write this column
+/// anywhere else. Nullable because `programVersionId` itself is nullable and
+/// a handful of pre-Stage-2 rows point at a draft ProgramVersion with no
+/// collection at all.
 model Enrollment {
   id               String    @id @default(uuid())
   participantId    String    @map("participant_id")
   cohortId         String    @map("cohort_id")
   programVersionId String?   @map("program_version_id")
+  collectionKey    String?   @map("collection_key")
   status           String    @default("active") // "active", "paused", "completed", "dropped"
   enrolledAt       DateTime  @default(now()) @map("enrolled_at")
   completedAt      DateTime? @map("completed_at")
@@ -540,10 +570,19 @@ model Enrollment {
   observations   MetricObservation[]
   alerts         Alert[]
   learnerProjects LearnerProject[]
+  blockProgress      BlockProgress[]
+  milestoneProgress  MilestoneProgress[]
+  assessmentSessions AssessmentSession[]
 
   @@unique([participantId, cohortId])
   @@index([cohortId])
   @@index([participantId])
+  // Partial unique index enforcing "one ACTIVE enrollment per (learner,
+  // course)" (D2) lives in raw migration SQL, not here — Prisma schema syntax
+  // cannot express a WHERE clause on an index. See
+  // 20260821000000_add_enrollment_collection_key/migration.sql, following the
+  // learner_projects_current_enrollment_key precedent
+  // (20260814010000_add_learner_projects/migration.sql).
   @@map("enrollments")
 }
 
@@ -697,7 +736,16 @@ model LessonVersion {
 /// compatibility aggregate and is intentionally not changed by this model.
 model BlockProgress {
   id             String    @id @default(uuid())
+  /// DEPRECATED (A.6 candidate, Platform Restructure Phase A / A.4): learner
+  /// identity is now reachable via enrollmentId -> participant -> socioId.
+  /// Kept for one full verification cycle; new code should prefer
+  /// enrollmentId. Not dropped here — A.6 is a separate migration.
   socioId        String    @map("socio_id")
+  /// DEPRECATED (A.6 candidate): course identity is now enrollmentId's FK
+  /// chain (programVersionId -> collectionId -> slug), set once at row
+  /// creation and never rewritten on update (see A.4 write-path notes on
+  /// completeBlock/recordPlayerTutorSuccess/markTeachBackComplete). Kept for
+  /// one full verification cycle.
   collectionKey  String    @map("collection_key")
   lessonKey      String    @map("lesson_key")
   blockId        String    @map("block_id")
@@ -709,11 +757,24 @@ model BlockProgress {
   state          Json?
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
+  /// A.4. Nullable: backfilled rows and any row from before this stage may
+  /// have none. Set once at creation by the three write paths in
+  /// player/service.ts; never rewritten by an update — see the doc comment
+  /// on `collectionKey` above for why, and the retake-collision note this
+  /// implies (@@unique below is not yet enrollment-scoped; A.6's job).
+  enrollmentId   String?   @map("enrollment_id")
 
-  socio Socio @relation(fields: [socioId], references: [id], onDelete: Cascade)
+  socio      Socio       @relation(fields: [socioId], references: [id], onDelete: Cascade)
+  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
 
+  // NOT YET enrollment-scoped — see A.4 report. A second enrollment in the
+  // same collection (a retake) writing the same (lessonKey, blockId) would
+  // collide with this constraint and overwrite the first attempt's row
+  // instead of creating a new one. A.6 must widen this to include
+  // enrollmentId before retakes are safe.
   @@unique([socioId, collectionKey, lessonKey, blockId], map: "block_progress_identity_key")
   @@index([socioId, collectionKey, completedAt])
+  @@index([enrollmentId])
   @@map("block_progress")
 }
 
@@ -857,7 +918,15 @@ enum AssessmentSessionStatus {
 model AssessmentSession {
   id             String                  @id @default(uuid())
   organizationId String                  @map("organization_id")
+  /// DEPRECATED (A.6 candidate, A.4): see BlockProgress.socioId's doc comment.
   socioId        String                  @map("socio_id")
+  /// This table has no collectionKey column at all — course identity had to
+  /// be derived (A.4) via lessonKey -> ContentLesson.collection.slug,
+  /// narrowed by the socio's curriculumCollectionKey at write/backfill time.
+  /// lessonKey itself is NOT deprecated — it identifies which lesson this
+  /// session is about, which enrollmentId cannot express and A.6 will not
+  /// remove. Only its former role as the sole (indirect) course signal is
+  /// superseded.
   lessonKey      String                  @map("lesson_key")
   blockId        String?                 @map("block_id")
   kind           String                  @default("teach_back")
@@ -872,13 +941,24 @@ model AssessmentSession {
   channel        String                  @default("web")
   createdAt      DateTime                @default(now()) @map("created_at")
   updatedAt      DateTime                @updatedAt @map("updated_at")
+  /// A.4. Nullable — see BlockProgress.enrollmentId's doc comment. Set once
+  /// at creation (createAssessmentSession); this table has no update path
+  /// that could rewrite it.
+  enrollmentId   String?                 @map("enrollment_id")
 
-  socio    Socio     @relation(fields: [socioId], references: [id])
-  messages Message[]
+  socio      Socio       @relation(fields: [socioId], references: [id])
+  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  messages   Message[]
 
+  // attemptNumber already differentiates retakes (a new attempt increments
+  // it), so — unlike BlockProgress/MilestoneProgress — a second enrollment
+  // does not collide with this constraint. It is still not enrollment-aware:
+  // attemptNumber's counter continues across enrollments rather than
+  // resetting per-enrollment, a related but different gap. See A.4 report.
   @@unique([socioId, lessonKey, attemptNumber])
   @@index([organizationId])
   @@index([socioId, status])
+  @@index([enrollmentId])
   @@map("assessment_sessions")
 }
 
@@ -898,14 +978,18 @@ model AssessmentSession {
 /// completing the exercise"), so the writer is a [MILESTONE:key] marker the AI
 /// emits, the same mechanism as [LESSON_COMPLETE:n] and [FINANCIAL:...].
 ///
-/// RETAKE BLOCKER: this identity is still socioId + collectionKey + milestoneKey.
-/// It must become enrollment-scoped before AI Essentials supports retakes, or
-/// two enrollments in the same collection will share capstone milestone state.
+/// enrollmentId landed in A.4 (Platform Restructure Phase A). The identity
+/// below is NOT yet enrollment-scoped — see the @@unique comment — so this
+/// is still a retake blocker until A.6 widens that constraint; only the
+/// column existing is done, not the fix.
 model MilestoneProgress {
   id             String   @id @default(uuid())
   organizationId String   @map("organization_id")
+  /// DEPRECATED (A.6 candidate, A.4): see BlockProgress.socioId's doc comment.
   socioId        String   @map("socio_id")
   /// Scopes the milestone key: keys are unique per course, not globally.
+  /// DEPRECATED (A.6 candidate, A.4): see BlockProgress.collectionKey's doc
+  /// comment — same "set once at creation, never rewritten" rule applies.
   collectionKey  String   @map("collection_key")
   milestoneKey   String   @map("milestone_key")
   reachedAt      DateTime @default(now()) @map("reached_at")
@@ -914,12 +998,22 @@ model MilestoneProgress {
   /// The learner's own report, verbatim. Never rendered into a prompt.
   evidence       String?
   createdAt      DateTime @default(now()) @map("created_at")
+  /// A.4. Nullable — see BlockProgress.enrollmentId's doc comment; the same
+  /// rules apply (set once by recordMilestoneReached, never rewritten;
+  /// `update: {}` on its upsert already never touched anything).
+  enrollmentId   String?  @map("enrollment_id")
 
-  socio Socio @relation(fields: [socioId], references: [id])
+  socio      Socio       @relation(fields: [socioId], references: [id])
+  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
 
+  // NOT YET enrollment-scoped — see the model doc comment above and the A.4
+  // report. Same retake-collision shape as BlockProgress: a second
+  // enrollment in this collection reaching the same milestoneKey would hit
+  // this constraint's `update: {}` no-op instead of recording a fresh reach.
   @@unique([socioId, collectionKey, milestoneKey])
   @@index([organizationId])
   @@index([socioId, collectionKey])
+  @@index([enrollmentId])
   @@map("milestone_progress")
 }
 
@@ -1006,6 +1100,15 @@ model LtiIdentity {
   @@map("lti_identities")
 }
 
+/// Not a duplicate of `Enrollment` (course enrollment): this tracks LTI
+/// role-membership per launch context (learner/instructor in this Canvas
+/// context), deduped so repeated launches don't re-write it. 0 rows and
+/// 0 `LtiContext` rows as of 2026-08-21 — not dead code, just unconfigured:
+/// `provisionLaunch` writes it on every launch, and no LTI context has been
+/// configured yet. NOT an A.6 drop candidate — it has a live writer and a
+/// distinct purpose from `Enrollment`; the earlier note suggesting otherwise
+/// was wrong and is retracted. Canvas/LTI has no deadline and resumes after
+/// Phase E per the restructure plan.
 model LtiEnrollment {
   id         String   @id @default(uuid())
   identityId String   @map("identity_id")

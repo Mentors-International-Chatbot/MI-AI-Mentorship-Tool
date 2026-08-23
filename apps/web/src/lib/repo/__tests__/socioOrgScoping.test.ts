@@ -239,7 +239,8 @@ describe('getSociosAcrossAllOrganizations — the deliberate cross-tenant path',
     await prismaRepo.getSociosAcrossAllOrganizations();
 
     const [args] = mockPrisma.socio.findMany.mock.calls[0];
-    expect(args.where).toEqual({ status: 'ACTIVE' });
+    // archivedAt: null is A.3's soft-archive exclusion, not an org filter.
+    expect(args.where).toEqual({ status: 'ACTIVE', archivedAt: null });
     expect(args.where).not.toHaveProperty('participantProfile');
   });
 });

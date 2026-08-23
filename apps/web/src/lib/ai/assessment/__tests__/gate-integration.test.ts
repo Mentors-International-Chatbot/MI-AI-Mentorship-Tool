@@ -39,6 +39,7 @@ function createMockSession(overrides: Partial<MockSession> = {}): MockSession {
     liveState: {},
     createdAt: new Date(),
     updatedAt: new Date(),
+    enrollmentId: null,
     ...overrides,
   };
 }

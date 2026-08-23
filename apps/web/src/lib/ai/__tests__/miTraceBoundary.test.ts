@@ -158,6 +158,7 @@ describe("MI lesson-delivery trace boundary", () => {
           courseCode: "SKILLS",
           collectionKey: "skills-tool-calls",
           programVersionId: "pv-skills",
+          enrollmentId: "enrollment-skills-1",
           lessonKey: "skills-and-tool-calls",
           blockId: "stc-01",
           intent: "question",

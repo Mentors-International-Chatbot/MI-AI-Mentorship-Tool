@@ -66,6 +66,21 @@ export class LearnerProjectTransitionError extends Error {
   }
 }
 
+/**
+ * Enrollment.collectionKey has no DB-level NOT NULL (the 3 pre-Stage-2
+ * dangling-draft rows, soft-archived in A.3, still legitimately carry NULL —
+ * see the Enrollment model's `collectionKey` doc comment). This is the
+ * code-level backstop instead: the one live writer of NEW enrollments must
+ * never create another NULL row. A ProgramVersion with no collection is not
+ * a valid target to begin a course against.
+ */
+export class EnrollmentCourseUnresolvedError extends Error {
+  constructor(public readonly programVersionId: string) {
+    super(`ProgramVersion ${programVersionId} has no collection — refusing to create an Enrollment with a NULL collectionKey`);
+    this.name = 'EnrollmentCourseUnresolvedError';
+  }
+}
+
 export function isLearnerProjectStatusTransitionAllowed(
   from: LearnerProjectStatus | null,
   to: LearnerProjectStatus,
@@ -146,6 +161,7 @@ function toEnrollment(p: PrismaEnrollment): Enrollment {
     participantId: p.participantId,
     cohortId: p.cohortId,
     programVersionId: p.programVersionId,
+    collectionKey: p.collectionKey,
     status: p.status as Enrollment['status'],
     enrolledAt: p.enrolledAt,
     completedAt: p.completedAt,
@@ -345,6 +361,7 @@ function toAssessmentSession(p: PrismaAssessmentSession): AssessmentSession {
     configSnapshot: p.configSnapshot as Record<string, unknown> | null,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
+    enrollmentId: p.enrollmentId,
   };
 }
 
@@ -363,6 +380,7 @@ function toSocio(p: PrismaSocio): Socio {
     aiPaused: p.aiPaused,
     mentorId: p.mentorId,
     curriculumCollectionKey: p.curriculumCollectionKey,
+    archivedAt: p.archivedAt,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -1169,7 +1187,7 @@ export const tenantPrismaRepo: TenantRepo = {
 
     const version = await prisma.programVersion.findUnique({
       where: { id: programVersionId },
-      select: { programId: true, program: { select: { organizationId: true } } },
+      select: { programId: true, program: { select: { organizationId: true } }, collection: { select: { slug: true } } },
     });
     if (!version) {
       throw new TenantIsolationError('ProgramVersion not found', {
@@ -1178,6 +1196,11 @@ export const tenantPrismaRepo: TenantRepo = {
         resourceId: programVersionId,
       });
     }
+    // Denormalized course identity, kept in sync here and nowhere else — see
+    // the `collectionKey` doc comment on the Enrollment model. Null when the
+    // ProgramVersion itself has no collection (the pre-Stage-2 dangling draft
+    // shape; A.3 decides those rows' fate, not this method).
+    const collectionKey = version.collection?.slug ?? null;
     if (version.program.organizationId !== ctx.organizationId) {
       throw new TenantIsolationError('Cross-tenant access denied', {
         requestedOrgId: ctx.organizationId,
@@ -1207,11 +1230,35 @@ export const tenantPrismaRepo: TenantRepo = {
     // Upsert on the (participantId, cohortId) unique constraint is what makes
     // this idempotent: re-entry for the same learner+cohort always resolves
     // the same row and reactivates it rather than minting a duplicate.
-    const enrollment = await prisma.enrollment.upsert({
+    //
+    // Version pinning (Platform Restructure Phase A, Stage 2 addendum):
+    // programVersionId is the authoritative version for an enrollment's
+    // entire lifetime once set. Re-entry must reactivate the row, never
+    // silently re-point an already-pinned enrollment at whatever version this
+    // call happened to resolve this time (e.g. a course re-published between
+    // two course-selection visits) — that would be an in-place version
+    // migration nobody chose. Version migration is archive-and-recreate (the
+    // same mechanic as the D2 reset), not a field the create-or-resolve path
+    // mutates. So: only CREATE sets programVersionId/collectionKey; an
+    // existing row keeps its own, even if this call resolved a different one.
+    const existing = await prisma.enrollment.findUnique({
       where: { participantId_cohortId: { participantId, cohortId: resolvedCohortId } },
-      create: { participantId, cohortId: resolvedCohortId, programVersionId, status: 'active', metadata: { channel } },
-      update: { programVersionId, status: 'active' },
     });
+    if (!existing && collectionKey === null) {
+      // Only the CREATE branch writes collectionKey; refuse here rather than
+      // mint another dangling-draft-shaped row. Re-entry (existing !== null)
+      // never touches collectionKey regardless — see the pinning comment
+      // above — so this cannot block reactivating a pre-existing enrollment.
+      throw new EnrollmentCourseUnresolvedError(programVersionId);
+    }
+    const enrollment = existing
+      ? await prisma.enrollment.update({
+          where: { id: existing.id },
+          data: { status: 'active' },
+        })
+      : await prisma.enrollment.create({
+          data: { participantId, cohortId: resolvedCohortId, programVersionId, collectionKey, status: 'active', metadata: { channel } },
+        });
     return toEnrollment(enrollment);
   },
 
@@ -1627,6 +1674,7 @@ export const tenantPrismaRepo: TenantRepo = {
     const socios = await prisma.socio.findMany({
       where: {
         status: 'ACTIVE',
+        archivedAt: null, // A.3: archived socios (status stays ACTIVE) must not appear in mentor dashboards
         participantProfile: { organizationId },
       },
       orderBy: { updatedAt: 'desc' },
@@ -1638,6 +1686,7 @@ export const tenantPrismaRepo: TenantRepo = {
     const socios = await prisma.socio.findMany({
       where: {
         status: 'ACTIVE',
+        archivedAt: null, // A.3: see getSociosForOrganization
         mentorId,
         participantProfile: { organizationId },
       },
@@ -2137,6 +2186,42 @@ export const tenantPrismaRepo: TenantRepo = {
       }
     }
 
+    // A.4: prefer the caller's enrollmentId (the player gate has one via
+    // ValidatedPlayerContext). Otherwise resolve via the socio's CURRENT
+    // curriculumCollectionKey + participant — matches the A.4 backfill's
+    // logic exactly. Best-effort: null is valid (e.g. unanchored socio).
+    //
+    // Defense in depth: a caller-supplied enrollmentId is not trusted blindly
+    // even though every current caller already derived it from a
+    // tenant-verified PlayerAccess — this repo method has ctx, so it verifies
+    // independently rather than relying on every future caller staying
+    // disciplined. Cross-tenant IDs are silently dropped (fall through to
+    // internal resolution) rather than thrown, matching this field's
+    // best-effort, nullable nature elsewhere.
+    let enrollmentId = data.enrollmentId ?? null;
+    if (enrollmentId) {
+      const owner = await prisma.enrollment.findUnique({
+        where: { id: enrollmentId },
+        select: { cohort: { select: { program: { select: { organizationId: true } } } } },
+      });
+      if (!owner || owner.cohort.program.organizationId !== ctx.organizationId) {
+        enrollmentId = null;
+      }
+    }
+    if (!enrollmentId) {
+      const socio = await prisma.socio.findUnique({
+        where: { id: data.socioId },
+        select: { curriculumCollectionKey: true, participantProfile: { select: { id: true } } },
+      });
+      if (socio?.curriculumCollectionKey && socio.participantProfile) {
+        const candidates = await prisma.enrollment.findMany({
+          where: { participantId: socio.participantProfile.id, collectionKey: socio.curriculumCollectionKey },
+          orderBy: { enrolledAt: 'desc' },
+        });
+        enrollmentId = (candidates.find((c) => c.status === 'active') ?? candidates[0])?.id ?? null;
+      }
+    }
+
     const session = await prisma.assessmentSession.create({
       data: {
         organizationId: ctx.organizationId,
@@ -2146,6 +2231,7 @@ export const tenantPrismaRepo: TenantRepo = {
         channel: data.channel,
         attemptNumber,
         configSnapshot: data.configSnapshot as object,
+        enrollmentId,
       },
     });
     return toAssessmentSession(session);

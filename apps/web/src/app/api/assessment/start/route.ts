@@ -88,6 +88,15 @@ export async function POST(req: NextRequest) {
     // ─── Create new session only if none exists (retake scenario) ───────────
     if (!sessionToUse) {
       // No open session - this is a retake or the gate handler didn't create one
+      //
+      // A.5 (Platform Restructure Phase A, Stage 5): no enrollmentId or
+      // collectionKey passed — this route's request body is {lessonKey,
+      // blockId} only, with no course signal anywhere in its shape. This is
+      // the G3 root cause in another hat: createAssessmentSession falls back
+      // to the socio's CURRENT curriculumCollectionKey, standing in for
+      // whatever course this session is actually about, because there is no
+      // other fact available to ask instead. Fixing this for real means
+      // widening the request shape (a courseCode param), not a lookup here.
       sessionToUse = await createAssessmentSession({
         ctx,
         repo: tenantPrismaRepo,

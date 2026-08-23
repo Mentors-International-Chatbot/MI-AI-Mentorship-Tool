@@ -43,6 +43,14 @@ export type ValidatedPlayerContext = {
   parentAssistantMessageId?: string;
   collectionKey: string;
   programVersionId: string;
+  /**
+   * A.4 (Platform Restructure Phase A, Stage 4). Threaded from
+   * PlayerAccess.enrollmentId so recordPlayerTutorSuccess — the one
+   * BlockProgress writer here that only has a socioId, not a full
+   * PlayerAccess — can still populate BlockProgress.enrollmentId at
+   * creation without a second lookup.
+   */
+  enrollmentId: string;
   contentVersion?: number;
   teachBackTurn?: 1 | 2;
   ltiContextId?: string;
@@ -90,9 +98,15 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
       && item.status === "active"
     )?.id;
   } else {
-    if (socio.curriculumCollectionKey !== collectionKey) {
-      throw new PlayerError(403, "not_enrolled", "You are not enrolled in this course");
-    }
+    // A.5 (Platform Restructure Phase A, Stage 5 — closes G2): Enrollment is
+    // consulted FIRST and is what grants access. Before this, the gate below
+    // (curriculumCollectionKey !== collectionKey -> 403) ran BEFORE this
+    // lookup, so a learner with a fully valid ACTIVE enrollment for
+    // collectionKey was rejected outright whenever the single legacy field
+    // happened to name a different course — the actual single-course
+    // constraint, not a missing table. This is what delivers multi-course: a
+    // learner with two ACTIVE enrollments can now reach either directly by
+    // URL, independent of which one curriculumCollectionKey currently names.
     const enrollment = socio.participantProfile ? await playerRuntimeRepo.enrollment.findFirst({
       where: {
         participantId: socio.participantProfile.id,
@@ -102,7 +116,19 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
       include: { programVersion: { include: { collection: true, program: true } } },
       orderBy: { enrolledAt: "desc" },
     }) : null;
-    if (!enrollment?.programVersion) throw new PlayerError(403, "not_enrolled", "An active enrollment in this course is required");
+    if (!enrollment?.programVersion) {
+      // DEPRECATED fallback (A.6 removes this branch entirely — see the
+      // curriculumCollectionKey doc comment on the Socio model). Grants
+      // nothing: there is no programVersion to serve without a real
+      // Enrollment row, full stop. This exists only to distinguish, in logs,
+      // "the profile still names this course but has no matching Enrollment"
+      // (a real data gap worth knowing about — post-A.3 no active socio
+      // should hit this) from a plain "never enrolled here."
+      if (socio.curriculumCollectionKey === collectionKey) {
+        console.warn(`[PlayerAccess] socio ${socio.id} curriculumCollectionKey names "${collectionKey}" but has no matching active Enrollment — likely a data gap, not a legitimate deny.`);
+      }
+      throw new PlayerError(403, "not_enrolled", "An active enrollment in this course is required");
+    }
     programVersion = enrollment.programVersion;
     selectedEnrollmentId = enrollment.id;
   }
@@ -239,13 +265,13 @@ export async function preparePlayerContext(
     parentAssistantMessageId = prior.id;
   }
   if (input.intent === "capstone" || (input.intent === "expand" && input.parentIntent === "capstone")) {
-    return { surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, parentAssistantMessageId, ltiContextId };
+    return { surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, enrollmentId: access.enrollmentId, parentAssistantMessageId, ltiContextId };
   }
   const rows = await lessonRows(access);
   const row = rows.find((item) => item.slug === input.lessonKey);
   if (!row?.versions[0]) throw new PlayerError(404, "lesson_not_found", "Lesson not found");
   const lesson = lessonSchema.parse(row.versions[0].body);
-  if (!input.blockId) return { surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, parentAssistantMessageId, ltiContextId };
+  if (!input.blockId) return { surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, enrollmentId: access.enrollmentId, parentAssistantMessageId, ltiContextId };
   const block = lesson.blocks.find((item) => item.id === input.blockId);
   if (!block) throw new PlayerError(404, "block_not_found", "Block not found");
   if (input.intent === "teach_back" && block.blockType !== "teach_back") throw new PlayerError(400, "invalid_context", "The selected block is not a teach-back");
@@ -256,7 +282,7 @@ export async function preparePlayerContext(
     ? existing.state as { turnCount?: unknown } : {};
   const turnCount = typeof state.turnCount === "number" ? state.turnCount : 0;
   return {
-    surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId,
+    surface: "player", courseCode: access.courseCode, ...input, collectionKey: access.collectionKey, programVersionId: access.programVersionId, enrollmentId: access.enrollmentId,
     contentVersion: block.contentVersion, teachBackTurn: input.intent === "teach_back" ? (turnCount >= 1 ? 2 : 1) : undefined,
     parentAssistantMessageId, ltiContextId,
   };
@@ -274,7 +300,10 @@ export async function recordPlayerTutorSuccess(socioId: string, context: Validat
   };
   await playerRuntimeRepo.blockProgress.upsert({
     where: { socioId_collectionKey_lessonKey_blockId: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, blockId: context.blockId } },
-    create: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, blockId: context.blockId, contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state },
+    // enrollmentId set only on create, never on update — see the doc comment
+    // on BlockProgress.collectionKey (A.4): the row is pinned to whichever
+    // enrollment first wrote it.
+    create: { socioId, collectionKey: context.collectionKey, lessonKey: context.lessonKey, blockId: context.blockId, contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state, enrollmentId: context.enrollmentId },
     update: { contentVersion: context.contentVersion, completedAt, score: completedAt ? 1 : null, state },
   });
   if (context.teachBackTurn === 2) {
@@ -644,7 +673,8 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
   const now = new Date();
   await playerRuntimeRepo.blockProgress.upsert({
     where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
-    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: savedState },
+    // enrollmentId set only on create, never on update — see A.4 note above.
+    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: savedState, enrollmentId: access.enrollmentId },
     update: { contentVersion: block.contentVersion, startedAt: now, completedAt: grade.complete ? now : null, score: grade.score, response: grade.response as object, state: savedState },
   });
 
@@ -807,7 +837,8 @@ export async function markTeachBackComplete(access: PlayerAccess, lessonKey: str
   if (!block) throw new PlayerError(404, "block_not_found", "Teach-back block not found");
   await playerRuntimeRepo.blockProgress.upsert({
     where: { socioId_collectionKey_lessonKey_blockId: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId } },
-    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: new Date(), score: 1, state },
+    // enrollmentId set only on create, never on update — see A.4 note above.
+    create: { socioId: access.socioId, collectionKey: access.collectionKey, lessonKey, blockId, contentVersion: block.contentVersion, completedAt: new Date(), score: 1, state, enrollmentId: access.enrollmentId },
     update: { contentVersion: block.contentVersion, completedAt: new Date(), score: 1, state },
   });
 }

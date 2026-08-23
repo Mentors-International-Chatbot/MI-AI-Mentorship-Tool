@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
 
   // Get all distinct curriculum collection keys from active socios
   const distinctCurriculums = await prisma.socio.findMany({
-    where: { status: 'ACTIVE' },
+    where: { status: 'ACTIVE', archivedAt: null }, // A.3: never check-in an archived socio
     select: { curriculumCollectionKey: true },
     distinct: ['curriculumCollectionKey'],
   });
@@ -117,6 +117,7 @@ export async function GET(req: NextRequest) {
     const socios = await prisma.socio.findMany({
       where: {
         status: 'ACTIVE',
+        archivedAt: null, // A.3: see the distinctCurriculums query above
         channelType: 'whatsapp',
         curriculumCollectionKey: collectionKey,
       },

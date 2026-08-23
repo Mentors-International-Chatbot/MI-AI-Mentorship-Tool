@@ -751,6 +751,15 @@ export const metadataSchema = z.object({
       supportedChannels: z.array(z.enum(["whatsapp", "web", "canvas"])).min(1),
     })
     .optional(),
+  /**
+   * D4: whether this course appears in a course-listing UI. Optional here
+   * (validated packages may omit it) because the runtime default lives in
+   * `resolveListed()` (`journey-package/listed.ts`), the same
+   * present-but-untrusted-JSON pattern `resolveDelivery` uses for `delivery`
+   * — not a Prisma column, matching how `delivery` itself is stored on
+   * ProgramVersion.metadata rather than the ContentCollection row.
+   */
+  listed: z.boolean().optional(),
 });
 
 // ── Top-level package + cross-reference validation ───────────────────────────

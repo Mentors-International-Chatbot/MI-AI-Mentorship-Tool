@@ -6,15 +6,27 @@ import { getCourseMeta } from '@/lib/courses/course-meta';
 /**
  * Builds extraction prompt based on learnerContext.fields from course config.
  * If no learnerContext, returns null (no extraction needed).
+ *
+ * A.5 (Platform Restructure Phase A, Stage 5): `collectionKey` is the
+ * enrollment-derived course for this turn, passed by the one caller that has
+ * it (the player surface, via ValidatedPlayerContext.collectionKey — see
+ * extractAndStoreContext). Without it, this fell back to
+ * socio.curriculumCollectionKey — the single legacy field — even for a
+ * player turn on a course that field doesn't currently name, extracting
+ * against the WRONG course's learnerContext field schema for a
+ * multi-enrolled learner. Same root cause as messaging/handler.ts:461.
  */
-async function buildExtractionPrompt(socioId: string): Promise<string | null> {
-    // Get socio to find their curriculum
-    const socio = await repo.getSocioById(socioId);
-    if (!socio?.curriculumCollectionKey) {
+async function buildExtractionPrompt(socioId: string, collectionKey?: string): Promise<string | null> {
+    let resolvedCollectionKey = collectionKey;
+    if (!resolvedCollectionKey) {
+        const socio = await repo.getSocioById(socioId);
+        resolvedCollectionKey = socio?.curriculumCollectionKey ?? undefined;
+    }
+    if (!resolvedCollectionKey) {
         return null; // No course = no context extraction
     }
 
-    const meta = await getCourseMeta(socio.curriculumCollectionKey);
+    const meta = await getCourseMeta(resolvedCollectionKey);
     if (!meta.learnerContext) {
         return null; // No learnerContext defined = no extraction
     }
@@ -55,10 +67,11 @@ export async function extractAndStoreContext(
     socioId: string,
     userMessage: string,
     aiResponse: string,
+    collectionKey?: string,
 ): Promise<void> {
     try {
         // Build prompt based on course config
-        const extractionPrompt = await buildExtractionPrompt(socioId);
+        const extractionPrompt = await buildExtractionPrompt(socioId, collectionKey);
 
         // No extraction needed for courses without learnerContext
         if (!extractionPrompt) {

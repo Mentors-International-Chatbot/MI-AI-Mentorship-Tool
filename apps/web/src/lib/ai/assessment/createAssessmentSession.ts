@@ -30,6 +30,26 @@ export interface CreateSessionParams {
   blockId: string;
   /** Delivery channel (whatsapp/web) - captured at session creation */
   channel: string;
+  /**
+   * A.4 (Platform Restructure Phase A). Pass it when the caller already has
+   * one (the player-surface gate does, via ValidatedPlayerContext). Omitted
+   * by the standalone /api/assessment/start retake path, which has no
+   * PlayerAccess — repo.createAssessmentSession resolves it internally in
+   * that case.
+   */
+  enrollmentId?: string;
+  /**
+   * A.5 (Platform Restructure Phase A, Stage 5). The enrollment-derived
+   * course for this session (playerContext.collectionKey when this is a
+   * player-surface gate trigger). Without it, resolveProgramConfig fell back
+   * to socio.curriculumCollectionKey — the single legacy field — even when
+   * the caller already knew the right course, the same content-mismatch
+   * shape as messaging/handler.ts:461 before its A.5 fix. Structurally
+   * absent for /api/assessment/start (no course in that request's shape at
+   * all) and the chat-surface gate trigger (no PlayerAccess) — both keep the
+   * curriculumCollectionKey fallback; see resolveProgramConfig's comment.
+   */
+  collectionKey?: string;
 }
 
 export interface SessionConfigSnapshot {
@@ -78,14 +98,22 @@ export class AssessmentConfigError extends Error {
 
 /**
  * Resolves the ProgramVersion.config for a socio's active curriculum.
+ *
+ * A.5: prefers the caller-supplied collectionKey (the player-surface gate
+ * trigger has one, enrollment-derived via playerContext). Falling back to
+ * socio.curriculumCollectionKey — G3's root cause pattern: current state
+ * standing in for a historical/contextual fact — is structurally required
+ * for /api/assessment/start (no course anywhere in that request) and the
+ * chat-surface gate trigger (no PlayerAccess to carry one). Both are
+ * chat/legacy-shaped call sites, not bugs to fix here.
  */
 async function resolveProgramConfig(
   ctx: TenantContext,
   repo: TenantRepo,
   socioId: string,
+  collectionKeyOverride?: string,
 ): Promise<{ config: ProgramVersionConfig; collectionKey: string }> {
-  // Get the socio's curriculum collection key
-  const collectionKey = await repo.getSocioCurriculumCollectionKey(socioId);
+  const collectionKey = collectionKeyOverride ?? await repo.getSocioCurriculumCollectionKey(socioId);
 
   if (!collectionKey) {
     throw new AssessmentConfigError(
@@ -245,10 +273,10 @@ function buildConfigSnapshot(
 export async function createAssessmentSession(
   params: CreateSessionParams,
 ): Promise<AssessmentSession> {
-  const { ctx, repo, socioId, lessonKey, blockId, channel } = params;
+  const { ctx, repo, socioId, lessonKey, blockId, channel, enrollmentId, collectionKey: collectionKeyOverride } = params;
 
   // ─── 1. Resolve program config ────────────────────────────────────────────
-  const { config: programConfig, collectionKey } = await resolveProgramConfig(ctx, repo, socioId);
+  const { config: programConfig, collectionKey } = await resolveProgramConfig(ctx, repo, socioId, collectionKeyOverride);
 
   // ─── 2. Resolve lesson and block ──────────────────────────────────────────
   const { lesson, block } = await resolveLessonAndBlock(ctx, repo, collectionKey, lessonKey, blockId);
@@ -285,6 +313,7 @@ export async function createAssessmentSession(
     channel,
     configSnapshot: configSnapshot as unknown as Record<string, unknown>,
     attemptNumber,
+    enrollmentId,
   });
 
   // ─── 8. Update with initial state ─────────────────────────────────────────

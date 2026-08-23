@@ -232,12 +232,20 @@ export async function POST(req: NextRequest) {
     // Preload collection to warm cache for upcoming chat
     await preloadCollection(collectionKey);
 
+    // A.5: pass published.id so this always resolves to the course the
+    // learner just selected, never the ambiguous "which of your enrollments"
+    // question resolveLearnerHome asks when called with no course in mind —
+    // this call site already knows which course, no tie-break needed.
+    const homeResolution = published ? await resolveLearnerHome(socio.id, 'web', published.id) : null;
+
     return NextResponse.json({
         success: true,
         collectionKey,
         // `published` is set only for player courses, so this follows the same
-        // delivery-driven decision the enrollment write above does.
-        homePath: published ? await resolveLearnerHome(socio.id) : '/chat',
+        // delivery-driven decision the enrollment write above does. A pinned
+        // programVersionId always resolves to a single redirect (see
+        // resolveLearnerHome) — 'choose' is unreachable here.
+        homePath: homeResolution?.kind === 'redirect' ? homeResolution.path : (published ? null : '/chat'),
         message: `Curriculum set to ${collectionKey}`,
     });
 }

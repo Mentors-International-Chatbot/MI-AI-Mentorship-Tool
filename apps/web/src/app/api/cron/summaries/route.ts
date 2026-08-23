@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   }
 
   const socios = await prisma.socio.findMany({
-    where: { status: 'ACTIVE' },
+    where: { status: 'ACTIVE', archivedAt: null }, // A.3: no weekly summary for an archived socio
     select: { id: true, mentorId: true },
   });
 

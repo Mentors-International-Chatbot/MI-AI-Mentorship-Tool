@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   socioFindUnique: vi.fn(),
-  enrollmentFindFirst: vi.fn(),
   programVersionFindFirst: vi.fn(),
   diagnosticAttemptCount: vi.fn(),
   blockProgressFindMany: vi.fn(),
@@ -13,7 +12,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/repo/playerRuntimeRepo", () => ({
   playerRuntimeRepo: {
     socio: { findUnique: mocks.socioFindUnique },
-    enrollment: { findFirst: mocks.enrollmentFindFirst },
     programVersion: { findFirst: mocks.programVersionFindFirst },
     diagnosticAttempt: { count: mocks.diagnosticAttemptCount },
     blockProgress: { findMany: mocks.blockProgressFindMany },
@@ -30,18 +28,29 @@ vi.mock("@/lib/player/learnerProject", () => ({
 
 import { resolveLearnerHome } from "../learnerHome";
 
+/**
+ * A.5 (Platform Restructure Phase A, Stage 5): resolveLearnerHome no longer
+ * makes a separate `enrollment.findFirst` call at all — it selects each
+ * ACTIVE enrollment (id, programVersionId, collectionKey) directly off the
+ * socio query, then resolves each one's version by exact id. This is what
+ * makes multi-course possible: the function can enumerate every active
+ * enrollment instead of asking "does the one matching curriculumCollectionKey
+ * exist."
+ */
+function socioWithEnrollments(enrollments: Array<{ id: string; programVersionId: string; collectionKey: string }>, curriculumCollectionKey: string | null = "ai-essentials") {
+  return {
+    id: "learner-1",
+    curriculumCollectionKey,
+    participantProfile: { id: "participant-1", enrollments },
+  };
+}
+
 describe("resolveLearnerHome version pinning", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.socioFindUnique.mockResolvedValue({
-      id: "learner-1",
-      curriculumCollectionKey: "ai-essentials",
-      participantProfile: { id: "participant-1" },
-    });
-    mocks.enrollmentFindFirst.mockResolvedValue({
-      id: "enrollment-1",
-      programVersionId: "archived-version",
-    });
+    mocks.socioFindUnique.mockResolvedValue(socioWithEnrollments([
+      { id: "enrollment-1", programVersionId: "archived-version", collectionKey: "ai-essentials" },
+    ]));
     mocks.programVersionFindFirst.mockResolvedValue({
       id: "archived-version",
       status: "archived",
@@ -57,13 +66,8 @@ describe("resolveLearnerHome version pinning", () => {
   });
 
   it("keeps an existing learner on the archived version pinned by their active enrollment", async () => {
-    await expect(resolveLearnerHome("learner-1")).resolves.toBe("/learn/AIESS/capstone");
+    await expect(resolveLearnerHome("learner-1")).resolves.toEqual({ kind: "redirect", path: "/learn/AIESS/capstone" });
 
-    expect(mocks.enrollmentFindFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        programVersion: expect.objectContaining({ status: { in: ["published", "archived"] } }),
-      }),
-    }));
     expect(mocks.programVersionFindFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         id: "archived-version",
@@ -73,6 +77,9 @@ describe("resolveLearnerHome version pinning", () => {
   });
 
   it("routes project setup before consulting the baseline diagnostic", async () => {
+    mocks.socioFindUnique.mockResolvedValueOnce(socioWithEnrollments([
+      { id: "enrollment-1", programVersionId: "published-version", collectionKey: "ai-essentials" },
+    ]));
     mocks.programVersionFindFirst.mockResolvedValueOnce({
       id: "published-version",
       status: "published",
@@ -90,19 +97,43 @@ describe("resolveLearnerHome version pinning", () => {
       program: { organizationId: "org-1" },
       collection: { lessons: [] },
     });
-    mocks.enrollmentFindFirst.mockResolvedValueOnce({ id: "enrollment-1", programVersionId: "published-version" });
     mocks.learnerProjectSelectionRequired.mockResolvedValueOnce(true);
 
-    await expect(resolveLearnerHome("learner-1")).resolves.toBe("/learn/AIESS/project-setup");
+    await expect(resolveLearnerHome("learner-1")).resolves.toEqual({ kind: "redirect", path: "/learn/AIESS/project-setup" });
     expect(mocks.diagnosticAttemptCount).not.toHaveBeenCalled();
   });
 
+  it("publishing a new ProgramVersion for the collection does not change what an already-enrolled learner sees (Stage 2 pinning invariant)", async () => {
+    // The learner's enrollment is pinned to "old-version". A newer version of
+    // the same collection has since been published — resolveLearnerHome must
+    // never consult it for someone who is already enrolled.
+    mocks.socioFindUnique.mockResolvedValue(socioWithEnrollments([
+      { id: "enrollment-1", programVersionId: "old-version", collectionKey: "ai-essentials" },
+    ]));
+
+    await resolveLearnerHome("learner-1");
+
+    // The version lookup is scoped to the exact pinned id, never an
+    // orderBy-latest query unscoped by id — that would be the floating bug
+    // this test exists to forbid.
+    expect(mocks.programVersionFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: "old-version" }),
+      }),
+    );
+    // Never called with a "latest published, no id filter" shape.
+    for (const call of mocks.programVersionFindFirst.mock.calls) {
+      const where = call[0]?.where ?? {};
+      if (!('id' in where)) {
+        throw new Error("resolveLearnerHome queried programVersion without pinning to an id — this floats an enrolled learner to whatever is latest");
+      }
+    }
+  });
+
   it.each(["mi-colombia-curriculum", "pbj-basics"])("keeps legacy chat routing unchanged for %s", async (collectionKey) => {
-    mocks.socioFindUnique.mockResolvedValueOnce({
-      id: "learner-1",
-      curriculumCollectionKey: collectionKey,
-      participantProfile: { id: "participant-1" },
-    });
+    mocks.socioFindUnique.mockResolvedValueOnce(socioWithEnrollments([
+      { id: "enrollment-1", programVersionId: "legacy-version", collectionKey },
+    ], collectionKey));
     mocks.programVersionFindFirst.mockResolvedValueOnce({
       id: "legacy-version",
       status: "published",
@@ -111,10 +142,66 @@ describe("resolveLearnerHome version pinning", () => {
       program: { organizationId: "org-1" },
       collection: { lessons: [] },
     });
-    mocks.enrollmentFindFirst.mockResolvedValueOnce({ id: "enrollment-1", programVersionId: "legacy-version" });
     mocks.resolveDelivery.mockReturnValueOnce({ surface: "chat", supportedChannels: ["web"] });
 
-    await expect(resolveLearnerHome("learner-1")).resolves.toBe("/chat");
+    await expect(resolveLearnerHome("learner-1")).resolves.toEqual({ kind: "redirect", path: "/chat" });
     expect(mocks.learnerProjectSelectionRequired).not.toHaveBeenCalled();
+  });
+
+  it("returns 'choose' with a link per course when more than one ACTIVE enrollment exists, never picking one", async () => {
+    mocks.socioFindUnique.mockResolvedValueOnce(socioWithEnrollments([
+      { id: "enrollment-1", programVersionId: "aiess-version", collectionKey: "ai-essentials" },
+      { id: "enrollment-2", programVersionId: "skills-version", collectionKey: "skills-tool-calls" },
+    ]));
+    mocks.programVersionFindFirst.mockImplementation(async (args: { where: { id: string } }) => {
+      if (args.where.id === "aiess-version") {
+        return { id: "aiess-version", status: "published", metadata: {}, config: {}, program: { organizationId: "org-1" }, collection: { lessons: [] } };
+      }
+      if (args.where.id === "skills-version") {
+        return { id: "skills-version", status: "published", metadata: {}, config: {}, program: { organizationId: "org-1" }, collection: { lessons: [] } };
+      }
+      return null;
+    });
+    mocks.resolveDelivery.mockReturnValue({ surface: "player", supportedChannels: ["web"] });
+    mocks.learnerProjectSelectionRequired.mockResolvedValue(false);
+    mocks.diagnosticAttemptCount.mockResolvedValue(1);
+
+    const result = await resolveLearnerHome("learner-1");
+
+    expect(result.kind).toBe("choose");
+    if (result.kind === "choose") {
+      expect(result.courses).toHaveLength(2);
+      expect(result.courses.map((c) => c.courseCode).sort()).toEqual(["AIESS", "SKILLS"]);
+    }
+  });
+
+  it("still resolves straight through when exactly one ACTIVE enrollment exists (unchanged UX)", async () => {
+    // Same fixture shape as the default beforeEach — one enrollment — but
+    // named explicitly as its own case per the Stage 5 tie-break decision:
+    // exactly one must NOT go through the 'choose' path.
+    const result = await resolveLearnerHome("learner-1");
+    expect(result.kind).toBe("redirect");
+  });
+
+  it("resolves to /join when there are zero ACTIVE enrollments", async () => {
+    mocks.socioFindUnique.mockResolvedValueOnce(socioWithEnrollments([], null));
+
+    await expect(resolveLearnerHome("learner-1")).resolves.toEqual({ kind: "redirect", path: "/join" });
+  });
+
+  it("a specific programVersionId (LTI) always resolves to a single redirect, never 'choose', even with other active enrollments elsewhere", async () => {
+    mocks.socioFindUnique.mockResolvedValueOnce(socioWithEnrollments([
+      { id: "enrollment-1", programVersionId: "aiess-version", collectionKey: "ai-essentials" },
+      { id: "enrollment-2", programVersionId: "skills-version", collectionKey: "skills-tool-calls" },
+    ]));
+    mocks.programVersionFindFirst.mockResolvedValueOnce({
+      id: "skills-version", status: "published", metadata: {}, config: {}, program: { organizationId: "org-1" }, collection: { lessons: [] },
+    });
+    mocks.resolveDelivery.mockReturnValueOnce({ surface: "player", supportedChannels: ["canvas"] });
+    mocks.learnerProjectSelectionRequired.mockResolvedValueOnce(false);
+    mocks.diagnosticAttemptCount.mockResolvedValueOnce(1);
+
+    const result = await resolveLearnerHome("learner-1", "canvas", "skills-version");
+    expect(result.kind).toBe("redirect");
   });
 });

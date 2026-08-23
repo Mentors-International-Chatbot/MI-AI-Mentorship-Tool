@@ -26,6 +26,8 @@ export type Socio = {
     aiPaused: boolean;
     mentorId?: string | null;
     curriculumCollectionKey?: string | null;
+    /** Soft-archive marker (A.3). Non-null = archived; see the Prisma model's doc comment. */
+    archivedAt?: Date | null;
     createdAt: Date;
     updatedAt: Date;
 };
@@ -167,6 +169,8 @@ export type MilestoneProgressRecord = {
     reachedAt: Date;
     source: string;
     evidence: string | null;
+    /** A.4. Null for pre-Stage-4 rows and any row whose socio has no resolvable enrollment for collectionKey. */
+    enrollmentId: string | null;
 };
 
 export type SocioFlag = {
@@ -451,6 +455,14 @@ export interface Repo {
     // Curriculum selection
     setSocioCurriculum(socioId: string, collectionKey: string): Promise<Socio>;
 
+    /**
+     * Soft-archive (A.3). Sets archivedAt, never deletes. Idempotent —
+     * archiving an already-archived socio does not overwrite the original
+     * archivedAt timestamp, so the record of *when* it was archived survives
+     * a repeat call.
+     */
+    archiveSocio(socioId: string): Promise<Socio>;
+
     // ─── Milestone progress ────────────────────────────────────────────────
     /**
      * Records that a participant reached a milestone. Idempotent on
@@ -465,6 +477,15 @@ export interface Repo {
         milestoneKey: string;
         source?: string;
         evidence?: string;
+        /**
+         * A.4. Pass it when the caller already has it (the player surface
+         * does, via ValidatedPlayerContext.enrollmentId). When omitted (the
+         * chat-surface case — there is no PlayerAccess/context to carry one),
+         * the repo resolves it via participant + collectionKey, preferring an
+         * ACTIVE enrollment. Never overwritten on the repeat-marker no-op
+         * update.
+         */
+        enrollmentId?: string;
     }): Promise<MilestoneProgressRecord>;
     /** Milestones this participant has reached on this course, oldest first. */
     getMilestoneProgress(socioId: string, collectionKey: string): Promise<MilestoneProgressRecord[]>;

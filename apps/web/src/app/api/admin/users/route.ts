@@ -28,7 +28,8 @@ export async function GET() {
       },
     }),
     prisma.socio.findMany({
-      where: { passwordHash: { not: null } },
+      // A.3: archived socios excluded from the admin user-management list
+      where: { passwordHash: { not: null }, archivedAt: null },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,

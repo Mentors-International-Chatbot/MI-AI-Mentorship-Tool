@@ -12,7 +12,8 @@ export async function GET() {
 
   const mentors = await prisma.mentor.findMany({
     include: {
-      _count: { select: { socios: true } },
+      // A.3: archived socios excluded from the mentor roster's caseload count
+      _count: { select: { socios: { where: { archivedAt: null } } } },
     },
     orderBy: { name: 'asc' },
   });
@@ -21,7 +22,8 @@ export async function GET() {
   const enriched = await Promise.all(
     mentors.map(async (m) => {
       const socioIds = await prisma.socio.findMany({
-        where: { mentorId: m.id },
+        // A.3: archived socios excluded from mentor aggregate stats
+        where: { mentorId: m.id, archivedAt: null },
         select: { id: true },
       });
       const ids = socioIds.map((s) => s.id);
