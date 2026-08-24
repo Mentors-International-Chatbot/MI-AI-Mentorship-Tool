@@ -257,6 +257,22 @@ export async function invokeStyledPlayerResponse(
             // intents remain fail-closed because their shape can control the
             // next learner action.
             if (intent === 'lesson_entry' && delivered.trim().length > 0) return response;
+            // B.4: comma_chained_enumeration is a semantic edit (collapse a
+            // list into a category phrase), not a mechanical one, and the one
+            // repair attempt frequently fails to remove it — confirmed against
+            // real acceptance-run data (content/ai-essentials-response-acceptance.json:
+            // entry-02/teachback-03/capstone-03 all needed a second sample
+            // attempt to clear it). Unlike every other violation kind, there is
+            // no deterministic fallback for it (contrast sanitizeForDelivery's
+            // markdown/punctuation stripping), so throwing to the generic
+            // AI_ERROR_FALLBACK trades a real, on-topic answer with an
+            // unremoved list for a message unrelated to what actually failed.
+            // Deliberately a separate branch from the lesson_entry carve-out
+            // above, not merged into one predicate: different justification
+            // (semantic-fix difficulty vs. intent framing), and the two may
+            // diverge later (e.g. if lesson_entry ever needs its own repair
+            // budget).
+            if (violations.length === 1 && violations[0] === 'comma_chained_enumeration' && delivered.trim().length > 0) return response;
             throw new Error(`Player response style contract failed after ${MAX_STYLE_REPAIRS} repair: ${violations.join(', ')}`);
         }
         // Repair is copy-editing, not a second teaching turn. Re-sending the
@@ -266,6 +282,7 @@ export async function invokeStyledPlayerResponse(
         // only for a faithful rewrite under the same output cap.
         currentMessages = [
             new SystemMessage(PLAYER_REPAIR_SYSTEM_PROMPT),
+            // dead: MAX_STYLE_REPAIRS is always 1, so `repair >= 2` never runs — strict is always true. Real cleanup out of scope for B.4.
             new HumanMessage(`${buildResponseStyleRepairInstruction(style, expanded, violations, MAX_STYLE_REPAIRS === 1 || repair >= 2, delivered.length, parentReply)}\n\nDRAFT TO REWRITE:\n${raw}`),
         ];
         const repairIndex = repair + 1;

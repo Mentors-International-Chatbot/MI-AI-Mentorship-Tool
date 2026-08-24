@@ -562,6 +562,27 @@ export interface TenantRepo {
   ): Promise<AssessmentSession>;
   getAssessmentSessionById(ctx: TenantContext, sessionId: string): Promise<AssessmentSession | null>;
   getAssessmentSessionsForSocio(ctx: TenantContext, socioId: string): Promise<AssessmentSession[]>;
+  /**
+   * B.2 Stage 1: the tenant-isolated, enrollment-scoped twin of the legacy
+   * `repo.getAssessmentSessionsForSocioLesson` (chat-surface only, socioId-
+   * keyed, not tenant-isolated — see `prismaRepo.ts`, left untouched).
+   *
+   * Enrollment-only by design, no socioId parameter and no fallback: the
+   * player surface (the only caller) always has PlayerAccess.enrollmentId in
+   * hand. Precondition checked against production data before adding this
+   * (2026-08-24): 0 of 9 AssessmentSession rows have enrollmentId null. Read
+   * that as a green light to build, not a settled guarantee — 9 rows is the
+   * entire table, not a representative sample, and all 9 are channel="web",
+   * so the check did not actually exercise a non-web-channel session (the
+   * one case this method must never see, being enrollment-only). If the
+   * table grows, re-run the null check before assuming this still holds.
+   */
+  getAssessmentSessionsForSocioLesson(
+    ctx: TenantContext,
+    enrollmentId: string,
+    lessonKey: string,
+    blockId: string,
+  ): Promise<AssessmentSession[]>;
   updateAssessmentSession(
     ctx: TenantContext,
     sessionId: string,

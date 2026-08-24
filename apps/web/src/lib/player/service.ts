@@ -1,8 +1,11 @@
 import { playerRuntimeRepo } from "@/lib/repo/playerRuntimeRepo";
+import { tenantRepo } from "@/lib/repo";
+import { createTenantContext } from "@/lib/repo/tenantContext";
 import type { RequestIdentity } from "@/lib/auth/requestIdentity";
 import { resolveCourseCode } from "@/lib/courses/resolver";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
-import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
+import { resolveIntroMessage } from "@/lib/journey-package/introMessage";
+import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock, type PassingConfig, type BlockAssessmentOverride } from "@/lib/journey-package/journey-package.schema";
 import { programVersionConfigSchema, type ProgramVersionConfig } from "@/lib/journey-package/program-version-config.schema";
 import { getCurrentLearnerProject, learnerProjectSelectionRequired } from "./learnerProject";
 import { buildLessonDashboard, type LessonDashboard } from "./dashboard";
@@ -23,6 +26,8 @@ export type PlayerAccess = {
   programVersion: string;
   config: ReturnType<typeof programVersionConfigSchema.parse>;
   enrollmentId: string;
+  /** B.1: authored course intro, resolved to the learner's language. Null if none is authored. */
+  introMessage: string | null;
 };
 
 export type PlayerParentIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
@@ -144,6 +149,7 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
     organizationId: programVersion.program.organizationId,
     programVersionId: programVersion.id, programVersion: programVersion.version,
     config: programVersionConfigSchema.parse(programVersion.config), enrollmentId: enrollment.id,
+    introMessage: resolveIntroMessage(programVersion.metadata, socio.language),
   };
 }
 
@@ -466,6 +472,17 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
   return {
     dashboard,
     lesson: { ...lesson, blocks: lesson.blocks.map(sanitizePlayerBlock) },
+    // B.1: shown only entering the course's first lesson (index === 0, per
+    // curriculum order — see `lessonRows`) AND only before the learner has
+    // completed anything in it. Without the second half this re-showed on
+    // every visit/reload of lesson 1, including after a retake landed back
+    // on the same lesson mid-course — a course-level "welcome" reappearing
+    // on visit six reads as a bug even though it's correct by `index === 0`
+    // alone. `progressById` is enrollment-scoped, so a retake's fresh
+    // enrollment naturally sees no completions and gets the intro again.
+    introMessage: index === 0 && lesson.blocks.every((block) => !progressById.get(block.id)?.completedAt)
+      ? access.introMessage
+      : null,
     previousLessonKey: rows[index - 1]?.slug ?? null,
     nextLessonKey: rows[index + 1]?.slug ?? null,
     hasCapstone: !!access.config.outcome,
@@ -535,7 +552,48 @@ export type PlayerFeedback =
     }
   | { kind: "drag_order"; correct: boolean; misplacedPositions: number[]; correctOrder?: number[] };
 
-export function gradePlayerBlock(block: LessonBlock, response: unknown, attempt = 1): { complete: boolean; score: number | null; response: unknown; feedback: PlayerFeedback | null } {
+/**
+ * B.2 Stage 2: merges a block's own `assessment` override onto the package's
+ * `config.assessment` defaults. Mirrors `createAssessmentSession.ts`'s
+ * `mergePassingConfig` exactly — per-field `override ?? base`, not a deep
+ * merge or an object spread, so a block can override e.g. only
+ * `showScoreToLearner` while inheriting everything else from the package.
+ *
+ * `base` is the already-zod-parsed `config.assessment` (schema defaults
+ * already filled), so unlike `mergePassingConfig` — which merges a possibly-
+ * unparsed raw input and needs a third hardcoded fallback per passing field —
+ * this needs only two levels per field.
+ */
+export function mergeBlockAssessmentConfig(
+  base: NonNullable<ProgramVersionConfig["assessment"]>,
+  override?: BlockAssessmentOverride,
+): { passing: PassingConfig; allowRetake: boolean; showScoreToLearner: boolean } {
+  return {
+    passing: {
+      dimensionKey: override?.passingOverride?.dimensionKey ?? base.passing.dimensionKey,
+      threshold: override?.passingOverride?.threshold ?? base.passing.threshold,
+      confidenceFloor: override?.passingOverride?.confidenceFloor ?? base.passing.confidenceFloor,
+      minTurns: override?.passingOverride?.minTurns ?? base.passing.minTurns,
+      maxTurns: override?.passingOverride?.maxTurns ?? base.passing.maxTurns,
+    },
+    allowRetake: override?.allowRetake ?? base.allowRetake,
+    showScoreToLearner: override?.showScoreToLearner ?? base.showScoreToLearner,
+  };
+}
+
+export function gradePlayerBlock(
+  block: LessonBlock,
+  response: unknown,
+  attempt = 1,
+  /**
+   * B.2 Stage 2: the caller resolves this — a DB read via
+   * `tenantRepo.getAssessmentSessionsForSocioLesson` — before calling in,
+   * keeping this function itself free of I/O. `score` is already
+   * `showScoreToLearner`-gated by the caller; this function never re-derives
+   * or re-gates it.
+   */
+  reteachGate?: { passed: boolean; score: number | null },
+): { complete: boolean; score: number | null; response: unknown; feedback: PlayerFeedback | null } {
   if (block.blockType === "teach") return { complete: true, score: 1, response: { acknowledged: true }, feedback: null };
   if (block.blockType === "quiz_checkpoint") {
     if (!response || typeof response !== "object" || Array.isArray(response)) throw new PlayerError(400, "invalid_response", "Submit an answer for every question");
@@ -584,7 +642,17 @@ export function gradePlayerBlock(block: LessonBlock, response: unknown, attempt 
     const correct = misplacedPositions.length === 0 && response.length === block.correctOrder.length;
     return { complete: correct, score: correct ? 1 : 0, response, feedback: { kind: "drag_order" as const, correct, misplacedPositions, correctOrder: correct ? block.correctOrder : undefined } };
   }
-  if (block.blockType === "teach_back") throw new PlayerError(409, "tutor_required", "Complete teach-back blocks through the tutor");
+  if (block.blockType === "teach_back") {
+    // B.2 Stage 2: a reteach_gate teach_back resolves through
+    // AssessmentSession.passedAt (via the caller-supplied reteachGate),
+    // never through the tutor-turn path recordPlayerTutorSuccess uses for a
+    // plain teach_back. Not complete until a passed session exists — no
+    // hardcoded default lets it complete on its own.
+    if (block.assessment?.mode === "reteach_gate") {
+      return { complete: reteachGate?.passed === true, score: reteachGate?.score ?? null, response, feedback: null };
+    }
+    throw new PlayerError(409, "tutor_required", "Complete teach-back blocks through the tutor");
+  }
   return { complete: true, score: 1, response, feedback: null };
 }
 
@@ -599,6 +667,42 @@ function progressState(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+/**
+ * B.2 Stage 2: the only I/O behind a reteach_gate teach_back's completion
+ * check — everything else in `gradePlayerBlock` stays a pure function. Goes
+ * through the Stage 1 choke point (`tenantRepo.getAssessmentSessionsForSocioLesson`,
+ * enrollment-scoped, tenant-isolated), never a direct `AssessmentSession`
+ * query. "Passed" means any session for this enrollment+lesson+block has
+ * `passedAt !== null` — same fact `stance.hasPassedCurrentLessonGates` uses
+ * on the chat surface, so a learner who passed via one surface (once a
+ * creation/turn UI exists on this one — not built yet, see report) reads as
+ * passed on the other too.
+ */
+async function resolveReteachGateSignal(
+  access: PlayerAccess,
+  lessonKey: string,
+  blockId: string,
+  block: LessonBlock & { blockType: "teach_back" },
+): Promise<{ passed: boolean; score: number | null }> {
+  const sessions = await tenantRepo.getAssessmentSessionsForSocioLesson(
+    createTenantContext(access.organizationId),
+    access.enrollmentId,
+    lessonKey,
+    blockId,
+  );
+  const passedSession = sessions.find((session) => session.passedAt !== null);
+  if (!passedSession) return { passed: false, score: null };
+
+  const merged = access.config.assessment
+    ? mergeBlockAssessmentConfig(access.config.assessment, block.assessment)
+    : undefined;
+  const dimensionKey = merged?.passing.dimensionKey;
+  const rawScore = dimensionKey && passedSession.scores && typeof passedSession.scores === "object"
+    ? (passedSession.scores as Record<string, unknown>)[dimensionKey]
+    : undefined;
+  return { passed: true, score: merged?.showScoreToLearner && typeof rawScore === "number" ? rawScore : null };
 }
 
 async function persistedBlockHoldsOpenQuestion(access: PlayerAccess, lessonKey: string, blockId: string): Promise<boolean> {
@@ -663,7 +767,10 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
     };
   }
   const attempt = priorAttempts + 1;
-  const grade = gradePlayerBlock(block, response, attempt);
+  const reteachGate = block.blockType === "teach_back" && block.assessment?.mode === "reteach_gate"
+    ? await resolveReteachGateSignal(access, lessonKey, blockId, block)
+    : undefined;
+  const grade = gradePlayerBlock(block, response, attempt, reteachGate);
   const openQuestionReview = grade.complete
     && !grade.feedback
     && options.openQuestionGateEnabled !== false

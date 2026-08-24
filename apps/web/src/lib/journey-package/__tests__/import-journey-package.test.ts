@@ -36,6 +36,7 @@ const assessmentEnabled = {
   allowRetake: true,
   blocking: true,
   autoAppendTeachBack: true,
+  showScoreToLearner: false,
 };
 
 /** Assessment config with autoAppendTeachBack disabled */
@@ -51,6 +52,7 @@ const assessmentDisabled = {
   allowRetake: true,
   blocking: true,
   autoAppendTeachBack: false,
+  showScoreToLearner: false,
 };
 
 describe("maybeAppendTeachBack", () => {

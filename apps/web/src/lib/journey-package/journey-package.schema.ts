@@ -188,6 +188,43 @@ export const quizQuestionSchema = z
     }
   });
 
+/**
+ * Assessment passing criteria. Used by config.assessment.passing and
+ * per-block passingOverride in gated teach_back blocks.
+ */
+export const passingSchema = z.object({
+  dimensionKey: key, // dimension that gates completion (the "understanding" score)
+  threshold: z.number(), // on that dimension's own scale
+  confidenceFloor: z.number().min(0).max(1).optional().default(0.5),
+  minTurns: z.number().int().positive().optional().default(2), // no one-sentence pass
+  maxTurns: z.number().int().positive().optional().default(12), // safety valve
+});
+
+/**
+ * B.2 (plan §"assessment" rescope; investigation report §5 item 12,
+ * generalized past the report's package-level reading): whether a graded
+ * block is a reteach-style gate or a plain graded checkpoint is authoring —
+ * pedagogy — and belongs on the block, not on the course. `mode` selects
+ * which behavior a block wants; every other field overrides that one
+ * package-level `config.assessment` default for this block only.
+ *
+ * Deliberately not a 7th `lessonBlockSchema` union member: the content a
+ * `web_quiz` needs is `questions[]`, which `quiz_checkpoint` already has —
+ * this is governance layered on existing content, not new content. See the
+ * "assessment.mode must match blockType" package-level check below for how
+ * `mode` is kept honest without a discriminated union.
+ *
+ * Absent on every block in every package imported before this field existed
+ * — append-only-safe by construction, no migration required.
+ */
+export const blockAssessmentOverrideSchema = z.object({
+  mode: z.enum(["reteach_gate", "web_quiz"]),
+  passingOverride: passingSchema.partial().optional(),
+  allowRetake: z.boolean().optional(),
+  showScoreToLearner: z.boolean().optional(),
+});
+export type BlockAssessmentOverride = z.infer<typeof blockAssessmentOverrideSchema>;
+
 /** Discriminates each block variant. Shared by every entry in lessonBlockSchema. */
 const blockBase = {
   id: key, // stable across reorders; referenced by dimensionKey ties, provenance, etc.
@@ -210,19 +247,15 @@ const blockBase = {
    * routing it through a model turn would return a paraphrase of it.
    */
   handoff: z.string().min(1).optional(),
+  /**
+   * B.2: opt this block into graded-assessment governance. Meaningful only
+   * on `quiz_checkpoint` (`mode: "web_quiz"`) and `teach_back`
+   * (`mode: "reteach_gate"`) — enforced by the package-level "assessment.mode
+   * must match blockType" check, not by narrowing this to those two variants
+   * structurally, since `blockBase` has no way to see its own `blockType`.
+   */
+  assessment: blockAssessmentOverrideSchema.optional(),
 };
-
-/**
- * Assessment passing criteria. Used by config.assessment.passing and
- * per-block passingOverride in gated teach_back blocks.
- */
-export const passingSchema = z.object({
-  dimensionKey: key, // dimension that gates completion (the "understanding" score)
-  threshold: z.number(), // on that dimension's own scale
-  confidenceFloor: z.number().min(0).max(1).optional().default(0.5),
-  minTurns: z.number().int().positive().optional().default(2), // no one-sentence pass
-  maxTurns: z.number().int().positive().optional().default(12), // safety valve
-});
 
 export const lessonBlockSchema = z.discriminatedUnion("blockType", [
   /**
@@ -613,6 +646,30 @@ export const configSchema = z.object({
       allowRetake: z.boolean().default(true),
       blocking: z.boolean().default(true), // gate lesson progression while open
       autoAppendTeachBack: z.boolean().default(false), // synthesize a gated teach_back per lesson (importer, Phase C)
+      /**
+       * B.2 (investigation report §5 item 14): whether the learner sees their
+       * raw assessment score. Distinct from `studentVisibleDimensionKeys`,
+       * which is a finer-grained allowlist of which *dimension scores* surface
+       * mid-session/at completion — this is a coarser, unrelated boolean
+       * show/hide toggle. Default `false` preserves current behavior (no raw
+       * score shown to the learner today).
+       *
+       * A package-level default only — a block can override it via its own
+       * `assessment.showScoreToLearner` (see `blockAssessmentOverrideSchema`).
+       * `mode` (reteach_gate/web_quiz) deliberately does NOT live here: it is
+       * per-block (a course authors reteach-style gating in one lesson and a
+       * plain graded checkpoint in another), not a one-per-course switch. See
+       * `blockAssessmentOverrideSchema` and the "assessment.mode must match
+       * blockType" package-level check below.
+       *
+       * `.optional().default(false)`, in that order: `.default(x).optional()`
+       * types the output as `boolean | undefined` even though the parsed
+       * value is always a real boolean at runtime — a real bug caught while
+       * building B.2 Stage 2's merge helper (TS rejected the merged return
+       * type). Order matters for zod's *inferred* output type here, not just
+       * style.
+       */
+      showScoreToLearner: z.boolean().optional().default(false),
     })
     .optional(),
   /**
@@ -760,6 +817,16 @@ export const metadataSchema = z.object({
    * ProgramVersion.metadata rather than the ContentCollection row.
    */
   listed: z.boolean().optional(),
+  /**
+   * B.1 (Phase B, single-thread consolidation): the authored opening message
+   * for the course, shown once as the thread's first `kind: "prompt"` item on
+   * the learner's first lesson — derived, verbatim, never a model turn. Same
+   * shape of problem `listed`/`delivery` solve: lives on `ProgramVersion.metadata`
+   * (untrusted, partially-present JSON that predates this field on most rows),
+   * so the runtime default (no intro message) lives in the resolver
+   * (`resolveIntroMessage`, `journey-package/introMessage.ts`), not here.
+   */
+  introMessage: localizedStringSchema.optional(),
 });
 
 // ── Top-level package + cross-reference validation ───────────────────────────
@@ -1004,6 +1071,69 @@ export const journeyPackageSchema = z
               message: `teach_back block "${b.id}" (lesson "${l.key}") passingOverride.dimensionKey "${b.passingOverride.dimensionKey}" not found in trackedDimensions`,
             });
           }
+        }
+      }
+    }
+
+    // ── Block-level assessment override validation (B.2) ──────────────────────
+    // `assessment.mode` is authoring, not free-form: "web_quiz" only means
+    // something on a quiz_checkpoint (it already carries questions[]) and
+    // "reteach_gate" only means something on a teach_back (it already carries
+    // the tutor-conversation gate). This is what keeps `assessment` a
+    // governance layer on existing content instead of a silently-ignored
+    // field on the wrong block type.
+    for (const l of pkg.curriculum.lessons) {
+      for (const b of l.blocks) {
+        if (!b.assessment) continue;
+
+        if (b.assessment.mode === "web_quiz" && b.blockType !== "quiz_checkpoint") {
+          ctx.addIssue({
+            code: "custom",
+            message: `block "${b.id}" (lesson "${l.key}") has assessment.mode="web_quiz" but is a "${b.blockType}" block — web_quiz only applies to quiz_checkpoint`,
+          });
+        }
+        if (b.assessment.mode === "reteach_gate" && b.blockType !== "teach_back") {
+          ctx.addIssue({
+            code: "custom",
+            message: `block "${b.id}" (lesson "${l.key}") has assessment.mode="reteach_gate" but is a "${b.blockType}" block — reteach_gate only applies to teach_back`,
+          });
+        }
+
+        // B.2 Stage 2 gap, temporary: gradePlayerBlock/completeBlock (the read
+        // side) can resolve a reteach_gate teach_back via
+        // AssessmentSession.passedAt, but nothing on the PLAYER surface
+        // creates or scores that session yet — that machinery is reachable
+        // only from the chat surface's messaging/handler.ts today. Without
+        // this check, a player-surface course could tag reteach_gate and
+        // strand every learner who reaches it: completeBlock would return
+        // complete:false forever, with no error anywhere explaining why.
+        // Reject at validation time instead — an author-visible error is the
+        // right failure mode for unfinished machinery, not a silently-stuck
+        // learner. Chat-surface courses are NOT gated here: gated_session
+        // teach_back is exactly PBJ's original, already-working mechanism.
+        // Remove this check once the player-surface write path (session
+        // creation + turn/complete routes reachable from the player surface)
+        // ships.
+        if (b.assessment.mode === "reteach_gate" && b.blockType === "teach_back" && pkg.metadata.delivery?.surface === "player") {
+          ctx.addIssue({
+            code: "custom",
+            message: `block "${b.id}" (lesson "${l.key}") has assessment.mode="reteach_gate" on a player-surface course, but the player surface has no write path for reteach-gate sessions yet (session creation + turn/complete are chat-surface-only today) — this would strand every learner who reaches it. Not supported until that ships.`,
+          });
+        }
+
+        // Overrides merge over config.assessment defaults, so the defaults must exist.
+        if (!pkg.config.assessment) {
+          ctx.addIssue({
+            code: "custom",
+            message: `block "${b.id}" (lesson "${l.key}") declares assessment.mode="${b.assessment.mode}" but config.assessment is missing — there is nothing for its overrides to merge over`,
+          });
+        }
+
+        if (b.assessment.passingOverride?.dimensionKey && !dimKeys.has(b.assessment.passingOverride.dimensionKey)) {
+          ctx.addIssue({
+            code: "custom",
+            message: `block "${b.id}" (lesson "${l.key}") assessment.passingOverride.dimensionKey "${b.assessment.passingOverride.dimensionKey}" not found in trackedDimensions`,
+          });
         }
       }
     }

@@ -30,6 +30,7 @@ const access = {
   programVersionId: "version-1",
   programVersion: "2.0.0",
   enrollmentId: "enrollment-1",
+  introMessage: null,
   config: programVersionConfigSchema.parse({
     projectSelection: {
       presets: [{ key: "brief", family: "routine", label: "Brief", defaultLevel: "L1", exampleContexts: ["Class"] }],

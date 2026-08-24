@@ -30,6 +30,8 @@ type Block = Teach | Quiz | Drag | TeachBack | Media | Resource | BlockBase;
 type ProgressItem = { blockId: string; completedAt: string | null; state?: { turnCount?: number; reviewPending?: boolean }; feedback?: unknown };
 type LessonDto = {
   lesson: { key: string; title: string; category?: string; keyConcepts: string[]; blocks: Block[] };
+  /** B.1: authored course opener, present only entering the course's first lesson. */
+  introMessage?: string | null;
   previousLessonKey: string | null; nextLessonKey: string | null;
   hasCapstone: boolean;
   helpRequestEnabled?: boolean;
@@ -489,7 +491,13 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         };
       });
 
-    const items: ThreadItem[] = [...tutorFor(undefined)];
+    // B.1: the authored course intro, when present, is the thread's very
+    // first item — ahead of any tutor turn or block. Derived verbatim from
+    // package metadata, never a model turn, same as `handoff`/teach-back
+    // prompts below.
+    const items: ThreadItem[] = data.introMessage
+      ? [{ kind: "prompt", key: "course-intro", content: data.introMessage }, ...tutorFor(undefined)]
+      : [...tutorFor(undefined)];
     for (const block of data.lesson.blocks) {
       const isDone = completed.has(block.id);
       const isCurrent = current?.id === block.id;

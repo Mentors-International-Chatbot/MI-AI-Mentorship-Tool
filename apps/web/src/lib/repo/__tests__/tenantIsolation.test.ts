@@ -1379,6 +1379,30 @@ describe('Assessment Session Tenant Isolation', () => {
         })
       );
     });
+
+    // B.2 Stage 1: the tenant-isolated, enrollment-scoped twin used by the
+    // player surface. Enrollment-only by design — asserting there is no
+    // `socioId` in the where clause is the point of this test, not an
+    // afterthought: a socioId fallback here would defeat the reason this
+    // method exists instead of reusing the legacy repo's.
+    it('List assessment sessions for enrollment+lesson+block, scoped to own org, no socioId fallback', async () => {
+      mockPrisma.assessmentSession.findMany.mockResolvedValue([]);
+
+      await tenantPrismaRepo.getAssessmentSessionsForSocioLesson(ctxOrgA, 'enrollment-123', 'lesson-1', 'block-1');
+
+      expect(mockPrisma.assessmentSession.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            organizationId: ORG_A_ID,
+            enrollmentId: 'enrollment-123',
+            lessonKey: 'lesson-1',
+            blockId: 'block-1',
+          },
+        })
+      );
+      const where = mockPrisma.assessmentSession.findMany.mock.calls[0][0].where;
+      expect(where).not.toHaveProperty('socioId');
+    });
   });
 
   // A.4: createAssessmentSession accepts a caller-supplied enrollmentId

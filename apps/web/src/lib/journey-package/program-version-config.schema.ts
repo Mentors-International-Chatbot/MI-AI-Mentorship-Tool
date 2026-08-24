@@ -174,6 +174,23 @@ export const programVersionConfigSchema = z.object({
       allowRetake: z.boolean().default(true),
       blocking: z.boolean().default(true),
       autoAppendTeachBack: z.boolean().default(false),
+      /**
+       * B.2 (investigation report §5 item 14). Mirrors
+       * `journeyPackageSchema`'s `config.assessment.showScoreToLearner` —
+       * distinct from `studentVisibleDimensionKeys` above (dimension-key
+       * allowlist vs. this coarse boolean). Default `false` preserves current
+       * behavior. A package-level default only; a block's own
+       * `assessment.showScoreToLearner` (see `blockAssessmentOverrideSchema`
+       * in `journey-package.schema.ts`) can override it per block. `mode`
+       * (reteach_gate/web_quiz) is deliberately NOT mirrored here — it's
+       * per-block authoring, not package config, so it lives only on the
+       * block schema, which this file (package-config-only, no block
+       * content) never defines.
+       *
+       * `.optional().default(false)`, in that order — see the matching field
+       * in `journey-package.schema.ts` for why the order isn't cosmetic.
+       */
+      showScoreToLearner: z.boolean().optional().default(false),
     })
     .optional(),
 

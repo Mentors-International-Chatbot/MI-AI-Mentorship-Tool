@@ -132,7 +132,7 @@ describe("getLessonDto — learner with an active project", () => {
       access({ projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
 
     expect(dto.dashboard).not.toBeNull();
-    expect(dto.dashboard!.project.title).toBe("Morning brief");
+    expect(dto.dashboard!.project!.title).toBe("Morning brief");
     expect(dto.dashboard!.lessonsComplete).toBe(0);
     expect(dto.dashboard!.lessonsTotal).toBe(1);
     expect(dto.dashboard!.milestones).toHaveLength(2);
@@ -184,7 +184,7 @@ describe("getLessonDto — learner with an active project", () => {
 
     expect(dto.dashboard!.milestones).toEqual([]);
     expect(dto.dashboard!.nextMilestone).toBeNull();
-    expect(dto.dashboard!.project.title).toBe("Morning brief");
+    expect(dto.dashboard!.project!.title).toBe("Morning brief");
   });
 
   it("degrades to no dashboard rather than failing the lesson", async () => {

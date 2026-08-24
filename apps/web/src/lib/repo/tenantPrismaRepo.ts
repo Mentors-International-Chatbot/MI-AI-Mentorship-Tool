@@ -2264,6 +2264,19 @@ export const tenantPrismaRepo: TenantRepo = {
     return sessions.map(toAssessmentSession);
   },
 
+  async getAssessmentSessionsForSocioLesson(ctx, enrollmentId, lessonKey, blockId) {
+    const sessions = await prisma.assessmentSession.findMany({
+      where: {
+        organizationId: ctx.organizationId,
+        enrollmentId,
+        lessonKey,
+        blockId,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return sessions.map(toAssessmentSession);
+  },
+
   async updateAssessmentSession(ctx, sessionId, data) {
     await verifyAssessmentSessionOwnership(ctx, sessionId);
     const session = await prisma.assessmentSession.update({

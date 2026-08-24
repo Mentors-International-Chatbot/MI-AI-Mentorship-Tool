@@ -65,11 +65,17 @@ export type NextMilestone = {
 };
 
 export type LessonDashboard = {
+  /**
+   * B.3 Stage 2: nullable, not required — a dashboard can now exist without a
+   * project (once `hasAttemptsData` below is real). Every consumer (start
+   * with `PlayerDashboard.tsx`) must guard this, even though `project` is
+   * non-null in every case that exists today.
+   */
   project: {
     title: string;
     oneLiner: string | null;
     context: string | null;
-  };
+  } | null;
   /**
    * Primary metric. Lesson-level, because that is what a learner moves
    * one action at a time.
@@ -125,13 +131,40 @@ export function selectNextMilestone(
 }
 
 /**
+/**
+ * B.3 Stage 2 placeholder for a future attempts/scores panel trigger.
+ * Always false today — no attempts data source is wired in yet, and this
+ * stage does not build one. Its only job is to give `buildLessonDashboard`'s
+ * return condition its final shape now, so the stage that adds real attempts
+ * data only has to fill this function in, not touch the condition again.
+ *
+ * Two things this stage deliberately leaves as open, deferred questions
+ * rather than deciding them here: whether unblocking `skills-tool-calls` (the
+ * one course with real quiz_checkpoint usage, and the reason this exists)
+ * also requires opening `service.ts`'s outer `!access.config.projectSelection`
+ * gate — this function is never reached for that course today, since that
+ * gate runs first and returns null before `buildLessonDashboard` is called at
+ * all; and what "milestone data" should precisely mean if it's ever added as
+ * a second trigger alongside this one — the existing test fixtures prove
+ * "milestones array is non-empty" is not it (a lesson-gated course reports 5
+ * milestone entries at zero progress, and those are exactly the cases the
+ * "no project" tests pin to null).
+ */
+function hasAttemptsData(): boolean {
+  return false;
+}
+
+/**
  * Assembles the dashboard, or returns null when it must not render at all.
  *
  * Null is the whole compatibility story. A course with no `projectSelection`
- * never gets a project row, so MI and PB&J fall out here and their players are
+ * never gets a project row, so MI and PB&J fall out here (via the caller's own
+ * gate, before this function is even reached) and their players are
  * byte-identical to before. A learner mid-setup is null too: a DRAFT project
  * has no confirmed title, and a card headed by a half-chosen name is worse than
- * no card.
+ * no card. Renders without a project only if something else has content
+ * (`hasAttemptsData`) — today that's never true, so this is a no-op change in
+ * behavior, not in shape.
  */
 export function buildLessonDashboard(input: {
   project: DashboardProjectInput | null;
@@ -140,16 +173,19 @@ export function buildLessonDashboard(input: {
   graduated: boolean;
 }): LessonDashboard | null {
   const { project } = input;
-  if (!project || project.status !== "ACTIVE" || !project.title) return null;
+  // Narrowed inline (not via a separate boolean) so `project.title` etc.
+  // below are safe without a non-null assertion — a boolean intermediate
+  // would need one, since TS can't see through `hasAttemptsData()` to know
+  // this branch is unreachable while it stubs to false.
+  const projectSection = project && project.status === "ACTIVE" && project.title
+    ? { title: project.title, oneLiner: project.oneLiner, context: project.context }
+    : null;
+  if (!projectSection && !hasAttemptsData()) return null;
 
   const lessonTitles = new Map(input.lessons.map((lesson) => [lesson.lessonKey, lesson.title]));
 
   return {
-    project: {
-      title: project.title,
-      oneLiner: project.oneLiner,
-      context: project.context,
-    },
+    project: projectSection,
     lessonsComplete: input.lessons.filter((lesson) => lesson.complete).length,
     lessonsTotal: input.lessons.length,
     milestones: input.milestones.map((milestone) => ({

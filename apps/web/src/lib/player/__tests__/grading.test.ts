@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lessonBlockSchema } from "@/lib/journey-package/journey-package.schema";
-import { aggregateDiagnosticDimensionScores, capstoneTutorGrounding, gradePlayerBlock, matchesExpansionParent, milestoneStates, passingDiagnosticDimensions, PlayerError, sanitizePlayerBlock } from "../service";
+import { aggregateDiagnosticDimensionScores, capstoneTutorGrounding, gradePlayerBlock, matchesExpansionParent, mergeBlockAssessmentConfig, milestoneStates, passingDiagnosticDimensions, PlayerError, sanitizePlayerBlock } from "../service";
 
 const quiz = lessonBlockSchema.parse({
   id: "quiz", order: 1, blockType: "quiz_checkpoint", concepts: ["ai_impact"],
@@ -158,5 +158,95 @@ describe("player server grading", () => {
 
   it("completes drag order only for the exact permutation", () => {
     expect(gradePlayerBlock(drag, [2, 0, 1])).toEqual(expect.objectContaining({ complete: true, score: 1 }));
+  });
+});
+
+describe("teach_back grading — B.2 Stage 2 reteach_gate branch", () => {
+  const plainTeachBack = lessonBlockSchema.parse({
+    id: "tb1", order: 1, blockType: "teach_back",
+    prompt: "Explain it back", evaluatesConcepts: [], dimensionKey: "comprehension",
+  });
+  const reteachGateTeachBack = lessonBlockSchema.parse({
+    id: "tb2", order: 2, blockType: "teach_back",
+    prompt: "Explain it back", evaluatesConcepts: [], dimensionKey: "comprehension",
+    assessment: { mode: "reteach_gate" },
+  });
+
+  it("a plain teach_back (no assessment.mode) still refuses gradePlayerBlock — unchanged", () => {
+    expect(() => gradePlayerBlock(plainTeachBack, {})).toThrow(PlayerError);
+    try {
+      gradePlayerBlock(plainTeachBack, {});
+      expect.unreachable();
+    } catch (error) {
+      expect((error as InstanceType<typeof PlayerError>).code).toBe("tutor_required");
+    }
+  });
+
+  it("reteach_gate: incomplete when no reteachGate signal is supplied (no session yet)", () => {
+    expect(gradePlayerBlock(reteachGateTeachBack, {})).toEqual({ complete: false, score: null, response: {}, feedback: null });
+  });
+
+  it("reteach_gate: incomplete when the caller-resolved signal says not passed", () => {
+    expect(gradePlayerBlock(reteachGateTeachBack, {}, 1, { passed: false, score: null })).toEqual({
+      complete: false, score: null, response: {}, feedback: null,
+    });
+  });
+
+  it("reteach_gate: complete once the caller-resolved signal says passed", () => {
+    expect(gradePlayerBlock(reteachGateTeachBack, {}, 1, { passed: true, score: null })).toEqual({
+      complete: true, score: null, response: {}, feedback: null,
+    });
+  });
+
+  it("reteach_gate: carries through whatever score the caller already gated on showScoreToLearner", () => {
+    // gradePlayerBlock trusts the caller's score as-is — it never re-derives
+    // or re-gates showScoreToLearner itself. A caller that decided to expose
+    // 0.85 sees 0.85; a caller that decided not to show a score passes null.
+    expect(gradePlayerBlock(reteachGateTeachBack, {}, 1, { passed: true, score: 0.85 }).score).toBe(0.85);
+    expect(gradePlayerBlock(reteachGateTeachBack, {}, 1, { passed: true, score: null }).score).toBeNull();
+  });
+});
+
+describe("mergeBlockAssessmentConfig — mirrors mergePassingConfig's per-field shape", () => {
+  const base = {
+    passing: { dimensionKey: "comprehension", threshold: 7, confidenceFloor: 0.5, minTurns: 2, maxTurns: 12 },
+    allowRetake: true,
+    blocking: true,
+    onMaxTurnsWithoutPass: "complete_with_scores" as const,
+    autoAppendTeachBack: false,
+    showScoreToLearner: false,
+  };
+
+  it("returns the base values untouched when no override is given", () => {
+    expect(mergeBlockAssessmentConfig(base)).toEqual({
+      passing: base.passing,
+      allowRetake: true,
+      showScoreToLearner: false,
+    });
+  });
+
+  it("overrides only the fields present on the block, per field — not wholesale replacement", () => {
+    const merged = mergeBlockAssessmentConfig(base, { mode: "reteach_gate", showScoreToLearner: true });
+    expect(merged.showScoreToLearner).toBe(true);
+    // Untouched fields still come from the base, proving this isn't "override present -> replace everything".
+    expect(merged.passing).toEqual(base.passing);
+    expect(merged.allowRetake).toBe(true);
+  });
+
+  it("overrides individual passing fields independently, not the whole passing object at once", () => {
+    const merged = mergeBlockAssessmentConfig(base, {
+      mode: "reteach_gate",
+      passingOverride: { threshold: 9 },
+    });
+    expect(merged.passing.threshold).toBe(9);
+    // Every other passing field still falls back to base.
+    expect(merged.passing.dimensionKey).toBe("comprehension");
+    expect(merged.passing.confidenceFloor).toBe(0.5);
+    expect(merged.passing.minTurns).toBe(2);
+    expect(merged.passing.maxTurns).toBe(12);
+  });
+
+  it("allowRetake override wins over the base value", () => {
+    expect(mergeBlockAssessmentConfig(base, { mode: "reteach_gate", allowRetake: false }).allowRetake).toBe(false);
   });
 });

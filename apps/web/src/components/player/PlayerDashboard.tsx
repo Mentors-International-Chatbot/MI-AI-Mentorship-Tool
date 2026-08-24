@@ -34,30 +34,39 @@ export function PlayerDashboard({
 
   return (
     <aside className="player-dash" aria-label="Your project">
-      <section className="player-dash-card player-dash-project">
-        <span className="player-eyebrow">Your project</span>
-        <h2>{project.title}</h2>
-        {project.oneLiner && <p className="player-dash-oneliner">{project.oneLiner}</p>}
+      {/*
+        B.3 Stage 2: `project` is nullable on the type now (a dashboard can
+        exist without one once `hasAttemptsData` in dashboard.ts is real),
+        even though nothing produces that state yet. The whole card is what
+        "Your project" names, so absent a project it doesn't render at all —
+        a defensive guard, not a new empty-state design.
+      */}
+      {project && (
+        <section className="player-dash-card player-dash-project">
+          <span className="player-eyebrow">Your project</span>
+          <h2>{project.title}</h2>
+          {project.oneLiner && <p className="player-dash-oneliner">{project.oneLiner}</p>}
 
-        {dashboard.graduated ? (
-          <p className="player-dash-next player-dash-graduated">All milestones complete</p>
-        ) : nextMilestone ? (
-          <p className="player-dash-next">
-            <span className="player-dash-label">Next</span>
-            {nextMilestone.name}
-            {/*
-              A locked "next" is still worth naming — it tells the learner where
-              they are heading — but it must say what unblocks it, or it reads as
-              something they failed to do.
-            */}
-            {nextMilestone.locked && nextMilestone.unlocksAfterLessonTitle && (
-              <span className="player-dash-unlock">
-                Unlocks after {nextMilestone.unlocksAfterLessonTitle}
-              </span>
-            )}
-          </p>
-        ) : null}
-      </section>
+          {dashboard.graduated ? (
+            <p className="player-dash-next player-dash-graduated">All milestones complete</p>
+          ) : nextMilestone ? (
+            <p className="player-dash-next">
+              <span className="player-dash-label">Next</span>
+              {nextMilestone.name}
+              {/*
+                A locked "next" is still worth naming — it tells the learner where
+                they are heading — but it must say what unblocks it, or it reads as
+                something they failed to do.
+              */}
+              {nextMilestone.locked && nextMilestone.unlocksAfterLessonTitle && (
+                <span className="player-dash-unlock">
+                  Unlocks after {nextMilestone.unlocksAfterLessonTitle}
+                </span>
+              )}
+            </p>
+          ) : null}
+        </section>
+      )}
 
       <section className="player-dash-card">
         <span className="player-eyebrow">Progress</span>

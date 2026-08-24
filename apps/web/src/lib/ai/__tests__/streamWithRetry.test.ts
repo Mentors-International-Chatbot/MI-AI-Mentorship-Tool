@@ -100,6 +100,57 @@ describe('invokeStyledPlayerResponse — the delivery contract', () => {
     expect(chat.invoke).toHaveBeenCalledTimes(2);
   });
 
+  // B.4: replicates the real failure shape found in
+  // content/ai-essentials-response-acceptance.json (entry-02/teachback-03/
+  // capstone-03) — a first draft whose only violation is
+  // comma_chained_enumeration, where the one repair attempt still contains an
+  // enumeration. In production (no sample-retry safety net) this used to
+  // throw to the generic AI_ERROR_FALLBACK; it must now accept the repaired
+  // draft instead, same as the lesson_entry carve-out above but on its own
+  // branch.
+  it('accepts a repaired draft when comma_chained_enumeration is the only violation left after the one repair attempt', async () => {
+    const firstDraft = "Name the role, task, context, constraints, and audience before you draft anything. That order keeps the model from inventing details nobody gave it and from guessing at what actually matters most here. What's one constraint you would add to your next prompt?";
+    const repairedDraft = "State the role, task, context, constraints, and format before you send anything. That structure removes ambiguity before generation even starts and keeps the model from filling gaps with invented detail. What's one constraint you would add first?";
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: firstDraft })
+        .mockResolvedValueOnce({ content: repairedDraft }),
+    };
+
+    const response = await invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, 'question');
+
+    expect(response.content).toBe(repairedDraft);
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('still throws when comma_chained_enumeration is not the only violation left after repair', async () => {
+    const firstDraft = "Name the role, task, context, constraints, and audience before you draft anything. That order keeps the model from inventing details nobody gave it and from guessing at what actually matters most here. What's one constraint you would add to your next prompt?";
+    // Same unresolved enumeration as the accepted draft above, plus a fourth
+    // sentence — a second, real violation (sentence_limit) alongside it.
+    const stillTwoViolations = "Name the role, task, context, constraints, and audience before you draft anything. That order keeps the model from inventing details nobody gave it and from guessing at what actually matters most here. A missing piece is exactly where a model starts filling gaps on its own. What's one constraint you would add to your next prompt?";
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: firstDraft })
+        .mockResolvedValueOnce({ content: stillTwoViolations }),
+    };
+
+    await expect(invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, 'question')).rejects.toThrow('Player response style contract failed after 1 repair');
+
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
   it('can observe one invalid first draft without entering the live repair path', async () => {
     const validations: Array<{ stage: string; repairIndex: number; passed: boolean; violations: string[] }> = [];
     const chat = { invoke: vi.fn().mockResolvedValue({ content: 'One? Two? [END]' }) };
