@@ -199,8 +199,8 @@ describe("block-level assessment override — passingOverride", () => {
   });
 });
 
-describe("block-level assessment override — reteach_gate requires a player-surface write path (B.2 Stage 2 gap)", () => {
-  it("rejects assessment.mode='reteach_gate' on an explicit player-surface course", () => {
+describe("block-level assessment override — reteach_gate on the player surface (E.4: B.2 Stage 2 gap closed by E.1's write path)", () => {
+  it("accepts assessment.mode='reteach_gate' on an explicit player-surface course, now that E.1 shipped its write path", () => {
     const pkg = makeBasePackage({
       metadata: {
         packageId: "test-pkg", title: "Test Package", languages: ["en"], version: "1.0.0",
@@ -214,10 +214,17 @@ describe("block-level assessment override — reteach_gate requires a player-sur
     });
 
     const result = journeyPackageSchema.safeParse(pkg);
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some((i) => i.message.includes("no write path for reteach-gate sessions yet"))).toBe(true);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const block = result.data.curriculum.lessons[0].blocks.find((b) => b.id === "b2-tb");
+      expect(block?.assessment?.mode).toBe("reteach_gate");
     }
+    // Schema validity alone isn't the claim: completeBlock actually resolves a
+    // player-surface reteach_gate block via AssessmentSession.passedAt
+    // (../../player/__tests__/completeBlockReteachGate.test.ts), and
+    // LessonPlayer renders it through BoundedAssessmentContainer
+    // (../../../components/player/__tests__/boundedAssessmentContainer.test.ts)
+    // — both already pass against this now-unblocked schema shape.
   });
 
   it("still accepts assessment.mode='reteach_gate' on an explicit chat-surface course (PBJ's own mechanism)", () => {

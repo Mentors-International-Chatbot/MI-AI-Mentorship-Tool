@@ -65,7 +65,7 @@ describe("project proposal selection", () => {
     const result = await generateProjectProposals({
       access: {
         socioId: "socio-1", courseCode: "AIESS", collectionKey: "ai-essentials", organizationId: "org-1",
-        programVersionId: "version-1", programVersion: "2", enrollmentId: "enrollment-1", introMessage: null,
+        programVersionId: "version-1", programVersion: "2", enrollmentId: "enrollment-1", introMessage: null, language: "en",
         config: { trackedDimensions: [], alertRules: [], projectSelection: selection },
       },
       lifeContext: "I turn club notes into an update every Friday.",
@@ -96,7 +96,7 @@ function callProposals(model: { invoke: ReturnType<typeof vi.fn> }) {
   return generateProjectProposals({
     access: {
       socioId: "socio-1", courseCode: "AIESS", collectionKey: "ai-essentials", organizationId: "org-1",
-      programVersionId: "version-1", programVersion: "2", enrollmentId: "enrollment-1", introMessage: null,
+      programVersionId: "version-1", programVersion: "2", enrollmentId: "enrollment-1", introMessage: null, language: "en",
       config: { trackedDimensions: [], alertRules: [], projectSelection: selection },
     },
     lifeContext: "I turn club notes into an update every Friday.",

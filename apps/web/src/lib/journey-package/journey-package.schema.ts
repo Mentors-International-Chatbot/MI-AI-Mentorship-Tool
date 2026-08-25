@@ -492,7 +492,106 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
       }),
     ]),
   }),
+
+  /**
+   * E.3: an authored brief for external/applied work — "go do this, come back
+   * and continue." Conversational, no container, no grading: the brief renders
+   * in-thread and the block completes on the learner's next chat-input
+   * submission (or immediately, for a brief with nothing to submit).
+   *
+   * requiresSubmission: whether the learner must type something before this
+   *   block completes (mirrors `teach.expectsResponse`'s gate, but ungraded).
+   * blocking: whether that submission holds up lesson progression. Today this
+   *   is mechanically always true when requiresSubmission is true (there is no
+   *   other progression gate yet) — enforced below so the two flags can't
+   *   diverge in a way nothing implements. The field is kept distinct from
+   *   requiresSubmission anyway, for a real future case: a block that
+   *   collects and stores a submission (to show back to the learner later)
+   *   without holding up the lesson while it waits — e.g. "tell us what you
+   *   did, we'll read it, but don't stop here."
+   *
+   * That future case (`requiresSubmission: true, blocking: false`) is
+   * rejected below, not merely undocumented. The player currently sends a
+   * required submission through the same shared-textarea chat path
+   * `teach.expectsResponse` uses — the text lands in chat history, and
+   * `BlockProgress.response` stores only `{acknowledged: true}`, not the
+   * learner's text. So "stores it, shows it back later" is not actually
+   * implemented yet; authoring this combination today would silently produce
+   * a block that requires a submission nothing ever retrieves. Same
+   * schema-gate-shut move Track E has used before (B.2 gated `reteach_gate`
+   * shut on the player surface until E.1 shipped its write path, then E.4
+   * removed that check): fail closed with a clear reason instead of shipping
+   * a half-finished feature that looks authorable. Remove this check once
+   * the submission is actually persisted somewhere retrievable.
+   */
+  z.object({
+    ...blockBase,
+    blockType: z.literal("project"),
+    content: z.string().min(1),
+    requiresSubmission: z.boolean().default(false),
+    blocking: z.boolean().optional(),
+  }).superRefine((block, ctx) => {
+    if (block.blocking === true && block.requiresSubmission === false) {
+      ctx.addIssue({
+        code: "custom",
+        message: "a project block cannot set blocking: true while requiresSubmission is false — there is no submission to block on",
+        path: ["blocking"],
+      });
+    }
+    if (block.requiresSubmission === true && block.blocking === false) {
+      ctx.addIssue({
+        code: "custom",
+        message: "a project block cannot set requiresSubmission: true with blocking: false yet — the player does not persist a non-blocking submission anywhere retrievable, so this would silently collect nothing. Not supported until that storage ships.",
+        path: ["blocking"],
+      });
+    }
+  }),
+
+  /**
+   * E.3.5: a sequential, in-thread question flow ("what's your name," "what
+   * job are you aiming for," ...), collected one answer per learner
+   * submission and stored as JSON on `BlockProgress.response`, keyed by each
+   * step's `field`. Deliberately separate from `config.onboarding.mode:
+   * "survey"` — that mechanism has a chat-surface-only implementation
+   * (`lib/onboarding/service.ts`) and is not touched by this block type. This
+   * is player-surface-only, self-contained, and does not read or write
+   * `config.onboarding` at all.
+   *
+   * Not wired to the AI prompt layer this stage — a later block's AI turn
+   * cannot yet reference an earlier answer collected here. That is tracked
+   * as separate, non-blocking scope (same class of gap as `project`'s
+   * reserved-but-gated case).
+   *
+   * `steps[].prompt` is a plain string, not `localizedStringSchema` —
+   * matching `teach.content`/`project.content`/`teach_back.prompt`'s
+   * existing convention. Every block's in-thread content today is sent to
+   * the client unresolved as part of the lesson DTO; `localizedStringSchema`
+   * only appears on fields resolved server-side before the client ever sees
+   * them (e.g. `metadata.introMessage`). `closingMessage` is the exception on
+   * this same block: it stays `localizedStringSchema` because it is resolved
+   * server-side too (`resolveOnboardingClosingMessage` in `player/service.ts`)
+   * and only ever reaches the client as an already-resolved plain string,
+   * inside `PlayerFeedback`.
+   */
+  z.object({
+    ...blockBase,
+    blockType: z.literal("onboarding_survey"),
+    steps: z.array(z.object({ id: key, prompt: z.string().min(1), field: z.string().min(1) })).min(1),
+    /** Rendered after the last step completes. `{step:<id>}` tokens are substituted with that step's stored answer. */
+    closingMessage: localizedStringSchema.optional(),
+  }),
 ]);
+
+/**
+ * E.3: `blocking` has no static schema default because it depends on a
+ * sibling field's parsed value, which zod's `.default()` cannot read. Every
+ * caller that needs the effective blocking behavior resolves it through this
+ * function instead of reading `block.blocking` directly — same pattern as
+ * `normalizeMilestoneAvailability` resolving a computed value post-parse.
+ */
+export function resolveProjectBlocking(block: { requiresSubmission: boolean; blocking?: boolean }): boolean {
+  return block.blocking ?? block.requiresSubmission;
+}
 
 // ── Lesson ───────────────────────────────────────────────────────────────────
 
@@ -1020,6 +1119,27 @@ export const journeyPackageSchema = z
             }
           }
         }
+        if (b.blockType === "onboarding_survey") {
+          const stepIds = b.steps.map((s) => s.id);
+          if (new Set(stepIds).size !== stepIds.length) {
+            ctx.addIssue({
+              code: "custom",
+              message: `onboarding_survey block "${b.id}" (lesson "${l.key}") has duplicate step ids`,
+              path: ["steps"],
+            });
+          }
+          const stepFields = b.steps.map((s) => s.field);
+          // Each step's field becomes a JSON key on BlockProgress.response — a
+          // collision would silently overwrite one step's stored answer with
+          // another's.
+          if (new Set(stepFields).size !== stepFields.length) {
+            ctx.addIssue({
+              code: "custom",
+              message: `onboarding_survey block "${b.id}" (lesson "${l.key}") has duplicate step fields — each step's field must be unique since it keys the stored response`,
+              path: ["steps"],
+            });
+          }
+        }
       }
     }
 
@@ -1213,27 +1333,17 @@ export const journeyPackageSchema = z
           });
         }
 
-        // B.2 Stage 2 gap, temporary: gradePlayerBlock/completeBlock (the read
-        // side) can resolve a reteach_gate teach_back via
-        // AssessmentSession.passedAt, but nothing on the PLAYER surface
-        // creates or scores that session yet — that machinery is reachable
-        // only from the chat surface's messaging/handler.ts today. Without
-        // this check, a player-surface course could tag reteach_gate and
-        // strand every learner who reaches it: completeBlock would return
-        // complete:false forever, with no error anywhere explaining why.
-        // Reject at validation time instead — an author-visible error is the
-        // right failure mode for unfinished machinery, not a silently-stuck
-        // learner. Chat-surface courses are NOT gated here: gated_session
-        // teach_back is exactly PBJ's original, already-working mechanism.
-        // Remove this check once the player-surface write path (session
-        // creation + turn/complete routes reachable from the player surface)
-        // ships.
-        if (b.assessment.mode === "reteach_gate" && b.blockType === "teach_back" && pkg.metadata.delivery?.surface === "player") {
-          ctx.addIssue({
-            code: "custom",
-            message: `block "${b.id}" (lesson "${l.key}") has assessment.mode="reteach_gate" on a player-surface course, but the player surface has no write path for reteach-gate sessions yet (session creation + turn/complete are chat-surface-only today) — this would strand every learner who reaches it. Not supported until that ships.`,
-          });
-        }
+        // E.4: the B.2 Stage 2 gap this check used to guard against is closed.
+        // E.1 shipped a player-surface write path for reteach_gate sessions
+        // (resolveOrCreateReteachGateSession + BoundedAssessmentContainer /
+        // ReteachGateExperience, wired into LessonPlayer.tsx's boundedMode ===
+        // "reteach_gate" branch) — completeBlock now resolves these blocks via
+        // AssessmentSession.passedAt on the player surface the same way it
+        // already did on chat, confirmed in completeBlockReteachGate.test.ts
+        // and boundedAssessmentContainer.test.ts. The rejection here is
+        // removed; a player-surface course may now author assessment.mode =
+        // "reteach_gate" on a teach_back block same as chat-surface courses
+        // always could.
 
         // Overrides merge over config.assessment defaults, so the defaults must exist.
         if (!pkg.config.assessment) {

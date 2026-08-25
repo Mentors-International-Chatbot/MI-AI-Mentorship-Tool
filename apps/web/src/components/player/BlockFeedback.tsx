@@ -20,6 +20,7 @@ type QuizFeedback = {
   questions: Array<{ questionId: string; correct: boolean; correctAnswer?: string | string[] | Record<string, string>; explanation?: string }>;
 };
 type DragOrderFeedback = { kind: "drag_order"; correct: boolean; misplacedPositions: number[]; correctOrder?: number[] };
+type OnboardingSurveyFeedback = { kind: "onboarding_survey"; closingMessage: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -46,6 +47,10 @@ function isQuiz(value: unknown): value is QuizFeedback {
 function isDragOrder(value: unknown): value is DragOrderFeedback {
   return isRecord(value) && value.kind === "drag_order" && typeof value.correct === "boolean"
     && Array.isArray(value.misplacedPositions) && value.misplacedPositions.every((item) => typeof item === "number");
+}
+
+function isOnboardingSurvey(value: unknown): value is OnboardingSurveyFeedback {
+  return isRecord(value) && value.kind === "onboarding_survey" && typeof value.closingMessage === "string";
 }
 
 /**
@@ -154,6 +159,14 @@ export function BlockFeedback({ feedback, questionPrompts, questionFormats, matc
           </p>
         )}
         {order.length > 0 && <ol className="player-feedback-order">{order.map((label, index) => <li key={`${index}-${label}`}>{label}</li>)}</ol>}
+      </section>
+    );
+  }
+
+  if (isOnboardingSurvey(feedback)) {
+    return (
+      <section className="player-feedback is-correct" role="status" aria-live="polite">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{feedback.closingMessage}</ReactMarkdown>
       </section>
     );
   }

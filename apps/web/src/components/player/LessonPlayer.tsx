@@ -43,8 +43,10 @@ type ResourceValue =
   | { type: "textbook_reference"; title?: string; isbn?: string; chapter?: string; page?: string; callout?: string }
   | { type: "mcp_connector"; connector: string; context?: string };
 type Resource = BlockBase & { blockType: "resource"; resource: ResourceValue };
-type Block = Teach | Quiz | Drag | TeachBack | Media | Resource | BlockBase;
-type ProgressItem = { blockId: string; completedAt: string | null; state?: { turnCount?: number; reviewPending?: boolean }; feedback?: unknown };
+type Project = BlockBase & { blockType: "project"; content: string; requiresSubmission?: boolean; blocking?: boolean };
+type OnboardingSurvey = BlockBase & { blockType: "onboarding_survey"; steps: Array<{ id: string; prompt: string; field: string }> };
+type Block = Teach | Quiz | Drag | TeachBack | Media | Resource | Project | OnboardingSurvey | BlockBase;
+type ProgressItem = { blockId: string; completedAt: string | null; state?: { turnCount?: number; stepIndex?: number; reviewPending?: boolean }; feedback?: unknown };
 type LessonDto = {
   lesson: { key: string; title: string; category?: string; keyConcepts: string[]; blocks: Block[] };
   /** B.1: authored course opener, present only entering the course's first lesson. */
@@ -165,6 +167,8 @@ export function hydrateBlockProgress(progress: ProgressItem[]) {
 
 export function historyContent(block: Block): string | null {
   if (block.blockType === "teach") return (block as Teach).content;
+  if (block.blockType === "project") return (block as Project).content;
+  if (block.blockType === "onboarding_survey") return (block as OnboardingSurvey).steps.map((step) => `**${step.prompt}**`).join("\n\n");
   if (block.blockType === "teach_back") return (block as TeachBack).prompt;
   if (block.blockType === "drag_order") return (block as Drag).prompt;
   if (block.blockType === "quiz_checkpoint") {
@@ -275,6 +279,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   const { messages: threadMessages, reload: loadThread } = usePlayerThread(course, lessonKey);
   const [teachBackTurn, setTeachBackTurn] = useState(1);
   const [submittedComplete, setSubmittedComplete] = useState<Set<string>>(new Set());
+  const [surveyStepIndex, setSurveyStepIndex] = useState(0);
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   useEffect(() => {
@@ -308,12 +313,15 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
    * there is one: a primary send-and-advance button under the box, disabled
    * until something is typed.
    */
-  const requiresResponse = current?.blockType === "teach" && (current as Teach).expectsResponse === true;
+  const requiresResponse = (current?.blockType === "teach" && (current as Teach).expectsResponse === true)
+    || (current?.blockType === "project" && (current as Project).requiresSubmission === true);
+  const isSurvey = current?.blockType === "onboarding_survey";
   useEffect(() => {
     if (current?.blockType === "drag_order") setOrder((current as Drag).items.map((_, index) => index));
     const savedTurn = data?.progress.find((item) => item.blockId === current?.id)?.state?.turnCount;
+    const savedStepIndex = data?.progress.find((item) => item.blockId === current?.id)?.state?.stepIndex;
     const savedFeedback = data?.progress.find((item) => item.blockId === current?.id)?.feedback;
-    setAnswers({}); setFeedback(savedFeedback === undefined || !current ? {} : { [current.id]: savedFeedback }); setTeachBackTurn(savedTurn === 1 ? 2 : 1); setSendFailures(0);
+    setAnswers({}); setFeedback(savedFeedback === undefined || !current ? {} : { [current.id]: savedFeedback }); setTeachBackTurn(savedTurn === 1 ? 2 : 1); setSurveyStepIndex(typeof savedStepIndex === "number" ? savedStepIndex : 0); setSendFailures(0);
   }, [current, data]);
 
   async function complete(response?: unknown): Promise<CompleteBlockResult | null> {
@@ -367,6 +375,22 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       if (!sent) return;
     }
     await complete(response);
+  }
+
+  /**
+   * onboarding_survey's steps are canned questions, not a conversation — each
+   * answer is graded deterministically server-side (see gradePlayerBlock),
+   * never by the model. `advance()` cannot be reused here: it sends any
+   * typed text to `askTutor()` first, which would turn every one of the
+   * course's canned questions into a live AI turn. This calls `complete()`
+   * directly with the raw answer, exactly like `drag_order`'s `advance(order)`
+   * bypasses the tutor for a non-text response.
+   */
+  async function submitSurveyStep() {
+    const answer = question.trim();
+    if (!answer) return;
+    setQuestion("");
+    await complete(answer);
   }
 
   async function advanceReviewedBlock() {
@@ -729,6 +753,8 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           />
         ) : <>
         {current.blockType === "teach" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
+        {current.blockType === "project" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Project).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
+        {current.blockType === "onboarding_survey" && !submittedComplete.has(current.id) && <ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as OnboardingSurvey).steps[Math.min(surveyStepIndex, (current as OnboardingSurvey).steps.length - 1)]?.prompt ?? ""}</ReactMarkdown>}
         {current.blockType === "quiz_checkpoint" && !submittedComplete.has(current.id) && <>
           {(current as Quiz).title && <h2>{(current as Quiz).title}</h2>}
           {(current as Quiz).questions.map((question) => <fieldset key={question.id}><legend>{question.prompt}</legend>{question.options?.map((option) => <label className="player-option" key={option}><input type="radio" name={question.id} value={option} checked={answers[question.id] === option} onChange={() => setAnswers((value) => ({ ...value, [question.id]: option }))} />{option}</label>)}</fieldset>)}
@@ -765,7 +791,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         {submittedComplete.has(current.id) && <button disabled={busy} onClick={advanceReviewedBlock}>Continue</button>}
         </>}
         {error && <p className="player-error">{error}</p>}
-      </section>{!boundedMode && <aside className="player-card"><h2>{requiresResponse ? "Your response" : "Ask AI Mentor"}</h2><textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} disabled={busy} placeholder={teachingBack ? "Explain it in your own words…" : requiresResponse ? "Type your response…" : "Ask about this lesson…"} />
+      </section>{!boundedMode && <aside className="player-card"><h2>{isSurvey ? "Your answer" : requiresResponse ? "Your response" : "Ask AI Mentor"}</h2><textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} disabled={busy} placeholder={isSurvey ? "Type your answer…" : teachingBack ? "Explain it in your own words…" : requiresResponse ? "Type your response…" : "Ask about this lesson…"} />
         {/* One control on a block that requires text: it sends and advances,
             and it is disabled until there is something to send. On every other
             block this stays what it was — a way to ask, next to the card's own
@@ -773,18 +799,24 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         {/* Once reviewed — graded or gated on an open question — this falls to
             the ask-only branch below, same as every other reviewed block:
             no live advance control competing with the Continue on the card. */}
-        {requiresResponse && !submittedComplete.has(current.id)
+        {/* onboarding_survey never falls to the ask-tutor branch: its steps are
+            canned questions, not something to converse about. */}
+        {isSurvey && !submittedComplete.has(current.id)
+          ? <button disabled={busy || !question.trim()} onClick={submitSurveyStep}>Send and continue</button>
+          : requiresResponse && !submittedComplete.has(current.id)
           ? <button disabled={busy || !question.trim()} onClick={() => advance({ acknowledged: true })}>Send and continue</button>
-          : <button disabled={busy || !question.trim()} onClick={() => askTutor()}>{teachingBack ? (teachBackTurn === 1 ? "Share with AI Mentor" : "Send follow-up") : "Ask a question"}</button>}
-        {requiresResponse && !submittedComplete.has(current.id) && !question.trim() && <p className="player-teachback-hint">Type your response to continue.</p>}
+          : !isSurvey && <button disabled={busy || !question.trim()} onClick={() => askTutor()}>{teachingBack ? (teachBackTurn === 1 ? "Share with AI Mentor" : "Send follow-up") : "Ask a question"}</button>}
+        {(isSurvey || requiresResponse) && !submittedComplete.has(current.id) && !question.trim() && <p className="player-teachback-hint">Type your {isSurvey ? "answer" : "response"} to continue.</p>}
         {/* Only after a send has actually failed twice, and only here. This is
             not a second way forward competing with the button above it: until
             the tutor breaks it does not exist. Without it a tutor outage on the
-            first block of a lesson is a locked door. */}
-        {requiresResponse && !submittedComplete.has(current.id) && sendFailures >= 2 && <button type="button" className="player-secondary" disabled={busy} onClick={() => complete({ acknowledged: true })}>Continue without sending</button>}
+            first block of a lesson is a locked door. onboarding_survey never
+            calls the tutor, so it has no equivalent failure mode to fall back
+            from. */}
+        {requiresResponse && !isSurvey && !submittedComplete.has(current.id) && sendFailures >= 2 && <button type="button" className="player-secondary" disabled={busy} onClick={() => complete({ acknowledged: true })}>Continue without sending</button>}
         {/* Chips are for asking about the lesson. During a teach-back the box is
             the learner's own explanation, and a canned question is not that. */}
-        {!teachingBack && !requiresResponse && <div className="player-chip-row">{TUTOR_CHIPS.map((chip) => <button type="button" className="player-chip" key={chip} disabled={busy} onClick={() => askTutor(chip)}>{chip}</button>)}</div>}
+        {!teachingBack && !requiresResponse && !isSurvey && <div className="player-chip-row">{TUTOR_CHIPS.map((chip) => <button type="button" className="player-chip" key={chip} disabled={busy} onClick={() => askTutor(chip)}>{chip}</button>)}</div>}
       </aside>}</> :<section className="player-card player-complete"><span>Lesson complete</span><h2>Nicely done.</h2><p>Your progress is saved.</p>{data.nextLessonKey
           ? <Link className="player-button" href={`/learn/${course}/${data.nextLessonKey}`}>Continue to next lesson</Link>
           : data.hasCapstone

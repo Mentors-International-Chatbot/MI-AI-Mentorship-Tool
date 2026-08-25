@@ -5,7 +5,7 @@ import type { RequestIdentity } from "@/lib/auth/requestIdentity";
 import { resolveCourseCode } from "@/lib/courses/resolver";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
 import { resolveIntroMessage } from "@/lib/journey-package/introMessage";
-import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
+import { lessonSchema, normalizeMilestoneAvailability, type LocalizedString, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
 import { programVersionConfigSchema, type ProgramVersionConfig } from "@/lib/journey-package/program-version-config.schema";
 import { mergeAssessmentConfig } from "@/lib/journey-package/mergeAssessmentConfig";
 import { getCurrentLearnerProject, learnerProjectSelectionRequired } from "./learnerProject";
@@ -31,6 +31,8 @@ export type PlayerAccess = {
   enrollmentId: string;
   /** B.1: authored course intro, resolved to the learner's language. Null if none is authored. */
   introMessage: string | null;
+  /** E.3.5: the learner's language, for resolving an onboarding_survey block's closingMessage. */
+  language: string;
 };
 
 export type PlayerParentIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
@@ -153,6 +155,7 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
     programVersionId: programVersion.id, programVersion: programVersion.version,
     config: programVersionConfigSchema.parse(programVersion.config), enrollmentId: enrollment.id,
     introMessage: resolveIntroMessage(programVersion.metadata, socio.language),
+    language: socio.language,
   };
 }
 
@@ -470,7 +473,14 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
   if (await learnerProjectSelectionRequired(access)) {
     throw new PlayerError(403, "project_required", "Choose your project before starting the course");
   }
-  const diagnosticRequired = access.config.onboarding?.mode === "baseline_quiz";
+  // E.3.5 finding 5: gated on the diagnostic's own presence, not `mode`.
+  // `mode: "baseline_quiz"` was a chat-surface concept (the chat onboarding
+  // runner's own single-flow selector); the player surface never had a
+  // survey-mode alternative to distinguish from until onboarding_survey
+  // shipped as its own block type, so this gate no longer needs `mode` at
+  // all. `diagnosticDto`/`submitDiagnostic` already keyed off `diagnostic`
+  // presence directly — this makes the gate consistent with them.
+  const diagnosticRequired = !!access.config.onboarding?.diagnostic;
   if (diagnosticRequired) {
     const attempts = await playerRuntimeRepo.diagnosticAttempt.count({ where: { socioId: access.socioId, programVersionId: access.programVersionId } });
     if (attempts === 0) throw new PlayerError(403, "diagnostic_required", "Complete the baseline diagnostic first");
@@ -512,15 +522,27 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
       const persistedState = current && item?.state && typeof item.state === "object" && !Array.isArray(item.state)
         ? item.state as { turnCount?: unknown; reviewPending?: unknown }
         : undefined;
-      const state = persistedState
+      const persistedAnswers = current && block.blockType === "onboarding_survey" && item?.response && typeof item.response === "object" && !Array.isArray(item.response)
+        ? item.response as Record<string, unknown>
+        : undefined;
+      const state = persistedState || persistedAnswers
         ? {
-            ...(block.blockType === "teach_back" ? { turnCount: Number(persistedState.turnCount) || 0 } : {}),
-            reviewPending: persistedState.reviewPending === true,
+            ...(block.blockType === "teach_back" && persistedState ? { turnCount: Number(persistedState.turnCount) || 0 } : {}),
+            // E.3.5: derived from the accumulated response's key count, not
+            // a separately persisted counter — see gradePlayerBlock's
+            // onboarding_survey branch for why the count IS the step index.
+            ...(persistedAnswers ? { stepIndex: Object.keys(persistedAnswers).length } : {}),
+            reviewPending: persistedState?.reviewPending === true,
           }
         : undefined;
       const priorAttempts = Number(progressState(item?.state).attempts) || 0;
-      const feedback = current && item?.completedAt && state?.reviewPending && block.blockType !== "teach_back"
+      const feedback = current && item?.completedAt && state?.reviewPending && block.blockType !== "teach_back" && block.blockType !== "onboarding_survey"
         ? gradePlayerBlock(block, item.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT), undefined, access.config.assessment).feedback
+        // Reconstructed directly rather than replayed through gradePlayerBlock:
+        // that function's onboarding_survey branch expects one new string
+        // answer, not the full stored answer object a reload hands back here.
+        : current && item?.completedAt && block.blockType === "onboarding_survey" && block.closingMessage && persistedAnswers
+        ? { kind: "onboarding_survey" as const, closingMessage: resolveOnboardingClosingMessage(block.closingMessage, access.language, block.steps, persistedAnswers) }
         : undefined;
       return { blockId: block.id, contentVersion: block.contentVersion, startedAt: current ? item?.startedAt ?? null : null, completedAt: current ? item?.completedAt ?? null : null, score: current ? item?.score ?? null : null, state, feedback };
     }),
@@ -567,7 +589,8 @@ export type PlayerFeedback =
         explanation?: string;
       }>;
     }
-  | { kind: "drag_order"; correct: boolean; misplacedPositions: number[]; correctOrder?: number[] };
+  | { kind: "drag_order"; correct: boolean; misplacedPositions: number[]; correctOrder?: number[] }
+  | { kind: "onboarding_survey"; closingMessage: string };
 
 /**
  * B.2 Stage 2: merges a block's own `assessment` override onto the package's
@@ -583,6 +606,28 @@ export type PlayerFeedback =
  */
 /** Backward-compatible export; the merge itself lives at the shared choke point. */
 export const mergeBlockAssessmentConfig = mergeAssessmentConfig;
+
+/**
+ * E.3.5: mirrors `course-meta.ts`'s `buildWelcomeMessage` placeholder
+ * mechanism exactly (resolve the localized template, then sequential
+ * `.replace(/{token}/g, value)` calls) — a small local copy rather than an
+ * import, since that module is chat-surface-oriented and this is the one
+ * piece of its pattern the player surface needs.
+ */
+function resolveOnboardingClosingMessage(
+  closingMessage: LocalizedString,
+  language: string,
+  steps: ReadonlyArray<{ id: string; field: string }>,
+  answers: Record<string, unknown>,
+): string {
+  const lang = language as keyof LocalizedString;
+  let message = closingMessage[lang] ?? closingMessage.en;
+  for (const step of steps) {
+    const value = answers[step.field];
+    message = message.replace(new RegExp(`\\{step:${step.id}\\}`, "g"), typeof value === "string" ? value : "");
+  }
+  return message;
+}
 
 export function gradePlayerBlock(
   block: LessonBlock,
@@ -605,6 +650,15 @@ export function gradePlayerBlock(
    * helper the way `resolveReteachGateSignal` is for reteach_gate.
    */
   packageAssessment?: ProgramVersionConfig["assessment"],
+  /**
+   * E.3.5: an `onboarding_survey` block's prior accumulated answers (the
+   * existing `BlockProgress.response`, or `undefined` on the first
+   * submission), plus the learner's language for resolving `closingMessage`.
+   * The number of already-answered steps IS the current step index — no
+   * separate counter is threaded in or persisted; `Object.keys(prior).length`
+   * derives it, the same way `getLessonDto` re-derives it for the client.
+   */
+  onboardingSurveyPrior?: { answers: Record<string, unknown>; language: string },
 ): { complete: boolean; score: number | null; response: unknown; feedback: PlayerFeedback | null } {
   if (block.blockType === "teach") return { complete: true, score: 1, response: { acknowledged: true }, feedback: null };
   if (block.blockType === "quiz_checkpoint") {
@@ -721,6 +775,27 @@ export function gradePlayerBlock(
       return { complete: reteachGate?.passed === true, score: reteachGate?.score ?? null, response, feedback: null };
     }
     throw new PlayerError(409, "tutor_required", "Complete teach-back blocks through the tutor");
+  }
+  if (block.blockType === "onboarding_survey") {
+    if (typeof response !== "string" || response.trim().length === 0) {
+      throw new PlayerError(400, "invalid_response", "An answer is required for every step");
+    }
+    const priorAnswers = onboardingSurveyPrior?.answers ?? {};
+    const stepIndex = Object.keys(priorAnswers).length;
+    if (stepIndex >= block.steps.length) {
+      throw new PlayerError(409, "already_complete", "This survey has already been fully answered");
+    }
+    const answers = { ...priorAnswers, [block.steps[stepIndex].field]: response };
+    const complete = Object.keys(answers).length === block.steps.length;
+    const closingMessage = complete && block.closingMessage && onboardingSurveyPrior
+      ? resolveOnboardingClosingMessage(block.closingMessage, onboardingSurveyPrior.language, block.steps, answers)
+      : null;
+    return {
+      complete,
+      score: null,
+      response: answers,
+      feedback: closingMessage ? { kind: "onboarding_survey", closingMessage } : null,
+    };
   }
   return { complete: true, score: 1, response, feedback: null };
 }
@@ -897,7 +972,15 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
   const reteachGate = block.blockType === "teach_back" && block.assessment?.mode === "reteach_gate"
     ? await resolveReteachGateSignal(access, lessonKey, blockId, block)
     : undefined;
-  const grade = gradePlayerBlock(block, response, attempt, reteachGate, access.config.assessment);
+  const onboardingSurveyPrior = block.blockType === "onboarding_survey"
+    ? {
+        answers: existing?.contentVersion === block.contentVersion && existing.response && typeof existing.response === "object" && !Array.isArray(existing.response)
+          ? existing.response as Record<string, unknown>
+          : {},
+        language: access.language,
+      }
+    : undefined;
+  const grade = gradePlayerBlock(block, response, attempt, reteachGate, access.config.assessment, onboardingSurveyPrior);
   const openQuestionReview = grade.complete
     && !grade.feedback
     && options.openQuestionGateEnabled !== false

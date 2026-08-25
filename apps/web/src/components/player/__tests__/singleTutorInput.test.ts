@@ -167,7 +167,7 @@ describe("block advance sends before completing", () => {
  */
 describe("expectsResponse blocks offer exactly one way forward", () => {
   it("derives the requirement from the block, never from a key or course code", () => {
-    expect(source).toMatch(/const requiresResponse = current\?\.blockType === "teach" && \(current as Teach\)\.expectsResponse === true;/);
+    expect(source).toMatch(/const requiresResponse = \(current\?\.blockType === "teach" && \(current as Teach\)\.expectsResponse === true\)\s*\|\|\s*\(current\?\.blockType === "project" && \(current as Project\)\.requiresSubmission === true\);/);
     // Asserted against comment-stripped source. The file documents at length
     // why a hardcoded "AIESS" came out of the /api/chat callers, and a test
     // that forbade naming the mistake would forbid explaining it.
@@ -194,11 +194,14 @@ describe("expectsResponse blocks offer exactly one way forward", () => {
 
   it("leaves blocks without the flag exactly as they were", () => {
     // The ask button keeps its own labels and still routes to askTutor.
-    expect(source).toMatch(/: <button disabled=\{busy \|\| !question\.trim\(\)\} onClick=\{\(\) => askTutor\(\)\}>\{teachingBack \? \(teachBackTurn === 1 \? "Share with AI Mentor" : "Send follow-up"\) : "Ask a question"\}<\/button>/);
+    // (E.3.5: guarded by !isSurvey too — onboarding_survey never asks the tutor.)
+    expect(source).toMatch(/: !isSurvey && <button disabled=\{busy \|\| !question\.trim\(\)\} onClick=\{\(\) => askTutor\(\)\}>\{teachingBack \? \(teachBackTurn === 1 \? "Share with AI Mentor" : "Send follow-up"\) : "Ask a question"\}<\/button>/);
   });
 
   it("reveals a fallback only after a send has actually failed twice", () => {
-    expect(source).toMatch(/\{requiresResponse && !submittedComplete\.has\(current\.id\) && sendFailures >= 2 && <button/);
+    // (E.3.5: guarded by !isSurvey too — onboarding_survey never calls the
+    // tutor, so it has no send-failure fallback to reveal.)
+    expect(source).toMatch(/\{requiresResponse && !isSurvey && !submittedComplete\.has\(current\.id\) && sendFailures >= 2 && <button/);
     // complete(), not advance(): advance() would try to send again, which is
     // the thing that is failing.
     expect(source).toMatch(/onClick=\{\(\) => complete\(\{ acknowledged: true \}\)\}>Continue without sending<\/button>/);
@@ -208,7 +211,9 @@ describe("expectsResponse blocks offer exactly one way forward", () => {
     expect(source).toMatch(/setSendFailures\(\(value\) => value \+ 1\);/);
     expect(source).toMatch(/setSendFailures\(0\);\s*\n\s*if \(teachingBack/);
     // Reset on block change, so failures on block 1 cannot unlock block 4.
-    expect(source).toMatch(/setTeachBackTurn\(savedTurn === 1 \? 2 : 1\); setSendFailures\(0\);/);
+    // (E.3.5: setSurveyStepIndex now sits between the two — still resets
+    // together with them on every block change.)
+    expect(source).toMatch(/setTeachBackTurn\(savedTurn === 1 \? 2 : 1\); setSurveyStepIndex\([^)]*\); setSendFailures\(0\);/);
   });
 });
 
