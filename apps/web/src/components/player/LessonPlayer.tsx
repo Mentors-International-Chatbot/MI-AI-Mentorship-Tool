@@ -27,7 +27,14 @@ type BlockBase = {
   assessment?: { mode: "reteach_gate" | "web_quiz" };
 };
 type Teach = BlockBase & { blockType: "teach"; content: string; expectsResponse?: boolean };
-type Quiz = BlockBase & { blockType: "quiz_checkpoint"; title?: string; questions: Array<{ id: string; prompt: string; options?: string[]; graded: boolean }> };
+type Quiz = BlockBase & { blockType: "quiz_checkpoint"; title?: string; questions: Array<{
+  id: string;
+  prompt: string;
+  format: "multiple_choice" | "short_answer" | "fill_in_blank" | "drag_to_order" | "matching";
+  options?: string[];
+  matchingPrompts?: Array<{ id: string; text: string }>;
+  graded: boolean;
+}> };
 type Drag = BlockBase & { blockType: "drag_order"; prompt: string; items: string[] };
 type TeachBack = BlockBase & { blockType: "teach_back"; prompt: string };
 type Media = BlockBase & { blockType: "media"; kind: string; config: Record<string, unknown>; caption?: string };

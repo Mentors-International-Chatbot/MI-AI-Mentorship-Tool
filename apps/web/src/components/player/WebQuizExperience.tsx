@@ -1,15 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import type { QuizAnswer } from "@/lib/player/quizGrading";
 import { BlockFeedback, feedbackAllowsRetry } from "./BlockFeedback";
 import { BoundedAssessmentContainer, type BoundedAssessmentPhase } from "./BoundedAssessmentContainer";
-
-type Question = {
-  id: string;
-  prompt: string;
-  options?: string[];
-  graded: boolean;
-};
+import { isCompleteQuizAnswer, QuizQuestionField, type QuizQuestionDto } from "./QuizQuestionField";
 
 type SubmitResult = {
   completed: boolean;
@@ -19,11 +14,11 @@ type SubmitResult = {
 type Props = {
   blockId: string;
   title?: string;
-  questions: Question[];
+  questions: QuizQuestionDto[];
   busy: boolean;
   initiallyComplete?: boolean;
   initialFeedback?: unknown;
-  onSubmit: (answers: Record<string, string>) => Promise<SubmitResult | null>;
+  onSubmit: (answers: Record<string, QuizAnswer>) => Promise<SubmitResult | null>;
   onReturnToThread: () => Promise<void>;
 };
 
@@ -38,7 +33,7 @@ export function WebQuizExperience({
   onReturnToThread,
 }: Props) {
   const [phase, setPhase] = useState<BoundedAssessmentPhase>(initiallyComplete ? "verdict" : "entry");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, QuizAnswer>>({});
   const [feedback, setFeedback] = useState<unknown>(initialFeedback);
   const [attempt, setAttempt] = useState(1);
   const [error, setError] = useState("");
@@ -65,9 +60,13 @@ export function WebQuizExperience({
   }
 
   const quizFeedback = feedback && typeof feedback === "object"
-    ? feedback as { kind?: string; correct?: boolean }
+    ? feedback as { kind?: string; correct?: boolean; passed?: boolean }
     : null;
-  const passed = quizFeedback?.kind === "quiz" ? quizFeedback.correct : undefined;
+  const passed = quizFeedback?.kind === "quiz" ? quizFeedback.passed ?? quizFeedback.correct : undefined;
+  const questionFormats = Object.fromEntries(questions.map((question) => [question.id, question.format]));
+  const matchingPromptLabels = Object.fromEntries(questions.flatMap((question) => question.matchingPrompts
+    ? [[question.id, Object.fromEntries(question.matchingPrompts.map((prompt) => [prompt.id, prompt.text]))]]
+    : []));
 
   return (
     <BoundedAssessmentContainer
@@ -82,7 +81,7 @@ export function WebQuizExperience({
       onEnter={() => setPhase("active")}
       canComplete={false}
       verdict={{
-        heading: passed === true ? "Correct" : passed === false ? "Attempt complete" : "Submitted",
+        heading: passed === true ? "Passed" : passed === false ? "Keep going" : "Submitted",
         message: passed === true
           ? "Review the result, then return to the lesson."
           : "Your response has been recorded. Return to the lesson when you are ready.",
@@ -96,34 +95,23 @@ export function WebQuizExperience({
           {questions.map((question) => (
             <fieldset key={question.id}>
               <legend>{question.prompt}</legend>
-              {question.options?.length ? question.options.map((option) => (
-                <label className="player-option" key={option}>
-                  <input
-                    type="radio"
-                    name={`${blockId}-${question.id}`}
-                    value={option}
-                    checked={answers[question.id] === option}
-                    onChange={() => setAnswers((value) => ({ ...value, [question.id]: option }))}
-                  />
-                  {option}
-                </label>
-              )) : (
-                <input
-                  className="player-bounded-short-answer"
-                  value={answers[question.id] ?? ""}
-                  onChange={(event) => setAnswers((value) => ({ ...value, [question.id]: event.target.value }))}
-                  aria-label={question.prompt}
-                />
-              )}
+              <QuizQuestionField
+                blockId={blockId}
+                question={question}
+                answer={answers[question.id]}
+                onChange={(answer) => setAnswers((value) => ({ ...value, [question.id]: answer }))}
+              />
             </fieldset>
           ))}
           <BlockFeedback
             feedback={feedback}
             questionPrompts={Object.fromEntries(questions.map((question) => [question.id, question.prompt]))}
+            questionFormats={questionFormats}
+            matchingPromptLabels={matchingPromptLabels}
           />
           <button
             type="button"
-            disabled={busy || questions.some((question) => !answers[question.id]?.trim())}
+            disabled={busy || questions.some((question) => !isCompleteQuizAnswer(question, answers[question.id]))}
             onClick={() => void submit()}
           >
             {feedbackAllowsRetry(feedback) ? "Try again" : questions.some((question) => question.graded) ? "Submit answer" : "Continue"}
@@ -134,6 +122,8 @@ export function WebQuizExperience({
         <BlockFeedback
           feedback={feedback}
           questionPrompts={Object.fromEntries(questions.map((question) => [question.id, question.prompt]))}
+          questionFormats={questionFormats}
+          matchingPromptLabels={matchingPromptLabels}
         />
       )}
     </BoundedAssessmentContainer>

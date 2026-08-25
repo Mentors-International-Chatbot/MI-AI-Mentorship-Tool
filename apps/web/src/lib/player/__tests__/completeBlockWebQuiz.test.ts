@@ -112,6 +112,7 @@ describe("completeBlock — quiz_checkpoint with assessment.mode: web_quiz", () 
     expect(result.feedback).toEqual({
       kind: "quiz",
       correct: true,
+      passed: true,
       retryAvailable: false,
       questions: [{ questionId: "q1", correct: true, correctAnswer: "A", explanation: "A is correct." }],
     });

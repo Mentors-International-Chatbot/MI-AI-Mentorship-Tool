@@ -11,6 +11,7 @@ import { mergeAssessmentConfig } from "@/lib/journey-package/mergeAssessmentConf
 import { getCurrentLearnerProject, learnerProjectSelectionRequired } from "./learnerProject";
 import { buildLessonDashboard, type LessonDashboard } from "./dashboard";
 import { createAssessmentSession } from "@/lib/ai/assessment/createAssessmentSession";
+import { gradeQuizQuestion } from "./quizGrading";
 
 export class PlayerError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -159,6 +160,18 @@ export function sanitizePlayerBlock(block: LessonBlock) {
   if (block.blockType === "quiz_checkpoint") {
     return { ...block, questions: block.questions.map((question) => {
       const safe = { ...question } as Partial<typeof question>;
+      const orderedAnswerKey = Array.isArray(question.answerKey) ? question.answerKey : null;
+      if (
+        question.format === "drag_to_order"
+        && question.options
+        && orderedAnswerKey
+        && question.options.length === orderedAnswerKey.length
+        && question.options.every((value, index) => value === orderedAnswerKey[index])
+      ) {
+        // Never hand the browser an already-solved initial sequence merely
+        // because the author listed the option pool in key order.
+        safe.options = [...question.options.slice(1), question.options[0]];
+      }
       delete safe.answerKey;
       delete safe.explanation;
       return safe;
@@ -537,6 +550,8 @@ export type PlayerFeedback =
   | {
       kind: "quiz";
       correct: boolean;
+      /** Present for threshold-gated web quizzes; omitted for legacy quizzes. */
+      passed?: boolean;
       /** The learner may submit a different set of answers to this block. */
       retryAvailable: boolean;
       questions: Array<{
@@ -548,7 +563,7 @@ export type PlayerFeedback =
          * multi-select formats; `multiple_choice` is refined to a single
          * string in the package schema.
          */
-        correctAnswer?: string | string[];
+        correctAnswer?: string | string[] | Record<string, string>;
         explanation?: string;
       }>;
     }
@@ -595,36 +610,21 @@ export function gradePlayerBlock(
   if (block.blockType === "quiz_checkpoint") {
     if (!response || typeof response !== "object" || Array.isArray(response)) throw new PlayerError(400, "invalid_response", "Submit an answer for every question");
     const answers = response as Record<string, unknown>;
-    if (block.questions.some((question) => typeof answers[question.id] !== "string")) throw new PlayerError(400, "incomplete_response", "Submit an answer for every question");
-    if (block.questions.some((question) => question.format === "multiple_choice" && !question.options?.includes(answers[question.id] as string))) throw new PlayerError(400, "invalid_response", "Every answer must be one of the question options");
+    const evaluated = block.questions.map((question) => ({ question, grade: gradeQuizQuestion(question, answers[question.id]) }));
+    if (evaluated.some(({ grade }) => !grade.valid && grade.reason === "incomplete")) throw new PlayerError(400, "incomplete_response", "Submit an answer for every question");
+    if (evaluated.some(({ grade }) => !grade.valid)) throw new PlayerError(400, "invalid_response", "One or more quiz answers are invalid");
     // Ungraded questions are recorded, never judged. Scoring runs over the
     // graded ones only, and a block with none scores null rather than zero —
     // "no opinion was wrong" and "every answer was wrong" must not look alike
     // in BlockProgress.score.
-    const graded = block.questions.filter((question) => question.graded);
-    const results = graded.map((question) => ({ question, correct: answers[question.id] === question.answerKey }));
+    const results = evaluated.flatMap(({ question, grade }) => question.graded && grade.valid
+      ? [{ question, correct: grade.correct }]
+      : []);
     const allCorrect = results.every((item) => item.correct);
-    // The last attempt either way: nothing left to earn by holding the key
-    // back, and the block has to stop being a wall.
-    const lastAttempt = allCorrect || attempt >= QUIZ_ATTEMPT_LIMIT;
     const rawScore = results.length > 0 ? results.filter((item) => item.correct).length / results.length : null;
     // No graded questions means no verdict to show, which also lets the
     // player advance straight past an opinion poll instead of pausing on a
     // feedback panel that would have nothing in it.
-    const rawFeedback: PlayerFeedback | null = results.length > 0 ? {
-      kind: "quiz" as const,
-      correct: allCorrect,
-      retryAvailable: !lastAttempt,
-      questions: results.map(({ question, correct }) => (
-        // Per question, not per block: a question the learner already got
-        // right has no key left to protect, so its explanation lands while
-        // they are still looking at their own answer. A question they missed
-        // keeps both until the retry is spent.
-        correct || lastAttempt
-          ? { questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation }
-          : { questionId: question.id, correct }
-      )),
-    } : null;
     // B.3 Stage 1: a plain quiz_checkpoint (no assessment key — every block
     // in every live/archived course today) is completely untouched below —
     // rawScore/rawFeedback pass straight through, byte-identical to before
@@ -654,16 +654,47 @@ export function gradePlayerBlock(
     // satisfy) — a label difference, not a functional break.
     if (block.assessment?.mode === "web_quiz") {
       const merged = mergeBlockAssessmentConfig(
-        packageAssessment ?? { passing: { dimensionKey: "", threshold: 0, confidenceFloor: 0.5, minTurns: 2, maxTurns: 12 }, allowRetake: true, blocking: true, onMaxTurnsWithoutPass: "complete_with_scores", autoAppendTeachBack: false, showScoreToLearner: false },
+        packageAssessment ?? { passing: { dimensionKey: "", threshold: 0, confidenceFloor: 0.5, minTurns: 2, maxTurns: 12 }, allowRetake: true, blocking: true, onMaxTurnsWithoutPass: "complete_with_scores", autoAppendTeachBack: false, showScoreToLearner: false, webQuizPassingScore: 1 },
         block.assessment,
       );
+      const passed = rawScore === null || rawScore >= merged.webQuizPassingScore;
+      const rawFeedback: PlayerFeedback | null = results.length > 0 ? {
+        kind: "quiz" as const,
+        correct: allCorrect,
+        passed,
+        // Below-threshold web quizzes have no exhaustion point: every failed
+        // attempt stays open and can be revised until the configured score is met.
+        retryAvailable: !passed,
+        questions: results.map(({ question, correct }) => (
+          correct || passed
+            ? { questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation }
+            : { questionId: question.id, correct }
+        )),
+      } : null;
       return {
-        complete: results.length === 0 || lastAttempt,
+        complete: passed,
         score: merged.showScoreToLearner ? rawScore : null,
         response: answers,
         feedback: merged.showScoreToLearner ? rawFeedback : null,
       };
     }
+    // The last attempt either way: nothing left to earn by holding the key
+    // back, and the legacy block has to stop being a wall.
+    const lastAttempt = allCorrect || attempt >= QUIZ_ATTEMPT_LIMIT;
+    const rawFeedback: PlayerFeedback | null = results.length > 0 ? {
+      kind: "quiz" as const,
+      correct: allCorrect,
+      retryAvailable: !lastAttempt,
+      questions: results.map(({ question, correct }) => (
+        // Per question, not per block: a question the learner already got
+        // right has no key left to protect, so its explanation lands while
+        // they are still looking at their own answer. A question they missed
+        // keeps both until the retry is spent.
+        correct || lastAttempt
+          ? { questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation }
+          : { questionId: question.id, correct }
+      )),
+    } : null;
     return {
       // A missed first attempt leaves the block incomplete so the learner can
       // answer it again; the second attempt completes it whatever the score,

@@ -37,6 +37,7 @@ const assessmentEnabled = {
   blocking: true,
   autoAppendTeachBack: true,
   showScoreToLearner: false,
+  webQuizPassingScore: 1,
 };
 
 /** Assessment config with autoAppendTeachBack disabled */
@@ -53,6 +54,7 @@ const assessmentDisabled = {
   blocking: true,
   autoAppendTeachBack: false,
   showScoreToLearner: false,
+  webQuizPassingScore: 1,
 };
 
 describe("maybeAppendTeachBack", () => {

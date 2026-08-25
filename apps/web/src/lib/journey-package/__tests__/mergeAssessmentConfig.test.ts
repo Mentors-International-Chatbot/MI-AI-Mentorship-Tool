@@ -14,6 +14,7 @@ const base = {
   onMaxTurnsWithoutPass: "complete_with_scores" as const,
   autoAppendTeachBack: false,
   showScoreToLearner: false,
+  webQuizPassingScore: 0.7,
 };
 
 describe("mergeAssessmentConfig", () => {
@@ -22,6 +23,7 @@ describe("mergeAssessmentConfig", () => {
       passing: base.passing,
       allowRetake: true,
       showScoreToLearner: false,
+      webQuizPassingScore: 0.7,
     });
   });
 
@@ -31,11 +33,20 @@ describe("mergeAssessmentConfig", () => {
       passingOverride: { threshold: 8, minTurns: 3 },
       allowRetake: false,
       showScoreToLearner: true,
+      webQuizPassingScore: 0.7,
     })).toEqual({
       passing: { ...base.passing, threshold: 8, minTurns: 3 },
       allowRetake: false,
       showScoreToLearner: true,
+      webQuizPassingScore: 0.7,
     });
+  });
+
+  it("lets a web quiz override the normalized package passing score", () => {
+    expect(mergeAssessmentConfig(base, {
+      mode: "web_quiz",
+      webQuizPassingScore: 0.8,
+    }).webQuizPassingScore).toBe(0.8);
   });
 
   it("preserves legacy passingOverride while giving the new field precedence", () => {

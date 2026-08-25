@@ -103,6 +103,12 @@
 .player-bounded-input label { font-size: .85rem; font-weight: 750; }
 .player-bounded-input button { justify-self: start; }
 .player-bounded-short-answer { width: 100%; border: 1px solid #bcccdc; border-radius: 10px; padding: .75rem .85rem; font: inherit; }
+.player-bounded-short-answer.is-fill { border-style: dashed; }
+.player-matching-grid { display: grid; gap: .8rem; }
+.player-matching-grid label { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 1.4fr); gap: 1rem; align-items: center; }
+.player-matching-grid label > span { font-weight: 700; }
+.player-matching-grid select { width: 100%; border: 1px solid #bcccdc; border-radius: 10px; padding: .7rem .8rem; background: white; color: var(--player-text); font: inherit; }
+@media (max-width: 620px) { .player-matching-grid label { grid-template-columns: 1fr; gap: .35rem; } }
 .player-bounded-verdict { border-left: 4px solid var(--player-muted); border-radius: 10px; background: #f0f4f8; padding: 1rem 1.1rem; }
 .player-bounded-verdict.is-passed { border-left-color: var(--player-accent); background: #e8f5f1; }
 .player-bounded-verdict.is-not-passed { border-left-color: #b42318; background: #fdf1ee; }

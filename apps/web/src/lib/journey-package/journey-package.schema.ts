@@ -129,9 +129,10 @@ export const quizQuestionSchema = z
   .object({
     id: key,
     prompt: z.string().min(1),
-    format: z.enum(["multiple_choice", "short_answer"]),
+    format: z.enum(["multiple_choice", "short_answer", "fill_in_blank", "drag_to_order", "matching"]),
     options: z.array(z.string()).optional(),
-    answerKey: z.union([z.string(), z.array(z.string())]).optional(),
+    matchingPrompts: z.array(z.object({ id: key, text: z.string().min(1) })).optional(),
+    answerKey: z.union([z.string(), z.array(z.string()), z.record(key, z.string())]).optional(),
     explanation: z.string().min(1).optional(),
     /** Ties this question to a tracked dimension for auto-assessment. */
     dimensionKey: key.optional(),
@@ -158,33 +159,129 @@ export const quizQuestionSchema = z
     { message: "multiple_choice questions need at least 2 options", path: ["options"] },
   )
   .superRefine((q, ctx) => {
-    if (q.format !== "multiple_choice") return;
-    const options = q.options ?? [];
-    const normalized = options.map(normalizeOption);
-    if (new Set(normalized).size !== normalized.length) {
-      ctx.addIssue({
-        code: "custom",
-        message: "multiple_choice options must be unique after Unicode and whitespace normalization",
-        path: ["options"],
-      });
-    }
-    // Graded questions keep the original requirement, unconditionally. An
-    // ungraded question must not carry a key at all — a stray one would look
-    // authoritative to a later reader and to any future grader.
-    if (q.graded) {
-      if (typeof q.answerKey !== "string" || options.filter((o) => o === q.answerKey).length !== 1) {
+    const requireNoAnswerKeyWhenUngraded = () => {
+      if (!q.graded && q.answerKey !== undefined) {
         ctx.addIssue({
           code: "custom",
-          message: "multiple_choice answerKey must equal exactly one raw option",
+          message: "an ungraded question must not declare an answerKey",
           path: ["answerKey"],
         });
       }
-    } else if (q.answerKey !== undefined) {
+    };
+    const requireUniqueOptions = (format: string) => {
+      const options = q.options ?? [];
+      const normalized = options.map(normalizeOption);
+      if (new Set(normalized).size !== normalized.length) {
+        ctx.addIssue({
+          code: "custom",
+          message: `${format} options must be unique after Unicode and whitespace normalization`,
+          path: ["options"],
+        });
+      }
+      return options;
+    };
+
+    if (q.format === "multiple_choice") {
+      const options = requireUniqueOptions("multiple_choice");
+      // Graded questions keep the original requirement, unconditionally. An
+      // ungraded question must not carry a key at all — a stray one would look
+      // authoritative to a later reader and to any future grader.
+      if (q.graded) {
+        if (typeof q.answerKey !== "string" || options.filter((o) => o === q.answerKey).length !== 1) {
+          ctx.addIssue({
+            code: "custom",
+            message: "multiple_choice answerKey must equal exactly one raw option",
+            path: ["answerKey"],
+          });
+        }
+      } else {
+        requireNoAnswerKeyWhenUngraded();
+      }
+      return;
+    }
+
+    // `short_answer` deliberately retains its pre-E.2 permissive schema.
+    if (q.format === "short_answer") return;
+
+    if (q.format === "fill_in_blank") {
+      if (q.options !== undefined) {
+        ctx.addIssue({ code: "custom", message: "fill_in_blank questions must not declare options", path: ["options"] });
+      }
+      if (q.matchingPrompts !== undefined) {
+        ctx.addIssue({ code: "custom", message: "fill_in_blank questions must not declare matchingPrompts", path: ["matchingPrompts"] });
+      }
+      if (q.graded) {
+        const accepted = typeof q.answerKey === "string"
+          ? [q.answerKey]
+          : Array.isArray(q.answerKey) ? q.answerKey : [];
+        const normalized = accepted.map(normalizeOption);
+        if (accepted.length === 0 || normalized.some((value) => value.length === 0)) {
+          ctx.addIssue({ code: "custom", message: "fill_in_blank answerKey must declare at least one non-empty accepted answer", path: ["answerKey"] });
+        } else if (new Set(normalized).size !== normalized.length) {
+          ctx.addIssue({ code: "custom", message: "fill_in_blank accepted answers must be unique after Unicode and whitespace normalization", path: ["answerKey"] });
+        }
+      } else {
+        requireNoAnswerKeyWhenUngraded();
+      }
+      return;
+    }
+
+    if (q.format === "drag_to_order") {
+      const options = requireUniqueOptions("drag_to_order");
+      if (options.length < 2 || options.some((option) => normalizeOption(option).length === 0)) {
+        ctx.addIssue({ code: "custom", message: "drag_to_order questions need at least 2 non-empty options", path: ["options"] });
+      }
+      if (q.matchingPrompts !== undefined) {
+        ctx.addIssue({ code: "custom", message: "drag_to_order questions must not declare matchingPrompts", path: ["matchingPrompts"] });
+      }
+      if (q.graded) {
+        const keyValues = Array.isArray(q.answerKey) ? q.answerKey : [];
+        const expected = [...options].sort();
+        const actual = [...keyValues].sort();
+        if (actual.length !== expected.length || actual.some((value, index) => value !== expected[index])) {
+          ctx.addIssue({ code: "custom", message: "drag_to_order answerKey must be a complete, duplicate-free permutation of the raw options", path: ["answerKey"] });
+        }
+      } else {
+        requireNoAnswerKeyWhenUngraded();
+      }
+      return;
+    }
+
+    const options = requireUniqueOptions("matching");
+    const prompts = q.matchingPrompts ?? [];
+    const promptIds = prompts.map((prompt) => prompt.id);
+    const normalizedPrompts = prompts.map((prompt) => normalizeOption(prompt.text));
+    if (prompts.length < 2 || options.length < 2 || prompts.length !== options.length || options.some((option) => normalizeOption(option).length === 0)) {
       ctx.addIssue({
         code: "custom",
-        message: "an ungraded question must not declare an answerKey",
-        path: ["answerKey"],
+        message: "matching questions need equal numbers of at least 2 prompts and options",
+        path: ["matchingPrompts"],
       });
+    }
+    if (new Set(promptIds).size !== promptIds.length) {
+      ctx.addIssue({ code: "custom", message: "matching prompt ids must be unique", path: ["matchingPrompts"] });
+    }
+    if (new Set(normalizedPrompts).size !== normalizedPrompts.length) {
+      ctx.addIssue({ code: "custom", message: "matching prompts must be unique after Unicode and whitespace normalization", path: ["matchingPrompts"] });
+    }
+    if (q.graded) {
+      const answerKey = q.answerKey && typeof q.answerKey === "object" && !Array.isArray(q.answerKey)
+        ? q.answerKey
+        : {};
+      const answerPromptIds = Object.keys(answerKey).sort();
+      const expectedPromptIds = [...promptIds].sort();
+      const answerOptions = Object.values(answerKey).sort();
+      const expectedOptions = [...options].sort();
+      if (
+        answerPromptIds.length !== expectedPromptIds.length
+        || answerPromptIds.some((value, index) => value !== expectedPromptIds[index])
+        || answerOptions.length !== expectedOptions.length
+        || answerOptions.some((value, index) => value !== expectedOptions[index])
+      ) {
+        ctx.addIssue({ code: "custom", message: "matching answerKey must map every prompt id to a duplicate-free permutation of the raw options", path: ["answerKey"] });
+      }
+    } else {
+      requireNoAnswerKeyWhenUngraded();
     }
   });
 
@@ -220,6 +317,8 @@ export const passingSchema = z.object({
 export const blockAssessmentOverrideSchema = z.object({
   mode: z.enum(["reteach_gate", "web_quiz"]),
   passingOverride: passingSchema.partial().optional(),
+  /** Normalized 0–1 score required to complete a web quiz. */
+  webQuizPassingScore: z.number().min(0).max(1).optional(),
   allowRetake: z.boolean().optional(),
   showScoreToLearner: z.boolean().optional(),
 });
@@ -670,6 +769,8 @@ export const configSchema = z.object({
        * style.
        */
       showScoreToLearner: z.boolean().optional().default(false),
+      /** Package default for web quizzes; block assessment may override it. */
+      webQuizPassingScore: z.number().min(0).max(1).optional().default(1),
     })
     .optional(),
   /**
@@ -1084,6 +1185,19 @@ export const journeyPackageSchema = z
     // field on the wrong block type.
     for (const l of pkg.curriculum.lessons) {
       for (const b of l.blocks) {
+        if (b.blockType === "quiz_checkpoint") {
+          const richQuestion = b.questions.find((question) => (
+            question.format === "fill_in_blank"
+            || question.format === "drag_to_order"
+            || question.format === "matching"
+          ));
+          if (richQuestion && b.assessment?.mode !== "web_quiz") {
+            ctx.addIssue({
+              code: "custom",
+              message: `quiz question "${richQuestion.id}" (block "${b.id}", lesson "${l.key}") uses rich format "${richQuestion.format}" but the block is not assessment.mode="web_quiz"`,
+            });
+          }
+        }
         if (!b.assessment) continue;
 
         if (b.assessment.mode === "web_quiz" && b.blockType !== "quiz_checkpoint") {
@@ -1179,6 +1293,7 @@ export const journeyPackageSchema = z
 export type JourneyPackage = z.infer<typeof journeyPackageSchema>;
 /** Input type allows optional fields with defaults to be omitted */
 export type JourneyPackageInput = z.input<typeof journeyPackageSchema>;
+export type QuizQuestion = z.infer<typeof quizQuestionSchema>;
 export type PassingConfig = z.infer<typeof passingSchema>;
 /** Author/input shapes keep defaulted fields optional for v1.0 callers. */
 export type PackageLesson = z.input<typeof lessonSchema>;

@@ -191,6 +191,8 @@ export const programVersionConfigSchema = z.object({
        * in `journey-package.schema.ts` for why the order isn't cosmetic.
        */
       showScoreToLearner: z.boolean().optional().default(false),
+      /** Normalized 0–1 score required to complete a web quiz. */
+      webQuizPassingScore: z.number().min(0).max(1).optional().default(1),
     })
     .optional(),
 

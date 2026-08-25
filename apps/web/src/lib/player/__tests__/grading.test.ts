@@ -215,6 +215,7 @@ describe("mergeBlockAssessmentConfig — mirrors mergePassingConfig's per-field 
     onMaxTurnsWithoutPass: "complete_with_scores" as const,
     autoAppendTeachBack: false,
     showScoreToLearner: false,
+    webQuizPassingScore: 1,
   };
 
   it("returns the base values untouched when no override is given", () => {
@@ -222,6 +223,7 @@ describe("mergeBlockAssessmentConfig — mirrors mergePassingConfig's per-field 
       passing: base.passing,
       allowRetake: true,
       showScoreToLearner: false,
+      webQuizPassingScore: 1,
     });
   });
 

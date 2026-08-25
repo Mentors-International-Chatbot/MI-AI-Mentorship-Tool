@@ -15,8 +15,9 @@ import remarkGfm from "remark-gfm";
 type QuizFeedback = {
   kind: "quiz";
   correct: boolean;
+  passed?: boolean;
   retryAvailable: boolean;
-  questions: Array<{ questionId: string; correct: boolean; correctAnswer?: string | string[]; explanation?: string }>;
+  questions: Array<{ questionId: string; correct: boolean; correctAnswer?: string | string[] | Record<string, string>; explanation?: string }>;
 };
 type DragOrderFeedback = { kind: "drag_order"; correct: boolean; misplacedPositions: number[]; correctOrder?: number[] };
 
@@ -24,10 +25,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+function isCorrectAnswer(value: unknown): value is string | string[] | Record<string, string> {
+  return typeof value === "string"
+    || (Array.isArray(value) && value.every((item) => typeof item === "string"))
+    || (isRecord(value) && Object.values(value).every((item) => typeof item === "string"));
+}
+
 function isQuiz(value: unknown): value is QuizFeedback {
   return isRecord(value) && value.kind === "quiz" && typeof value.correct === "boolean"
+    && typeof value.retryAvailable === "boolean"
+    && (value.passed === undefined || typeof value.passed === "boolean")
     && Array.isArray(value.questions)
-    && value.questions.every((item) => isRecord(item) && typeof item.questionId === "string" && typeof item.correct === "boolean");
+    && value.questions.every((item) => isRecord(item)
+      && typeof item.questionId === "string"
+      && typeof item.correct === "boolean"
+      && (item.correctAnswer === undefined || isCorrectAnswer(item.correctAnswer))
+      && (item.explanation === undefined || typeof item.explanation === "string"));
 }
 
 function isDragOrder(value: unknown): value is DragOrderFeedback {
@@ -65,17 +78,20 @@ export function feedbackAllowsRetry(feedback: unknown): boolean {
  * learner has spent their retry, so there is no key here to leak early even if
  * this file wanted to.
  */
-export function BlockFeedback({ feedback, questionPrompts, items }: {
+export function BlockFeedback({ feedback, questionPrompts, questionFormats, matchingPromptLabels, items }: {
   feedback: unknown;
   /** Question id → authored prompt, so a verdict line names its question. */
   questionPrompts?: Record<string, string>;
+  questionFormats?: Record<string, string>;
+  matchingPromptLabels?: Record<string, Record<string, string>>;
   /** Source-order labels for a drag block, used to spell out the right order. */
   items?: string[];
 }) {
   if (isQuiz(feedback)) {
+    const passed = feedback.passed ?? feedback.correct;
     return (
-      <section className={`player-feedback ${feedback.correct ? "is-correct" : "is-wrong"}`} role="status" aria-live="polite">
-        <strong className="player-feedback-verdict">{feedback.correct ? "Correct" : feedback.retryAvailable ? "Not quite — try again" : "Not quite"}</strong>
+      <section className={`player-feedback ${passed ? "is-correct" : "is-wrong"}`} role="status" aria-live="polite">
+        <strong className="player-feedback-verdict">{feedback.correct ? "Correct" : passed ? "Passed" : feedback.retryAvailable ? "Not quite — try again" : "Not quite"}</strong>
         <ol className="player-feedback-list">
           {feedback.questions.map((question) => (
             <li key={question.questionId} className={question.correct ? "is-correct" : "is-wrong"}>
@@ -85,7 +101,26 @@ export function BlockFeedback({ feedback, questionPrompts, items }: {
                   <span className="player-sr-only">{question.correct ? "Correct: " : "Incorrect: "}</span>
                   {questionPrompts?.[question.questionId] ?? "This question"}
                 </p>
-                {question.correctAnswer !== undefined && <p className="player-feedback-answer">Correct answer: {Array.isArray(question.correctAnswer) ? question.correctAnswer.join(", ") : question.correctAnswer}</p>}
+                {question.correctAnswer !== undefined && (
+                  typeof question.correctAnswer === "string" ? (
+                    <p className="player-feedback-answer">Correct answer: {question.correctAnswer}</p>
+                  ) : Array.isArray(question.correctAnswer) ? (
+                    <p className="player-feedback-answer">
+                      Correct answer: {questionFormats?.[question.questionId] === "drag_to_order"
+                        ? question.correctAnswer.join(" → ")
+                        : question.correctAnswer.join(" or ")}
+                    </p>
+                  ) : (
+                    <div className="player-feedback-answer">
+                      <span>Correct matches:</span>
+                      <ul>
+                        {Object.entries(question.correctAnswer).map(([promptId, answer]) => (
+                          <li key={promptId}>{matchingPromptLabels?.[question.questionId]?.[promptId] ?? promptId}: {answer}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                )}
                 {question.explanation && <div className="player-feedback-why"><ReactMarkdown remarkPlugins={[remarkGfm]}>{question.explanation}</ReactMarkdown></div>}
               </div>
             </li>
@@ -93,7 +128,13 @@ export function BlockFeedback({ feedback, questionPrompts, items }: {
         </ol>
         {/* Said once, at the bottom, rather than repeated under every missed
             question: the retry is for the block, not for one answer. */}
-        {feedback.retryAvailable && !feedback.correct && <p className="player-feedback-retry">Change your answers and submit again. The correct answers are shown after this attempt.</p>}
+        {feedback.retryAvailable && !passed && (
+          <p className="player-feedback-retry">
+            {feedback.passed !== undefined
+              ? "Change your answers and submit again. You can keep trying until you pass."
+              : "Change your answers and submit again. The correct answers are shown after this attempt."}
+          </p>
+        )}
       </section>
     );
   }
