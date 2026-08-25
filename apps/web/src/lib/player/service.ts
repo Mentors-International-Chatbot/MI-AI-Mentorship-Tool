@@ -505,7 +505,7 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
         : undefined;
       const priorAttempts = Number(progressState(item?.state).attempts) || 0;
       const feedback = current && item?.completedAt && state?.reviewPending && block.blockType !== "teach_back"
-        ? gradePlayerBlock(block, item.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT)).feedback
+        ? gradePlayerBlock(block, item.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT), undefined, access.config.assessment).feedback
         : undefined;
       return { blockId: block.id, contentVersion: block.contentVersion, startedAt: current ? item?.startedAt ?? null : null, completedAt: current ? item?.completedAt ?? null : null, score: current ? item?.score ?? null : null, state, feedback };
     }),
@@ -593,6 +593,15 @@ export function gradePlayerBlock(
    * or re-gates it.
    */
   reteachGate?: { passed: boolean; score: number | null },
+  /**
+   * B.3 Stage 1: `config.assessment` (package-level defaults), needed only
+   * when `block.assessment?.mode === "web_quiz"` to resolve
+   * `mergeBlockAssessmentConfig`. Unlike `reteachGate`, this needs no I/O —
+   * `access.config.assessment` is already in every caller's hand — so it's
+   * passed straight through rather than pre-resolved into a caller-side
+   * helper the way `resolveReteachGateSignal` is for reteach_gate.
+   */
+  packageAssessment?: ProgramVersionConfig["assessment"],
 ): { complete: boolean; score: number | null; response: unknown; feedback: PlayerFeedback | null } {
   if (block.blockType === "teach") return { complete: true, score: 1, response: { acknowledged: true }, feedback: null };
   if (block.blockType === "quiz_checkpoint") {
@@ -610,30 +619,71 @@ export function gradePlayerBlock(
     // The last attempt either way: nothing left to earn by holding the key
     // back, and the block has to stop being a wall.
     const lastAttempt = allCorrect || attempt >= QUIZ_ATTEMPT_LIMIT;
+    const rawScore = results.length > 0 ? results.filter((item) => item.correct).length / results.length : null;
+    // No graded questions means no verdict to show, which also lets the
+    // player advance straight past an opinion poll instead of pausing on a
+    // feedback panel that would have nothing in it.
+    const rawFeedback: PlayerFeedback | null = results.length > 0 ? {
+      kind: "quiz" as const,
+      correct: allCorrect,
+      retryAvailable: !lastAttempt,
+      questions: results.map(({ question, correct }) => (
+        // Per question, not per block: a question the learner already got
+        // right has no key left to protect, so its explanation lands while
+        // they are still looking at their own answer. A question they missed
+        // keeps both until the retry is spent.
+        correct || lastAttempt
+          ? { questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation }
+          : { questionId: question.id, correct }
+      )),
+    } : null;
+    // B.3 Stage 1: a plain quiz_checkpoint (no assessment key — every block
+    // in every live/archived course today) is completely untouched below —
+    // rawScore/rawFeedback pass straight through, byte-identical to before
+    // this stage. Only assessment.mode === "web_quiz" reroutes through
+    // mergeBlockAssessmentConfig, mirroring resolveReteachGateSignal's
+    // showScoreToLearner gate exactly (merged.showScoreToLearner ? value :
+    // null), applied uniformly to score AND feedback, on every attempt
+    // (complete or not) — not just the final one. Full suppression, not
+    // field-stripping: gated feedback becomes `null` outright rather than
+    // keeping the correct/incorrect shape with only correctAnswer/explanation
+    // stripped. Reasoning: (a) mirrors the coarse feedback:null shape
+    // resolveReteachGateSignal already ships for reteach_gate, keeping the
+    // two showScoreToLearner-gated completion paths consistent with each
+    // other; (b) a per-question correct/incorrect breakdown is itself a
+    // score, just not expressed as a fraction — stripping only
+    // correctAnswer/explanation would still tell the learner how many they
+    // got right, which is exactly what showScoreToLearner:false is asking
+    // not to reveal. One accepted side effect: nulling feedback also means
+    // completeBlock's reviewPending/"Continue" pause never triggers for
+    // these blocks (reviewPending requires !!grade.feedback or an actual
+    // open-question hold) — coherent, not a bug, since there is nothing to
+    // review when nothing was shown. The retry mechanism itself still works:
+    // an incomplete attempt still returns complete:false, so the block stays
+    // open for resubmission; the client just falls back to its generic
+    // "Submit answer" label instead of "Try again" (feedbackAllowsRetry
+    // requires a real quiz-shaped feedback object, which null doesn't
+    // satisfy) — a label difference, not a functional break.
+    if (block.assessment?.mode === "web_quiz") {
+      const merged = mergeBlockAssessmentConfig(
+        packageAssessment ?? { passing: { dimensionKey: "", threshold: 0, confidenceFloor: 0.5, minTurns: 2, maxTurns: 12 }, allowRetake: true, blocking: true, onMaxTurnsWithoutPass: "complete_with_scores", autoAppendTeachBack: false, showScoreToLearner: false },
+        block.assessment,
+      );
+      return {
+        complete: results.length === 0 || lastAttempt,
+        score: merged.showScoreToLearner ? rawScore : null,
+        response: answers,
+        feedback: merged.showScoreToLearner ? rawFeedback : null,
+      };
+    }
     return {
       // A missed first attempt leaves the block incomplete so the learner can
       // answer it again; the second attempt completes it whatever the score,
       // which is what the block did unconditionally before.
       complete: results.length === 0 || lastAttempt,
-      score: results.length > 0 ? results.filter((item) => item.correct).length / results.length : null,
+      score: rawScore,
       response: answers,
-      // No graded questions means no verdict to show, which also lets the
-      // player advance straight past an opinion poll instead of pausing on a
-      // feedback panel that would have nothing in it.
-      feedback: results.length > 0 ? {
-        kind: "quiz" as const,
-        correct: allCorrect,
-        retryAvailable: !lastAttempt,
-        questions: results.map(({ question, correct }) => (
-          // Per question, not per block: a question the learner already got
-          // right has no key left to protect, so its explanation lands while
-          // they are still looking at their own answer. A question they missed
-          // keeps both until the retry is spent.
-          correct || lastAttempt
-            ? { questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation }
-            : { questionId: question.id, correct }
-        )),
-      } : null,
+      feedback: rawFeedback,
     };
   }
   if (block.blockType === "drag_order") {
@@ -679,6 +729,16 @@ function progressState(value: unknown): Record<string, unknown> {
  * on the chat surface, so a learner who passed via one surface (once a
  * creation/turn UI exists on this one — not built yet, see report) reads as
  * passed on the other too.
+ *
+ * `showScoreToLearner` gating happens exactly once, here, at completion time.
+ * The resulting `score` (or `null`) is what `completeBlock` writes into
+ * `BlockProgress.score` — not re-derived on every later read. That means it
+ * is NOT retroactive: flipping `showScoreToLearner` in config later does not
+ * reveal a score for a block already completed under the old setting, since
+ * the persisted row already has `null` baked in. Every later read of this
+ * block's score (this function's own caller, `getLessonDto`'s progress
+ * array, any future dashboard panel) inherits that write-time decision for
+ * free rather than needing its own gate.
  */
 async function resolveReteachGateSignal(
   access: PlayerAccess,
@@ -754,7 +814,7 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
     // A finished block has no retry left to protect, so it re-grades at the
     // limit and shows the key. Legacy rows carry no attempt count; they are
     // complete, which is the only fact that matters here.
-    const existingGrade = gradePlayerBlock(block, existing.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT));
+    const existingGrade = gradePlayerBlock(block, existing.response, Math.max(priorAttempts, QUIZ_ATTEMPT_LIMIT), undefined, access.config.assessment);
     const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: access.enrollmentId, lessonKey } });
     const lessonComplete = lesson.blocks.every((item) => progress.some((entry) => entry.blockId === item.id && entry.contentVersion === item.contentVersion && entry.completedAt));
     return {
@@ -770,7 +830,7 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
   const reteachGate = block.blockType === "teach_back" && block.assessment?.mode === "reteach_gate"
     ? await resolveReteachGateSignal(access, lessonKey, blockId, block)
     : undefined;
-  const grade = gradePlayerBlock(block, response, attempt, reteachGate);
+  const grade = gradePlayerBlock(block, response, attempt, reteachGate, access.config.assessment);
   const openQuestionReview = grade.complete
     && !grade.feedback
     && options.openQuestionGateEnabled !== false
