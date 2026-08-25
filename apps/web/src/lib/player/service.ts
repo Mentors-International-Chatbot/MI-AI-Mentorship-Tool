@@ -5,10 +5,12 @@ import type { RequestIdentity } from "@/lib/auth/requestIdentity";
 import { resolveCourseCode } from "@/lib/courses/resolver";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
 import { resolveIntroMessage } from "@/lib/journey-package/introMessage";
-import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock, type PassingConfig, type BlockAssessmentOverride } from "@/lib/journey-package/journey-package.schema";
+import { lessonSchema, normalizeMilestoneAvailability, type NormalizedMilestone, type ParsedLessonBlock as LessonBlock } from "@/lib/journey-package/journey-package.schema";
 import { programVersionConfigSchema, type ProgramVersionConfig } from "@/lib/journey-package/program-version-config.schema";
+import { mergeAssessmentConfig } from "@/lib/journey-package/mergeAssessmentConfig";
 import { getCurrentLearnerProject, learnerProjectSelectionRequired } from "./learnerProject";
 import { buildLessonDashboard, type LessonDashboard } from "./dashboard";
+import { createAssessmentSession } from "@/lib/ai/assessment/createAssessmentSession";
 
 export class PlayerError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -564,22 +566,8 @@ export type PlayerFeedback =
  * unparsed raw input and needs a third hardcoded fallback per passing field —
  * this needs only two levels per field.
  */
-export function mergeBlockAssessmentConfig(
-  base: NonNullable<ProgramVersionConfig["assessment"]>,
-  override?: BlockAssessmentOverride,
-): { passing: PassingConfig; allowRetake: boolean; showScoreToLearner: boolean } {
-  return {
-    passing: {
-      dimensionKey: override?.passingOverride?.dimensionKey ?? base.passing.dimensionKey,
-      threshold: override?.passingOverride?.threshold ?? base.passing.threshold,
-      confidenceFloor: override?.passingOverride?.confidenceFloor ?? base.passing.confidenceFloor,
-      minTurns: override?.passingOverride?.minTurns ?? base.passing.minTurns,
-      maxTurns: override?.passingOverride?.maxTurns ?? base.passing.maxTurns,
-    },
-    allowRetake: override?.allowRetake ?? base.allowRetake,
-    showScoreToLearner: override?.showScoreToLearner ?? base.showScoreToLearner,
-  };
-}
+/** Backward-compatible export; the merge itself lives at the shared choke point. */
+export const mergeBlockAssessmentConfig = mergeAssessmentConfig;
 
 export function gradePlayerBlock(
   block: LessonBlock,
@@ -765,6 +753,54 @@ async function resolveReteachGateSignal(
   return { passed: true, score: merged?.showScoreToLearner && typeof rawScore === "number" ? rawScore : null };
 }
 
+/**
+ * Stage 1 of the reteach-gate write path (see
+ * reports/reteach-gate-write-path-design.md §a). Mirrors
+ * `router.checkGatePosition`'s find-or-create shape exactly: an open
+ * (non-completed) session for this enrollment+lesson+block is returned as-is;
+ * only when none exists is a new one created via `createAssessmentSession`,
+ * the same channel-agnostic core the chat surface uses. `channel` is always
+ * `"web"` here — the player surface has no other transport.
+ *
+ * A completed session is deliberately NOT treated as "resumed" — the same
+ * gate `checkGatePosition` applies (only non-completed sessions count as
+ * open) — so calling this again after a completed-but-unpassed session with
+ * `allowRetake: true` starts a fresh attempt, matching
+ * `createAssessmentSession`'s own attempt-number semantics.
+ */
+export async function resolveOrCreateReteachGateSession(
+  access: PlayerAccess,
+  lessonKey: string,
+  blockId: string,
+): Promise<{ sessionId: string; resumed: boolean }> {
+  const rows = await lessonRows(access);
+  const lessonRow = rows.find((row) => row.slug === lessonKey);
+  if (!lessonRow?.versions[0]) throw new PlayerError(404, "lesson_not_found", "Lesson not found");
+  const lesson = lessonSchema.parse(lessonRow.versions[0].body);
+  const block = lesson.blocks.find((item) => item.id === blockId);
+  if (!block) throw new PlayerError(404, "block_not_found", "Block not found");
+  if (block.blockType !== "teach_back" || block.assessment?.mode !== "reteach_gate") {
+    throw new PlayerError(400, "not_reteach_gate", "This block is not a reteach-gate teach-back block");
+  }
+
+  const ctx = createTenantContext(access.organizationId);
+  const existingSessions = await tenantRepo.getAssessmentSessionsForSocioLesson(ctx, access.enrollmentId, lessonKey, blockId);
+  const openSession = existingSessions.find((session) => session.status !== "completed");
+  if (openSession) return { sessionId: openSession.id, resumed: true };
+
+  const session = await createAssessmentSession({
+    ctx,
+    repo: tenantRepo,
+    socioId: access.socioId,
+    lessonKey,
+    blockId,
+    channel: "web",
+    enrollmentId: access.enrollmentId,
+    collectionKey: access.collectionKey,
+  });
+  return { sessionId: session.id, resumed: false };
+}
+
 async function persistedBlockHoldsOpenQuestion(access: PlayerAccess, lessonKey: string, blockId: string): Promise<boolean> {
   const latest = await playerRuntimeRepo.message.findFirst({
     where: {
@@ -835,7 +871,12 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
     && !grade.feedback
     && options.openQuestionGateEnabled !== false
     && await persistedBlockHoldsOpenQuestion(access, lessonKey, blockId);
-  const reviewPending = grade.complete && (!!grade.feedback || openQuestionReview);
+  // Every bounded payload returns through an explicit verdict/Continue state,
+  // including score-hidden quizzes whose feedback is intentionally null.
+  // Plain quizzes and every non-assessment block keep their existing review
+  // behavior exactly.
+  const boundedReturnReview = grade.complete && block.assessment !== undefined;
+  const reviewPending = grade.complete && (!!grade.feedback || openQuestionReview || boundedReturnReview);
   // Quizzes persist attempt count; every completed review shape also persists
   // its hold so hydration cannot mistake "saved" for "already reviewed."
   const state = {

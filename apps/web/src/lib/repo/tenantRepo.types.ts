@@ -37,6 +37,8 @@ export type ProgramVersion = {
   programId: string;
   version: string;
   config: Record<string, unknown>;
+  /** JourneyPackage.metadata, including the authoritative delivery surface. */
+  metadata?: unknown | null;
   active: boolean;
   /**
    * The language this version's content is authored in. Distinct from a

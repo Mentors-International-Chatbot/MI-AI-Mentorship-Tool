@@ -70,6 +70,8 @@ export interface AssessmentConfig {
   };
   /** What the student sees at the end */
   studentVisibleDimensionKeys: string[];
+  /** Whether terminal learner-facing prose may mention scores at all. */
+  showScoreToLearner?: boolean;
   /** Policy when max turns reached without passing */
   onMaxTurnsPolicy: 'complete_with_scores' | 'return_for_reteach' | 'flag_mentor';
   /** Tracked dimensions for sensing */
@@ -305,6 +307,7 @@ export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<Ass
       aiBehavior,
       studentVisibleScores: scores,
       passingDimensionKey: passing.dimensionKey,
+      showScoreToLearner: config.showScoreToLearner,
     });
 
     const closingMessage = await generateClosingMessage({
@@ -329,6 +332,7 @@ export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<Ass
       aiBehavior,
       onMaxTurnsPolicy,
       studentVisibleScores: scores,
+      showScoreToLearner: config.showScoreToLearner,
     });
 
     const closingMessage = await generateClosingMessage({

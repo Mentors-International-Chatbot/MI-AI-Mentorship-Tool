@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySession } from '@/lib/auth/session';
+import { resolveRequestIdentity } from '@/lib/auth/requestIdentity';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
 import { completeAssessment, type CompletionConfig } from '@/lib/ai/assessment/completeAssessment';
@@ -23,6 +23,7 @@ import { runGateResolvedFollowUp } from '@/lib/messaging/gateFollowUp';
 import { repo } from '@/lib/repo';
 import { ASSESSMENT_STRINGS, DEFAULT_LANGUAGE, type SupportedLanguage } from '@/lib/i18n/languages';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
+import { learnerVisibleAssessmentScores } from '@/lib/ai/assessment/learnerVisibility';
 
 interface CompleteRequestBody {
   reason?: 'cancelled' | 'timeout';
@@ -35,12 +36,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const { sessionId } = await params;
 
     // ─── Auth ───────────────────────────────────────────────────────────────
-    const session = await verifySession();
-    if (!session) {
+    const identity = await resolveRequestIdentity(req);
+    if (!identity) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (session.role !== 'socio') {
+    if (identity.role !== 'socio') {
       return NextResponse.json({ error: 'Only participants can complete assessments' }, { status: 403 });
     }
 
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     // ─── Get organization context ───────────────────────────────────────────
     // resolveOrganizationIdForSocio never fails: tries ParticipantProfile → curriculum → default org
-    const socioId = session.userId;
+    const socioId = identity.socioId ?? identity.userId;
     const organizationId = await tenantPrismaRepo.resolveOrganizationIdForSocio(socioId);
     const ctx = createTenantContext(organizationId);
 
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       studentVisibleDimensionKeys: isCancellation ? [] : configSnapshot.studentVisibleDimensionKeys,
       onMaxTurnsPolicy: configSnapshot.onMaxTurnsWithoutPass,
       allowRetake: configSnapshot.allowRetake,
+      surface: configSnapshot.surface,
     };
 
     // ─── Complete the session ───────────────────────────────────────────────
@@ -146,7 +148,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       content: completionMessage,
     });
 
-    // ─── Let the AI speak first ─────────────────────────────────────────────
+    // ─── Let the AI speak first on the legacy chat surface ──────────────────
     // Awaited deliberately. It costs this request an LLM call, which the
     // learner feels as a slower button on a click they just made — and buys
     // them a chat that is already answering when the redirect lands, instead of
@@ -154,8 +156,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     // generation would move the latency out of sight at the price of being a
     // job queue with extra steps.
     //
-    // Cancellations get nothing: there is no result to speak about.
-    if (!isCancellation) {
+    // Cancellations get nothing; the player container owns its own return and
+    // verdict, so it must not inject a second follow-up into the chat thread.
+    if (!isCancellation && configSnapshot.surface === 'chat') {
       const resolvedAt = completionResult.session.completedAt ?? new Date();
       await runGateResolvedFollowUp({
         socioId,
@@ -173,7 +176,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       status: string;
       message: string;
       passed?: boolean;
-      scores?: Record<string, number>;
+      scores?: Record<string, number> | null;
       reteachTriggered?: boolean;
     } = {
       status: isCancellation ? 'cancelled' : 'completed',
@@ -181,16 +184,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       passed: didPass,
     };
 
-    // Include scores for non-cancelled completions
+    // Include only the learner-visible score shape for non-cancelled completions.
     if (!isCancellation) {
-      const scores: Record<string, number> = {};
-      for (const key of configSnapshot.studentVisibleDimensionKeys) {
-        const dimState = finalState[key];
-        if (dimState) {
-          scores[key] = dimState.level;
-        }
-      }
-      response.scores = scores;
+      response.scores = learnerVisibleAssessmentScores(configSnapshot, completionResult.allScores);
     }
 
     // Indicate if reteach was triggered (client should show lesson content)

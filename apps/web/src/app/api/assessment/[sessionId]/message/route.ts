@@ -14,12 +14,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySession } from '@/lib/auth/session';
+import { resolveRequestIdentity } from '@/lib/auth/requestIdentity';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
 import { runAssessmentTurn, type AssessmentConfig } from '@/lib/ai/assessment/runAssessmentTurn';
 import { getSessionConfig, AssessmentConfigError } from '@/lib/ai/assessment/createAssessmentSession';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
+import { learnerVisibleAssessmentScores } from '@/lib/ai/assessment/learnerVisibility';
 
 interface MessageRequestBody {
   message: string;
@@ -32,12 +33,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const { sessionId } = await params;
 
     // ─── Auth ───────────────────────────────────────────────────────────────
-    const session = await verifySession();
-    if (!session) {
+    const identity = await resolveRequestIdentity(req);
+    if (!identity) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (session.role !== 'socio') {
+    if (identity.role !== 'socio') {
       return NextResponse.json({ error: 'Only participants can send assessment messages' }, { status: 403 });
     }
 
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     // ─── Get organization context ───────────────────────────────────────────
     // resolveOrganizationIdForSocio never fails: tries ParticipantProfile → curriculum → default org
-    const socioId = session.userId;
+    const socioId = identity.socioId ?? identity.userId;
     const organizationId = await tenantPrismaRepo.resolveOrganizationIdForSocio(socioId);
     const ctx = createTenantContext(organizationId);
 
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       aiBehavior: configSnapshot.aiBehavior,
       passing: configSnapshot.passing,
       studentVisibleDimensionKeys: configSnapshot.studentVisibleDimensionKeys,
+      showScoreToLearner: configSnapshot.showScoreToLearner,
       onMaxTurnsPolicy: configSnapshot.onMaxTurnsWithoutPass,
       dimensions: configSnapshot.trackedDimensions,
     };
@@ -166,7 +168,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       status: outcome.status,
       response: outcome.closingMessage,
-      scores: outcome.scores,
+      scores: learnerVisibleAssessmentScores(configSnapshot, outcome.scores),
       passed: outcome.status === 'passed',
       // Indicate that completion is pending
       requiresCompletion: true,

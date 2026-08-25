@@ -41,13 +41,18 @@ describe('E2E: Config Resolution from Journey Package', () => {
   let capturedConfigSnapshot: Record<string, unknown> | null = null;
 
   // Mock repo that returns PB&J data
-  const createMockRepo = (lessonBody = pbjLesson, programConfig = pbjProgramConfig): Partial<TenantRepo> => ({
+  const createMockRepo = (
+    lessonBody = pbjLesson,
+    programConfig = pbjProgramConfig,
+    metadata: unknown = undefined,
+  ): Partial<TenantRepo> => ({
     getSocioCurriculumCollectionKey: vi.fn().mockResolvedValue('pbj-basics'),
     getActiveProgramVersionByCollection: vi.fn().mockResolvedValue({
       id: 'pv-1',
       programId: 'prog-1',
       version: '0.1.0',
       config: programConfig,
+      metadata,
       active: true,
       publishedAt: new Date(),
       createdAt: new Date(),
@@ -157,6 +162,8 @@ describe('E2E: Config Resolution from Journey Package', () => {
     expect(configSnapshot.onMaxTurnsWithoutPass).toBe('complete_with_scores');
     expect(configSnapshot.blocking).toBe(true);
     expect(configSnapshot.allowRetake).toBe(true);
+    expect(configSnapshot.showScoreToLearner).toBe(false);
+    expect(configSnapshot.surface).toBe('chat');
 
     // Verify the teach_back block fields
     expect(configSnapshot.teachBackPrompt).toContain("Explain, in your own order");
@@ -203,6 +210,44 @@ describe('E2E: Config Resolution from Journey Package', () => {
     expect(configSnapshot.passing.minTurns).toBe(3);  // Overridden
     expect(configSnapshot.passing.dimensionKey).toBe('sequencing'); // Not overridden
     expect(configSnapshot.passing.maxTurns).toBe(5); // Not overridden
+  });
+
+  it('snapshots delivery surface and the complete block assessment override', async () => {
+    const lessonWithAssessmentOverride = {
+      ...pbjLesson,
+      blocks: pbjLesson.blocks.map(block => block.id === 'b8-gated-teach-back'
+        ? {
+            ...block,
+            assessment: {
+              mode: 'reteach_gate' as const,
+              passingOverride: { threshold: 8.5 },
+              allowRetake: false,
+              showScoreToLearner: true,
+            },
+          }
+        : block),
+    };
+    const repo = createMockRepo(
+      lessonWithAssessmentOverride as typeof pbjLesson,
+      pbjProgramConfig,
+      { delivery: { surface: 'player', supportedChannels: ['web'] } },
+    );
+    const { createAssessmentSession, getSessionConfig } = await import('../createAssessmentSession');
+
+    const session = await createAssessmentSession({
+      ctx: createTenantContext('org-1'),
+      repo: repo as TenantRepo,
+      socioId: 'socio-1',
+      lessonKey: 'assemble-the-sandwich',
+      blockId: 'b8-gated-teach-back',
+      channel: 'web',
+    });
+    const snapshot = getSessionConfig(session);
+
+    expect(snapshot.surface).toBe('player');
+    expect(snapshot.passing.threshold).toBe(8.5);
+    expect(snapshot.allowRetake).toBe(false);
+    expect(snapshot.showScoreToLearner).toBe(true);
   });
 
   it('throws AssessmentConfigError when assessment config is missing', async () => {

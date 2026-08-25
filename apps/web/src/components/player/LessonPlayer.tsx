@@ -13,9 +13,19 @@ import { HelpRequestPanel } from "./HelpRequestPanel";
 import { PlayerDashboard } from "./PlayerDashboard";
 import { SortableOrderItem } from "./SortableOrderItem";
 import { usePlayerThread } from "./usePlayerThread";
+import { ReteachGateExperience } from "./ReteachGateExperience";
+import { WebQuizExperience } from "./WebQuizExperience";
 import "./player.css";
 
-type BlockBase = { id: string; order: number; blockType: string; contentVersion: number; concepts: string[]; handoff?: string };
+type BlockBase = {
+  id: string;
+  order: number;
+  blockType: string;
+  contentVersion: number;
+  concepts: string[];
+  handoff?: string;
+  assessment?: { mode: "reteach_gate" | "web_quiz" };
+};
 type Teach = BlockBase & { blockType: "teach"; content: string; expectsResponse?: boolean };
 type Quiz = BlockBase & { blockType: "quiz_checkpoint"; title?: string; questions: Array<{ id: string; prompt: string; options?: string[]; graded: boolean }> };
 type Drag = BlockBase & { blockType: "drag_order"; prompt: string; items: string[] };
@@ -39,6 +49,7 @@ type LessonDto = {
   dashboard?: LessonDashboard | null;
   progress: ProgressItem[];
 };
+type CompleteBlockResult = { completed: boolean; feedback?: unknown; reviewPending?: boolean };
 type ParentIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
 const PARENT_INTENTS: ParentIntent[] = ["question", "teach_back", "lesson_entry", "capstone"];
 
@@ -279,7 +290,8 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   }, [course, lessonKey]);
 
   const current = useMemo(() => data?.lesson.blocks.find((block) => !completed.has(block.id)) ?? null, [data, completed]);
-  const teachingBack = current?.blockType === "teach_back";
+  const boundedMode = current?.assessment?.mode;
+  const teachingBack = current?.blockType === "teach_back" && boundedMode !== "reteach_gate";
   /**
    * This block asks for typed text and will not advance without it.
    *
@@ -297,11 +309,11 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     setAnswers({}); setFeedback(savedFeedback === undefined || !current ? {} : { [current.id]: savedFeedback }); setTeachBackTurn(savedTurn === 1 ? 2 : 1); setSendFailures(0);
   }, [current, data]);
 
-  async function complete(response?: unknown) {
-    if (!current) return;
+  async function complete(response?: unknown): Promise<CompleteBlockResult | null> {
+    if (!current) return null;
     setBusy(true); setError("");
     try {
-      const result = await playerFetch<{ completed: boolean; feedback?: unknown; reviewPending?: boolean }>(`/api/learn/${course}/${lessonKey}/blocks/${current.id}/complete`, {
+      const result = await playerFetch<CompleteBlockResult>(`/api/learn/${course}/${lessonKey}/blocks/${current.id}/complete`, {
         method: "POST",
         body: JSON.stringify({ response, openQuestionGateEnabled: gatedStreak < OPEN_QUESTION_GATE_CAP }),
       });
@@ -318,7 +330,11 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           setGatedStreak(0);
         }
       }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save progress"); }
+      return result;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save progress");
+      return null;
+    }
     finally { setBusy(false); }
   }
 
@@ -382,7 +398,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   async function askTutor(preset?: string): Promise<boolean> {
     const content = (preset ?? question).trim();
     if (!content) return false;
-    const teachingBack = current?.blockType === "teach_back";
+    const teachingBack = current?.blockType === "teach_back" && current.assessment?.mode !== "reteach_gate";
     const intent = teachingBack ? "teach_back" as const : "question" as const;
     const blockId = current?.id;
     setBusy(true); setError(""); setTutorError("");
@@ -682,6 +698,29 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
             never its authored prompt re-shown next to an exchange the thread
             already carries. That is the Problem A shape, and it applies whether
             the review came from a graded verdict or from the open-question gate. */}
+        {boundedMode === "reteach_gate" ? (
+          <ReteachGateExperience
+            key={current.id}
+            course={course}
+            lessonKey={lessonKey}
+            blockId={current.id}
+            initiallyComplete={submittedComplete.has(current.id)}
+            onWriteBlockCompletion={async () => (await complete({}))?.completed === true}
+            onReturnToThread={advanceReviewedBlock}
+          />
+        ) : boundedMode === "web_quiz" && current.blockType === "quiz_checkpoint" ? (
+          <WebQuizExperience
+            key={current.id}
+            blockId={current.id}
+            title={(current as Quiz).title}
+            questions={(current as Quiz).questions}
+            busy={busy}
+            initiallyComplete={submittedComplete.has(current.id)}
+            initialFeedback={feedback[current.id]}
+            onSubmit={complete}
+            onReturnToThread={advanceReviewedBlock}
+          />
+        ) : <>
         {current.blockType === "teach" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
         {current.blockType === "quiz_checkpoint" && !submittedComplete.has(current.id) && <>
           {(current as Quiz).title && <h2>{(current as Quiz).title}</h2>}
@@ -717,8 +756,9 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           items={current.blockType === "drag_order" ? (current as Drag).items : undefined}
         />
         {submittedComplete.has(current.id) && <button disabled={busy} onClick={advanceReviewedBlock}>Continue</button>}
+        </>}
         {error && <p className="player-error">{error}</p>}
-      </section><aside className="player-card"><h2>{requiresResponse ? "Your response" : "Ask AI Mentor"}</h2><textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} disabled={busy} placeholder={teachingBack ? "Explain it in your own words…" : requiresResponse ? "Type your response…" : "Ask about this lesson…"} />
+      </section>{!boundedMode && <aside className="player-card"><h2>{requiresResponse ? "Your response" : "Ask AI Mentor"}</h2><textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} disabled={busy} placeholder={teachingBack ? "Explain it in your own words…" : requiresResponse ? "Type your response…" : "Ask about this lesson…"} />
         {/* One control on a block that requires text: it sends and advances,
             and it is disabled until there is something to send. On every other
             block this stays what it was — a way to ask, next to the card's own
@@ -738,7 +778,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         {/* Chips are for asking about the lesson. During a teach-back the box is
             the learner's own explanation, and a canned question is not that. */}
         {!teachingBack && !requiresResponse && <div className="player-chip-row">{TUTOR_CHIPS.map((chip) => <button type="button" className="player-chip" key={chip} disabled={busy} onClick={() => askTutor(chip)}>{chip}</button>)}</div>}
-      </aside></> :<section className="player-card player-complete"><span>Lesson complete</span><h2>Nicely done.</h2><p>Your progress is saved.</p>{data.nextLessonKey
+      </aside>}</> :<section className="player-card player-complete"><span>Lesson complete</span><h2>Nicely done.</h2><p>Your progress is saved.</p>{data.nextLessonKey
           ? <Link className="player-button" href={`/learn/${course}/${data.nextLessonKey}`}>Continue to next lesson</Link>
           : data.hasCapstone
             ? <Link className="player-button" href={`/learn/${course}/capstone`}>Open capstone</Link>

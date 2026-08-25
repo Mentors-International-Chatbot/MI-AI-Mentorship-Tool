@@ -70,7 +70,8 @@ describe("server-authoritative open-question review", () => {
       serviceSource.indexOf("export async function completeBlock"),
       serviceSource.indexOf("export async function getCourseProgress"),
     );
-    expect(fn).toMatch(/const reviewPending = grade\.complete && \(!!grade\.feedback \|\| openQuestionReview\);/);
+    expect(fn).toMatch(/const boundedReturnReview = grade\.complete && block\.assessment !== undefined;/);
+    expect(fn).toMatch(/const reviewPending = grade\.complete && \(!!grade\.feedback \|\| openQuestionReview \|\| boundedReturnReview\);/);
     expect(fn).toMatch(/\.\.\.\(reviewPending \? \{ reviewPending: true \} : \{\}\)/);
     expect(fn).toMatch(/return \{ blockId, completed: grade\.complete, score: grade\.score, feedback: grade\.feedback, reviewPending, lessonComplete \};/);
   });

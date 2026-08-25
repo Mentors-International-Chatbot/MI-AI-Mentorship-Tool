@@ -10,10 +10,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySession } from '@/lib/auth/session';
+import { resolveRequestIdentity } from '@/lib/auth/requestIdentity';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
 import { getSessionConfig, AssessmentConfigError } from '@/lib/ai/assessment/createAssessmentSession';
+import { learnerVisibleAssessmentScores } from '@/lib/ai/assessment/learnerVisibility';
 
 type RouteParams = { params: Promise<{ sessionId: string }> };
 
@@ -22,18 +23,18 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const { sessionId } = await params;
 
     // ─── Auth ───────────────────────────────────────────────────────────────
-    const session = await verifySession();
-    if (!session) {
+    const identity = await resolveRequestIdentity(req);
+    if (!identity) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (session.role !== 'socio') {
+    if (identity.role !== 'socio') {
       return NextResponse.json({ error: 'Only participants can access assessments' }, { status: 403 });
     }
 
     // ─── Get organization context ───────────────────────────────────────────
     // resolveOrganizationIdForSocio never fails: tries ParticipantProfile → curriculum → default org
-    const socioId = session.userId;
+    const socioId = identity.socioId ?? identity.userId;
     const organizationId = await tenantPrismaRepo.resolveOrganizationIdForSocio(socioId);
     const ctx = createTenantContext(organizationId);
 
@@ -63,7 +64,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         attemptNumber: assessmentSession.attemptNumber,
         passedAt: assessmentSession.passedAt,
         completedAt: assessmentSession.completedAt,
-        scores: assessmentSession.scores,
+        scores: learnerVisibleAssessmentScores(
+          configSnapshot,
+          assessmentSession.scores as Record<string, number> | null,
+        ),
       },
       messages: messages.map((m) => ({
         id: m.id,
@@ -74,6 +78,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       config: {
         passing: configSnapshot.passing,
         studentVisibleDimensionKeys: configSnapshot.studentVisibleDimensionKeys,
+        allowRetake: configSnapshot.allowRetake,
       },
     });
   } catch (error) {

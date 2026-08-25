@@ -120,6 +120,7 @@ describe("completeBlock — reteach_gate teach_back", () => {
     const result = await completeBlock(access(), "l1", "tb1", {});
 
     expect(result.completed).toBe(true);
+    expect(result.reviewPending).toBe(true);
     expect(mocks.blockProgressUpsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ completedAt: expect.any(Date), score: 0.9 }),
     }));

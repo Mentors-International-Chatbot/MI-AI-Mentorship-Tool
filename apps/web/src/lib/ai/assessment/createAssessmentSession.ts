@@ -16,6 +16,8 @@ import type { TenantContext } from '@/lib/repo/tenantContext';
 import type { TenantRepo, AssessmentSession } from '@/lib/repo/tenantRepo.types';
 import type { ProgramVersionConfig } from '@/lib/journey-package/program-version-config.schema';
 import type { PackageLesson, LessonBlock, TrackedDimension, PassingConfig } from '@/lib/journey-package/journey-package.schema';
+import { resolveDelivery, type DeliveryConfig } from '@/lib/journey-package/delivery';
+import { mergeAssessmentConfig } from '@/lib/journey-package/mergeAssessmentConfig';
 import { createInitialSessionState } from './senseAssessmentTurn';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -53,6 +55,8 @@ export interface CreateSessionParams {
 }
 
 export interface SessionConfigSnapshot {
+  // Delivery surface resolved once from ProgramVersion.metadata
+  surface: DeliveryConfig['surface'];
   // Passing criteria (merged from config + block override)
   passing: {
     dimensionKey: string;
@@ -63,6 +67,8 @@ export interface SessionConfigSnapshot {
   };
   // What the student sees
   studentVisibleDimensionKeys: string[];
+  // Coarse learner score/feedback visibility gate
+  showScoreToLearner: boolean;
   // What becomes MetricObservations
   recordedDimensionKeys: string[];
   // Max turns policy
@@ -112,7 +118,7 @@ async function resolveProgramConfig(
   repo: TenantRepo,
   socioId: string,
   collectionKeyOverride?: string,
-): Promise<{ config: ProgramVersionConfig; collectionKey: string }> {
+): Promise<{ config: ProgramVersionConfig; collectionKey: string; surface: DeliveryConfig['surface'] }> {
   const collectionKey = collectionKeyOverride ?? await repo.getSocioCurriculumCollectionKey(socioId);
 
   if (!collectionKey) {
@@ -133,6 +139,7 @@ async function resolveProgramConfig(
   return {
     config: programVersion.config as ProgramVersionConfig,
     collectionKey,
+    surface: resolveDelivery(programVersion.metadata).surface,
   };
 }
 
@@ -173,11 +180,13 @@ async function resolveLessonAndBlock(
     );
   }
 
-  // Verify it's a gated session block
+  // Legacy chat packages use delivery="gated_session"; Track E player
+  // packages use the explicit block assessment mode. Both reach the same
+  // channel-agnostic conversational session core.
   const teachBackBlock = block as LessonBlock & { blockType: 'teach_back'; delivery?: string };
-  if (teachBackBlock.delivery !== 'gated_session') {
+  if (teachBackBlock.delivery !== 'gated_session' && teachBackBlock.assessment?.mode !== 'reteach_gate') {
     throw new AssessmentConfigError(
-      `Block "${blockId}" is not a gated_session teach_back block (delivery: "${teachBackBlock.delivery || 'inline'}")`
+      `Block "${blockId}" is not a gated teach_back block (delivery: "${teachBackBlock.delivery || 'inline'}")`
     );
   }
 
@@ -188,28 +197,13 @@ async function resolveLessonAndBlock(
 }
 
 /**
- * Merges passing config: config.assessment.passing → block.passingOverride
- */
-function mergePassingConfig(
-  baseConfig: PassingConfig,
-  blockOverride?: Partial<PassingConfig>,
-): SessionConfigSnapshot['passing'] {
-  return {
-    dimensionKey: blockOverride?.dimensionKey ?? baseConfig.dimensionKey,
-    threshold: blockOverride?.threshold ?? baseConfig.threshold,
-    confidenceFloor: blockOverride?.confidenceFloor ?? baseConfig.confidenceFloor ?? 0.5,
-    minTurns: blockOverride?.minTurns ?? baseConfig.minTurns ?? 2,
-    maxTurns: blockOverride?.maxTurns ?? baseConfig.maxTurns ?? 12,
-  };
-}
-
-/**
  * Builds the complete config snapshot for a session.
  */
 function buildConfigSnapshot(
   programConfig: ProgramVersionConfig,
   lesson: PackageLesson,
   block: LessonBlock & { blockType: 'teach_back' },
+  surface: DeliveryConfig['surface'],
 ): SessionConfigSnapshot {
   const assessment = programConfig.assessment;
   if (!assessment) {
@@ -226,8 +220,12 @@ function buildConfigSnapshot(
     passingOverride?: Partial<PassingConfig>;
   };
 
-  // Merge passing config
-  const passing = mergePassingConfig(assessment.passing, teachBackBlock.passingOverride);
+  const mergedAssessment = mergeAssessmentConfig(
+    assessment,
+    block.assessment,
+    teachBackBlock.passingOverride,
+  );
+  const passing = mergedAssessment.passing;
 
   // Resolve dimension keys
   const trackedDimensions = programConfig.trackedDimensions || [];
@@ -239,11 +237,13 @@ function buildConfigSnapshot(
     assessment.recordedDimensionKeys ?? allDimensionKeys;
 
   return {
+    surface,
     passing,
     studentVisibleDimensionKeys,
+    showScoreToLearner: mergedAssessment.showScoreToLearner,
     recordedDimensionKeys,
     onMaxTurnsWithoutPass: assessment.onMaxTurnsWithoutPass ?? 'complete_with_scores',
-    allowRetake: assessment.allowRetake ?? true,
+    allowRetake: mergedAssessment.allowRetake,
     blocking: assessment.blocking ?? true,
     trackedDimensions,
     aiBehavior: programConfig.aiBehavior || {},
@@ -276,13 +276,13 @@ export async function createAssessmentSession(
   const { ctx, repo, socioId, lessonKey, blockId, channel, enrollmentId, collectionKey: collectionKeyOverride } = params;
 
   // ─── 1. Resolve program config ────────────────────────────────────────────
-  const { config: programConfig, collectionKey } = await resolveProgramConfig(ctx, repo, socioId, collectionKeyOverride);
+  const { config: programConfig, collectionKey, surface } = await resolveProgramConfig(ctx, repo, socioId, collectionKeyOverride);
 
   // ─── 2. Resolve lesson and block ──────────────────────────────────────────
   const { lesson, block } = await resolveLessonAndBlock(ctx, repo, collectionKey, lessonKey, blockId);
 
   // ─── 3. Build config snapshot ─────────────────────────────────────────────
-  const configSnapshot = buildConfigSnapshot(programConfig, lesson, block);
+  const configSnapshot = buildConfigSnapshot(programConfig, lesson, block, surface);
 
   // ─── 4. Check for existing open session ───────────────────────────────────
   const existingSessions = await repo.getAssessmentSessionsForSocio(ctx, socioId);
@@ -342,5 +342,11 @@ export function getSessionConfig(session: AssessmentSession): SessionConfigSnaps
       `Session ${session.id} has no configSnapshot`
     );
   }
-  return snapshot;
+  // Rows created before Track E have neither field. They are all legacy chat
+  // sessions, and showScoreToLearner's schema default is false.
+  return {
+    ...snapshot,
+    surface: snapshot.surface ?? 'chat',
+    showScoreToLearner: snapshot.showScoreToLearner ?? false,
+  };
 }

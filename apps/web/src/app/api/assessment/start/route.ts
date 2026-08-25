@@ -21,7 +21,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifySession } from '@/lib/auth/session';
+import { resolveRequestIdentity } from '@/lib/auth/requestIdentity';
 import { repo } from '@/lib/repo';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext } from '@/lib/repo/tenantContext';
@@ -31,18 +31,20 @@ import { generateOpeningMessage } from '@/lib/ai/assessment/runAssessmentTurn';
 interface StartRequestBody {
   lessonKey: string;
   blockId: string; // Required for gated assessments
+  /** Exact player-created session; omitted by the legacy chat retake path. */
+  sessionId?: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
     // ─── Auth ───────────────────────────────────────────────────────────────
-    const session = await verifySession();
-    if (!session) {
+    const identity = await resolveRequestIdentity(req);
+    if (!identity) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     // Only socios can start assessments
-    if (session.role !== 'socio') {
+    if (identity.role !== 'socio') {
       return NextResponse.json({ error: 'Only participants can start assessments' }, { status: 403 });
     }
 
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const { lessonKey, blockId } = body;
+    const { lessonKey, blockId, sessionId } = body;
     if (!lessonKey) {
       return NextResponse.json({ error: 'lessonKey is required' }, { status: 400 });
     }
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     // ─── Get organization context ───────────────────────────────────────────
     // resolveOrganizationIdForSocio never fails: tries ParticipantProfile → curriculum → default org
-    const socioId = session.userId;
+    const socioId = identity.socioId ?? identity.userId;
     const organizationId = await tenantPrismaRepo.resolveOrganizationIdForSocio(socioId);
     const ctx = createTenantContext(organizationId);
 
@@ -78,8 +80,23 @@ export async function POST(req: NextRequest) {
     // ─── Check for existing session ─────────────────────────────────────────
     // The gate handler creates sessions when the gate fires (status: pending).
     // Look for an existing open session for this lesson+block.
-    const allSessions = await tenantPrismaRepo.getAssessmentSessionsForSocio(ctx, socioId);
-    const existingSession = allSessions.find(
+    const exactSession = sessionId
+      ? await tenantPrismaRepo.getAssessmentSessionById(ctx, sessionId)
+      : null;
+    if (sessionId && !exactSession) {
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+    }
+    if (exactSession && (
+      exactSession.socioId !== socioId
+      || exactSession.lessonKey !== lessonKey
+      || exactSession.blockId !== blockId
+    )) {
+      return NextResponse.json({ error: 'Session does not match this assessment' }, { status: 403 });
+    }
+    const allSessions = sessionId
+      ? []
+      : await tenantPrismaRepo.getAssessmentSessionsForSocio(ctx, socioId);
+    const existingSession = exactSession ?? allSessions.find(
       (s) => s.lessonKey === lessonKey && s.blockId === blockId && s.status !== 'completed'
     );
 

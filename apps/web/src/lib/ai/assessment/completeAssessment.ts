@@ -17,6 +17,7 @@
 import type { TenantContext } from '@/lib/repo/tenantContext';
 import type { TenantRepo, AssessmentSession, MetricObservation, ObservationSource, Alert } from '@/lib/repo/tenantRepo.types';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
+import type { DeliveryConfig } from '@/lib/journey-package/delivery';
 import { evaluateAlerts } from '@/lib/alerts/evaluateAlerts';
 import { repo as socioRepo } from '@/lib/repo';
 import {
@@ -50,6 +51,8 @@ export interface CompletionConfig {
   onMaxTurnsPolicy: 'complete_with_scores' | 'return_for_reteach' | 'flag_mentor';
   /** Whether the student can retry after failing */
   allowRetake: boolean;
+  /** Snapshot-time delivery surface. Missing legacy snapshots are chat. */
+  surface?: DeliveryConfig['surface'];
 }
 
 export type CompletionOutcome =
@@ -213,13 +216,14 @@ export async function completeAssessment(
   params: CompleteAssessmentParams,
 ): Promise<CompletionResult> {
   const { ctx, repo, sessionId, socioId, finalState, outcome, config, enrollmentId, channel } = params;
-  const { recordedDimensionKeys, studentVisibleDimensionKeys, passingDimensionKey, onMaxTurnsPolicy, allowRetake } = config;
+  const { recordedDimensionKeys, studentVisibleDimensionKeys, onMaxTurnsPolicy, allowRetake } = config;
+  const surface = config.surface ?? 'chat';
 
   const now = new Date();
   let observationIds: string[] = [];
   let mentorFlagged = false;
   let reteachTriggered = false;
-  let unlockedByNoDeadEnd = false;
+  const unlockedByNoDeadEnd = false;
 
   // ─── Step 1: Extract scores ───────────────────────────────────────────────
   const studentScores = extractScores(finalState, studentVisibleDimensionKeys);
@@ -292,12 +296,14 @@ export async function completeAssessment(
         break;
 
       case 'return_for_reteach':
-        // Send student back through the lesson to review material.
+        // Chat sends the learner back through the legacy message-index lesson.
+        // Player-surface reteach stays inside its bounded block experience and
+        // must never mutate that unrelated pointer.
         // Note: Blocking is based on session.status, not passedAt. Completing
         // the session (even without passing) unblocks the gate. If allowRetake
         // is false, they just won't be able to retry - but they can proceed.
-        if (allowRetake) {
-          // Reset lesson pointer so student reviews the material before retry
+        if (allowRetake && surface === 'chat') {
+          // Reset the legacy chat lesson pointer before retry.
           await socioRepo.resetMessageIndex(socioId);
           reteachTriggered = true;
           console.log(`[CompleteAssessment] Reteach triggered: lesson pointer reset for socio ${socioId}`);

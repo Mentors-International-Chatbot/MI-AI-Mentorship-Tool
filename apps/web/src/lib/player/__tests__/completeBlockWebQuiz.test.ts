@@ -91,6 +91,7 @@ describe("completeBlock — quiz_checkpoint with assessment.mode: web_quiz", () 
     expect(result.completed).toBe(true);
     expect(result.score).toBeNull();
     expect(result.feedback).toBeNull();
+    expect(result.reviewPending).toBe(true);
     expect(mocks.blockProgressUpsert).toHaveBeenCalledWith(expect.objectContaining({
       // Write-time null, matching B.2's shape exactly — not a response-time
       // redaction. The persisted BlockProgress row carries the same null a
@@ -114,6 +115,7 @@ describe("completeBlock — quiz_checkpoint with assessment.mode: web_quiz", () 
       retryAvailable: false,
       questions: [{ questionId: "q1", correct: true, correctAnswer: "A", explanation: "A is correct." }],
     });
+    expect(result.reviewPending).toBe(true);
     expect(mocks.blockProgressUpsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ score: 1 }),
     }));
@@ -136,6 +138,7 @@ describe("completeBlock — quiz_checkpoint with assessment.mode: web_quiz", () 
       retryAvailable: false,
       questions: [{ questionId: "q1", correct: true, correctAnswer: "A", explanation: "A is correct." }],
     });
+    expect(result.reviewPending).toBe(true); // Existing graded-feedback review, unchanged.
   });
 
   it("regression guard: an incorrect first attempt on a plain quiz_checkpoint still offers a retry, unchanged", async () => {

@@ -69,10 +69,10 @@ export function buildAssessmentPrompt(params: AssessmentPromptParams): string {
   // Build the proven/unproven state summary
   const stateEntries = Object.entries(liveState);
   const provenConcepts = stateEntries
-    .filter(([_, s]) => s.level >= 7 && s.confidence >= 0.5)
+    .filter(([, s]) => s.level >= 7 && s.confidence >= 0.5)
     .map(([key]) => key);
   const unprovenConcepts = stateEntries
-    .filter(([_, s]) => s.level < 7 || s.confidence < 0.5)
+    .filter(([, s]) => s.level < 7 || s.confidence < 0.5)
     .map(([key]) => key);
 
   const progressSection = `
@@ -181,10 +181,23 @@ export function buildPassedClosingMessage(params: {
   aiBehavior: { tone?: string; languageInstruction?: string };
   studentVisibleScores: Record<string, number>;
   passingDimensionKey: string;
+  showScoreToLearner?: boolean;
 }): string {
   const { aiBehavior, studentVisibleScores, passingDimensionKey } = params;
   const mainScore = studentVisibleScores[passingDimensionKey] ?? 0;
   const languageInstruction = aiBehavior.languageInstruction || 'Respond in the same language as the student.';
+
+  if (params.showScoreToLearner === false) {
+    return `You are completing an assessment session. The student has demonstrated sufficient understanding.
+
+Language: ${languageInstruction}
+
+Write a brief, warm congratulatory message (2-3 sentences max). Include:
+1. Acknowledge they've completed the assessment
+2. Mention what they explained well (be specific to what they said)
+
+DO NOT mention, estimate, or imply a numeric score. Keep it encouraging and genuine.`;
+  }
 
   // Format scores for display
   const scoreLines = Object.entries(studentVisibleScores)
@@ -216,6 +229,7 @@ export function buildMaxTurnsClosingMessage(params: {
   aiBehavior: { tone?: string; languageInstruction?: string };
   onMaxTurnsPolicy: 'complete_with_scores' | 'return_for_reteach' | 'flag_mentor';
   studentVisibleScores: Record<string, number>;
+  showScoreToLearner?: boolean;
 }): string {
   const { aiBehavior, onMaxTurnsPolicy, studentVisibleScores } = params;
   const languageInstruction = aiBehavior.languageInstruction || 'Respond in the same language as the student.';
@@ -224,14 +238,14 @@ export function buildMaxTurnsClosingMessage(params: {
     .map(([key, value]) => `- ${key}: ${value.toFixed(1)}/10`)
     .join('\n');
 
-  if (onMaxTurnsPolicy === 'return_for_reteach') {
+  if (onMaxTurnsPolicy === 'return_for_reteach' || params.showScoreToLearner === false) {
     return `You are completing an assessment session. The student hasn't quite demonstrated full understanding yet, and that's completely okay.
 
 Language: ${languageInstruction}
 
 Write a brief, warm closing message (2-3 sentences). Include:
 1. Thank them sincerely for their effort
-2. Let them know you'll go back over the material together
+2. ${onMaxTurnsPolicy === 'return_for_reteach' ? "Let them know you'll go back over the material together" : "Acknowledge what parts they explained well"}
 3. Reassure them that learning takes time and this is normal
 
 DO NOT show scores. DO NOT criticize. This student needs encouragement to continue.`;

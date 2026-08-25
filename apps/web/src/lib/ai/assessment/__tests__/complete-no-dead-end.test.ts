@@ -225,6 +225,30 @@ describe('No-Dead-End Policy', () => {
       // No passedAt - student will retry after reteach
     });
 
+    it('does not reset the legacy chat message pointer on the player surface', async () => {
+      const mockRepo = createMockTenantRepo();
+      const config: CompletionConfig = {
+        ...baseConfig,
+        onMaxTurnsPolicy: 'return_for_reteach',
+        allowRetake: true,
+        surface: 'player',
+      };
+
+      const result = await completeAssessment({
+        ctx,
+        repo: mockRepo,
+        sessionId: 'session-1',
+        socioId: 'socio-1',
+        finalState: testFinalState,
+        outcome: 'max_turns',
+        config,
+        channel: 'web',
+      });
+
+      expect(result.reteachTriggered).toBe(false);
+      expect(mockResetMessageIndex).not.toHaveBeenCalled();
+    });
+
     it('completes normally with allowRetake=false (completed status unblocks)', async () => {
       const mockRepo = createMockTenantRepo();
       const config: CompletionConfig = {

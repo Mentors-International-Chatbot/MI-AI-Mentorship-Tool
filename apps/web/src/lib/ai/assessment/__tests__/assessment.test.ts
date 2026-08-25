@@ -75,17 +75,6 @@ describe('Threshold Logic', () => {
     };
 
     it('should NOT pass on first turn (minTurns not met)', () => {
-      const state: DimensionStateMap = {
-        comprehension: {
-          dimensionKey: 'comprehension',
-          level: 9, // Above threshold
-          confidence: 0.8, // Above floor
-          trend: 'improving',
-          evidence: 'Great explanation',
-          updatedAt: new Date(),
-        },
-      };
-
       // Turn 1 < minTurns (2)
       const turnCount = 1;
       const meetsMinTurns = turnCount >= passingCriteria.minTurns;
@@ -347,6 +336,18 @@ describe('Completion Flow', () => {
       expect(prompt).toContain('congratulatory');
     });
 
+    it('buildPassedClosingMessage forbids score language when learner scores are hidden', () => {
+      const prompt = buildPassedClosingMessage({
+        aiBehavior: { tone: 'Warm' },
+        studentVisibleScores: { comprehension: 8.5 },
+        passingDimensionKey: 'comprehension',
+        showScoreToLearner: false,
+      });
+
+      expect(prompt).not.toContain('8.5/10');
+      expect(prompt).toContain('DO NOT mention, estimate, or imply a numeric score');
+    });
+
     it('buildMaxTurnsClosingMessage for return_for_reteach does NOT show scores', () => {
       const prompt = buildMaxTurnsClosingMessage({
         aiBehavior: { tone: 'Warm' },
@@ -367,6 +368,18 @@ describe('Completion Flow', () => {
 
       expect(prompt).toContain('5.0/10');
       expect(prompt).toContain('SCORES TO SHOW');
+    });
+
+    it('buildMaxTurnsClosingMessage suppresses scores regardless of policy when hidden', () => {
+      const prompt = buildMaxTurnsClosingMessage({
+        aiBehavior: { tone: 'Warm' },
+        onMaxTurnsPolicy: 'complete_with_scores',
+        studentVisibleScores: { comprehension: 5.0 },
+        showScoreToLearner: false,
+      });
+
+      expect(prompt).not.toContain('5.0/10');
+      expect(prompt).toContain('DO NOT show scores');
     });
   });
 });
