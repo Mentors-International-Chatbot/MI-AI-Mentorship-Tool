@@ -390,7 +390,15 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     const answer = question.trim();
     if (!answer) return;
     setQuestion("");
-    await complete(answer);
+    const result = await complete(answer);
+    // Every other block type advances by changing `current` (its id leaves
+    // `completed`), which re-renders on its own. onboarding_survey's steps
+    // all share one block id, so nothing else moves `current` between them —
+    // without this, the card keeps showing the just-answered question until
+    // a full reload re-derives `surveyStepIndex` from the server. A learner
+    // who doesn't know to reload sees a frozen screen and re-answers it,
+    // which the server then silently files under the next unanswered field.
+    if (result && !result.completed) setSurveyStepIndex((value) => value + 1);
   }
 
   async function advanceReviewedBlock() {
@@ -754,6 +762,12 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         ) : <>
         {current.blockType === "teach" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
         {current.blockType === "project" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Project).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
+        {/* The lesson-level "Step {done+1} of {total}" above counts blocks,
+            not survey questions — b0-2 is one block with several internal
+            steps, so that counter stays flat for the whole survey. This is
+            a second, separate counter for the survey's own progress; it does
+            not replace or feed into the lesson-level one. */}
+        {current.blockType === "onboarding_survey" && !submittedComplete.has(current.id) && <div className="player-step player-survey-step">Question {Math.min(surveyStepIndex, (current as OnboardingSurvey).steps.length - 1) + 1} of {(current as OnboardingSurvey).steps.length}</div>}
         {current.blockType === "onboarding_survey" && !submittedComplete.has(current.id) && <ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as OnboardingSurvey).steps[Math.min(surveyStepIndex, (current as OnboardingSurvey).steps.length - 1)]?.prompt ?? ""}</ReactMarkdown>}
         {current.blockType === "quiz_checkpoint" && !submittedComplete.has(current.id) && <>
           {(current as Quiz).title && <h2>{(current as Quiz).title}</h2>}
