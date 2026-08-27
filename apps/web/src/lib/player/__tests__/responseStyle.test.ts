@@ -54,6 +54,20 @@ describe("player response style prompt", () => {
     expect(buildResponseStyleInstruction(style, false, "lesson_entry")).toContain("learner situation specific to this lesson");
   });
 
+  it("relays a project submission instead of treating it as a question", () => {
+    // A motivating-activity project block is a thinking exercise the lesson
+    // plays off, not a question the learner asked. `question`'s Socratic
+    // clarification behavior was reaching every project block in the course
+    // (twelve of them) via the shared submission path; this pins the
+    // scripted, non-Socratic contract project gets instead.
+    const project = buildResponseStyleInstruction(style, false, "project");
+    expect(project).toContain("Relay the submission back");
+    expect(project).toContain("Never ask a clarifying, follow-up, or confirming question");
+    expect(project).toContain("Do not grade, score, or critique the submission");
+    expect(project).toContain("Do not end with a question");
+    expect(project).not.toContain("Answer in the first sentence");
+  });
+
   it("does not ask lesson_entry to end with a question", () => {
     // A lesson-entry message announces the block the player is about to show;
     // it is not a conversation turn the learner is expected to answer. A

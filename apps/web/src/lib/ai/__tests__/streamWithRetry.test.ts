@@ -151,6 +151,56 @@ describe('invokeStyledPlayerResponse — the delivery contract', () => {
     expect(chat.invoke).toHaveBeenCalledTimes(2);
   });
 
+  // Fix 2: AI Essentials was newly wired into this exact responseStyle
+  // config (see ai-essentials-aug2026-package.ts) so that its own
+  // languageInstruction prose ("three sentences or fewer") is backed by real
+  // enforcement, not just a prompt hint the model can ignore under pressure.
+  // These two pin that a plain sentence_limit violation — the case that
+  // instruction is meant to prevent — goes through the identical
+  // repair-then-accept-or-fallback path already proven above for
+  // comma_chained_enumeration, on its own branch rather than a special case.
+  it('accepts a repaired draft when sentence_limit is the only violation left after the one repair attempt', async () => {
+    const firstDraft = "Skills combine into one workflow when several tool calls run in sequence. Each step passes its own result forward so the next call has real input to work with. This turns a single skill into a small pipeline you can reuse across many tasks. What's one task you would want to automate this way?";
+    const repairedDraft = "Skills combine into one workflow when several tool calls run in sequence. Each step passes its own result forward so the next call always has real input to work with instead of guessing. What's one task you would want to automate this way?";
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: firstDraft })
+        .mockResolvedValueOnce({ content: repairedDraft }),
+    };
+
+    const response = await invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, 'question');
+
+    expect(response.content).toBe(repairedDraft);
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('still throws when sentence_limit is not fixed after the one repair attempt', async () => {
+    const firstDraft = "Skills combine into one workflow when several tool calls run in sequence. Each step passes its own result forward so the next call has real input to work with. This turns a single skill into a small pipeline you can reuse across many tasks. What's one task you would want to automate this way?";
+    // Same fourth sentence left in place — the repair did not shorten it.
+    const stillFourSentences = "Skills combine into one workflow when several tool calls run in sequence. Each step passes its own result forward so the next call always has real input to work with instead of guessing. This still turns a single skill into a small pipeline you can reuse. What's one task you would want to automate this way?";
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: firstDraft })
+        .mockResolvedValueOnce({ content: stillFourSentences }),
+    };
+
+    await expect(invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, 'question')).rejects.toThrow('Player response style contract failed after 1 repair');
+
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
   it('can observe one invalid first draft without entering the live repair path', async () => {
     const validations: Array<{ stage: string; repairIndex: number; passed: boolean; violations: string[] }> = [];
     const chat = { invoke: vi.fn().mockResolvedValue({ content: 'One? Two? [END]' }) };

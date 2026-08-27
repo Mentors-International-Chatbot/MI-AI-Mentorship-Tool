@@ -27,6 +27,9 @@ export const COURSE_CODES: Record<string, string> = {
   PBJ: "pbj-basics",
   AIESS: "ai-essentials",
   SKILLS: "skills-tool-calls",
+  // Track E run-through only (2026-08-26) — remove once this is superseded
+  // by EnrollmentInvitation.displayCode or promoted to a real course code.
+  AIESSAUG26: "ai-essentials-aug2026",
 };
 
 /**
@@ -52,6 +55,11 @@ export const COURSE_INFO: Record<string, Omit<CourseInfo, 'code'>> = {
     collectionKey: "skills-tool-calls",
     name: "Skills & Tool Calls",
     description: "One-lesson focus-group course on AI skills and tool calls",
+  },
+  AIESSAUG26: {
+    collectionKey: "ai-essentials-aug2026",
+    name: "AI Essentials (Aug 2026 refresh)",
+    description: "Six-lesson refreshed AI literacy course — Track E run-through",
   },
 };
 

@@ -36,7 +36,10 @@ export type PlayerAccess = {
 };
 
 export type PlayerParentIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
-export type PlayerIntent = PlayerParentIntent | "expand";
+// "project" is deliberately not a PlayerParentIntent: there is no "explain
+// more" UI entry point on a project-relay reply, so it is never a valid
+// expand target.
+export type PlayerIntent = PlayerParentIntent | "expand" | "project";
 export type ValidatedPlayerContext = {
   surface: "player";
   /**
@@ -237,6 +240,10 @@ export async function playerTutorGrounding(socioId: string, context: ValidatedPl
   const parentIntent = context.intent === "expand" ? context.parentIntent : context.intent;
   const lessonEntry = parentIntent === "lesson_entry";
   const teachBack = parentIntent === "teach_back";
+  // A project submission must be relayed per the block's own instructions
+  // (e.g. "group by A/B/C") — without the block itself in context, the model
+  // has no way to know what structure it asked for, or what it asked at all.
+  const project = parentIntent === "project";
   return [
     lessonEntry ? `Lesson: ${lesson.title}` : `Lesson key: ${context.lessonKey}`,
     `Key concepts: ${lesson.keyConcepts.join(", ")}`,
@@ -244,7 +251,7 @@ export async function playerTutorGrounding(socioId: string, context: ValidatedPl
     // authored explanation also sends its illustrative industry, which the
     // model repeatedly misread as learner context. Teach-backs retain their
     // prompt/evaluation block, while entries retain the full opening block.
-    safeBlock && (lessonEntry || teachBack) ? `Current block: ${JSON.stringify(safeBlock)}` : "",
+    safeBlock && (lessonEntry || teachBack || project) ? `Current block: ${JSON.stringify(safeBlock)}` : "",
   ].filter(Boolean).join("\n");
 }
 
@@ -299,6 +306,7 @@ export async function preparePlayerContext(
   const block = lesson.blocks.find((item) => item.id === input.blockId);
   if (!block) throw new PlayerError(404, "block_not_found", "Block not found");
   if (input.intent === "teach_back" && block.blockType !== "teach_back") throw new PlayerError(400, "invalid_context", "The selected block is not a teach-back");
+  if (input.intent === "project" && block.blockType !== "project") throw new PlayerError(400, "invalid_context", "The selected block is not a project");
   const existing = await playerRuntimeRepo.blockProgress.findUnique({
     where: { enrollmentId_lessonKey_blockId: { enrollmentId: access.enrollmentId, lessonKey: input.lessonKey, blockId: input.blockId } },
   });
@@ -469,6 +477,90 @@ export async function getLessonThread(access: PlayerAccess, lessonKey: string) {
   return rows.filter((row) => row.senderType === "mentor" || progressState(row.metadata).intent !== "lesson_entry");
 }
 
+/** Matches `{step:<id>}` in authored block content — same token shape `resolveOnboardingClosingMessage` uses for the closing message, extended to cross-lesson callers. */
+const CROSS_LESSON_TOKEN = /\{step:([a-z0-9_-]+)\}/g;
+
+/**
+ * E.6.1: single choke point for "what did the learner answer in an earlier
+ * lesson's onboarding_survey block" — every block that needs a cross-lesson
+ * answer (1.11, 6.3, and whatever needs a third one later) calls this same
+ * function rather than each running its own query. `rows` is already fetched
+ * by `lessonRows` for the current lesson lookup in `getLessonDto`, and it
+ * covers every lesson in the collection — so finding the survey block's
+ * definition (its `steps[].id` -> `steps[].field` map) costs nothing extra.
+ * Only the accumulated answers themselves (`BlockProgress.response`, scoped
+ * to that one block + this enrollment) are a genuinely new query, since
+ * `getLessonDto`'s own `progress` fetch is scoped to the CURRENT lesson only
+ * and the survey lives in a different one.
+ *
+ * Returns `null` per-id when unresolvable (survey block doesn't exist, or
+ * the learner hasn't answered that step yet) — callers must supply a
+ * fallback via `substituteCrossLessonTokens`, never splice this straight
+ * into authored text.
+ */
+async function resolveCrossLessonAnswers(
+  access: PlayerAccess,
+  rows: Awaited<ReturnType<typeof lessonRows>>,
+): Promise<Record<string, string | null>> {
+  let surveyBlock: (LessonBlock & { blockType: "onboarding_survey" }) | undefined;
+  for (const row of rows) {
+    const body = row.versions[0]?.body;
+    if (!body) continue;
+    const parsed = lessonSchema.safeParse(body);
+    if (!parsed.success) continue;
+    const found = parsed.data.blocks.find((b): b is LessonBlock & { blockType: "onboarding_survey" } => b.blockType === "onboarding_survey");
+    if (found) { surveyBlock = found; break; }
+  }
+  if (!surveyBlock) return {};
+
+  const progressRow = await playerRuntimeRepo.blockProgress.findFirst({
+    where: { enrollmentId: access.enrollmentId, blockId: surveyBlock.id },
+  });
+  const answers = progressRow?.response && typeof progressRow.response === "object" && !Array.isArray(progressRow.response)
+    ? progressRow.response as Record<string, unknown>
+    : {};
+
+  return Object.fromEntries(surveyBlock.steps.map((step) => {
+    const value = answers[step.field];
+    return [step.id, typeof value === "string" && value.trim().length > 0 ? value : null];
+  }));
+}
+
+/**
+ * Substitutes `{step:<id>}` tokens against `resolveCrossLessonAnswers`'
+ * output. `fallbacks` is required per call site (not a generic default) so
+ * each block's authored sentence stays grammatical even when the answer
+ * doesn't resolve — a learner who reaches 1.11 or 6.3 without having
+ * answered the survey must see natural fallback prose, never a raw token or
+ * an empty splice.
+ */
+function substituteCrossLessonTokens(
+  text: string,
+  answers: Record<string, string | null>,
+  fallbacks: Record<string, string>,
+): string {
+  return text.replace(CROSS_LESSON_TOKEN, (_match, id: string) => answers[id] ?? fallbacks[id] ?? "what you shared earlier in the course");
+}
+
+/** Fallback phrase per cross-lesson token this course actually authors, keyed by the survey step's `id` (not `field` — tokens reference `id`, same as `resolveOnboardingClosingMessage`). */
+const CROSS_LESSON_FALLBACKS: Record<string, string> = {
+  q5: "the repetitive task you had in mind",
+  q6: "what you believed about AI's effect on your career",
+};
+
+function applyCrossLessonSubstitution(block: LessonBlock, answers: Record<string, string | null>): LessonBlock {
+  // Plain substring check, not `.test()` on the shared global regex — a
+  // stateful `.test()` call would leave `lastIndex` non-zero and silently
+  // skip matches on a later call against a different block's text.
+  if (block.blockType === "project" && block.content.includes("{step:")) {
+    return { ...block, content: substituteCrossLessonTokens(block.content, answers, CROSS_LESSON_FALLBACKS) };
+  }
+  if (block.blockType === "teach_back" && block.prompt.includes("{step:")) {
+    return { ...block, prompt: substituteCrossLessonTokens(block.prompt, answers, CROSS_LESSON_FALLBACKS) };
+  }
+  return block;
+}
+
 export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
   if (await learnerProjectSelectionRequired(access)) {
     throw new PlayerError(403, "project_required", "Choose your project before starting the course");
@@ -494,9 +586,20 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
   });
   const progressById = new Map(progress.map((item) => [item.blockId, item]));
   const dashboard = await getLessonDashboard(access, rows);
+  // E.6.1: only queried when this lesson actually authors a cross-lesson
+  // token — every other lesson (the overwhelming majority) pays zero extra
+  // round trips.
+  const needsCrossLessonAnswers = lesson.blocks.some((block) => (
+    (block.blockType === "project" && block.content.includes("{step:"))
+    || (block.blockType === "teach_back" && block.prompt.includes("{step:"))
+  ));
+  const crossLessonAnswers = needsCrossLessonAnswers ? await resolveCrossLessonAnswers(access, rows) : {};
   return {
     dashboard,
-    lesson: { ...lesson, blocks: lesson.blocks.map(sanitizePlayerBlock) },
+    lesson: {
+      ...lesson,
+      blocks: lesson.blocks.map((block) => sanitizePlayerBlock(applyCrossLessonSubstitution(block, crossLessonAnswers))),
+    },
     // B.1: shown only entering the course's first lesson (index === 0, per
     // curriculum order — see `lessonRows`) AND only before the learner has
     // completed anything in it. Without the second half this re-showed on
@@ -544,7 +647,16 @@ export async function getLessonDto(access: PlayerAccess, lessonKey: string) {
         : current && item?.completedAt && block.blockType === "onboarding_survey" && block.closingMessage && persistedAnswers
         ? { kind: "onboarding_survey" as const, closingMessage: resolveOnboardingClosingMessage(block.closingMessage, access.language, block.steps, persistedAnswers) }
         : undefined;
-      return { blockId: block.id, contentVersion: block.contentVersion, startedAt: current ? item?.startedAt ?? null : null, completedAt: current ? item?.completedAt ?? null : null, score: current ? item?.score ?? null : null, state, feedback };
+      return {
+        blockId: block.id, contentVersion: block.contentVersion, startedAt: current ? item?.startedAt ?? null : null, completedAt: current ? item?.completedAt ?? null : null, score: current ? item?.score ?? null : null, state, feedback,
+        // Bug 2: the learner's own accumulated onboarding_survey answers are
+        // not an answer key to withhold — they are what the learner typed.
+        // `gradePlayerBlock`'s onboarding_survey branch only ever writes
+        // string values, so this cast is safe. Exposed whenever answered,
+        // not only once complete, so the player can eventually echo a step's
+        // own answer back live the same way it already does once done.
+        ...(persistedAnswers ? { surveyAnswers: persistedAnswers as Record<string, string> } : {}),
+      };
     }),
   };
 }
@@ -1151,10 +1263,24 @@ export async function submitDiagnostic(access: PlayerAccess, answers: unknown) {
     const metric = await playerRuntimeRepo.metricDefinition.findUnique({ where: { organizationId_key: { organizationId: access.organizationId, key: dimensionKey } } });
     if (metric) await playerRuntimeRepo.metricObservation.create({ data: { metricId: metric.id, enrollmentId: access.enrollmentId, signalType: "point", value: diagnostic.threshold, confidence: 1, evidenceRefs: { kind: "diagnostic", attemptId: attempt.id, dimensionKey }, source: "system_observed", observedAt: attempt.completedAt } });
   }
-  return {
-    attemptId: attempt.id, overallScore, threshold: diagnostic.threshold, dimensionScores,
-    questions: results.map(({ question, correct }) => ({ questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation })),
-  };
+  // E.5.1: DiagnosticAttempt/SocioDimensionState/MetricObservation above always
+  // get the real computed values — those are internal consumers (dimension
+  // tuning), unaffected by learner-facing visibility. Only what's returned
+  // here is gated, and gated in full: a per-question correct/incorrect
+  // breakdown is itself a score, so showScoreToLearner:false suppresses
+  // overallScore, dimensionScores, and the correct/correctAnswer/explanation
+  // fields together — same full-suppression convention as
+  // resolveReteachGateSignal and gradePlayerBlock's web_quiz branch, not
+  // partial field-stripping.
+  return diagnostic.showScoreToLearner
+    ? {
+      attemptId: attempt.id, overallScore, threshold: diagnostic.threshold, dimensionScores,
+      questions: results.map(({ question, correct }) => ({ questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation })),
+    }
+    : {
+      attemptId: attempt.id, overallScore: null, threshold: diagnostic.threshold, dimensionScores: null,
+      questions: results.map(({ question }) => ({ questionId: question.id })),
+    };
 }
 
 export async function markTeachBackComplete(access: PlayerAccess, lessonKey: string, blockId: string, state: object) {

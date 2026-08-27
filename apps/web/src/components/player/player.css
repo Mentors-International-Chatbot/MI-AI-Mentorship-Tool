@@ -145,7 +145,11 @@
    turn, in order. It carries no controls — a learner scrolling back to re-read
    a definition must not be able to re-answer the block it came from. */
 .player-thread { display: grid; gap: .55rem; margin: 0 0 1rem; }
-.player-message { max-width: 82%; padding: .75rem 1rem; border-radius: 14px; background: #dceee9; font-size: .9rem; }
+/* Bug 3: a content-free marker for "a new block just became current" —
+   deliberately just a rule, no label, no icon. Suppressed for teach_back and
+   onboarding_survey, whose own prompt-mirror already signals the transition. */
+.player-thread-divider { height: 1px; background: var(--player-line); margin: .3rem 0; }
+.player-message { max-width: 82%; padding: .75rem 1rem; border-radius: 14px; background: #dceee9; font-size: 1.05rem; line-height: 1.55; }
 .player-message.learner { justify-self: end; background: #e6edf4; }
 /* A human mentor's reply must read as a different person arriving, not a
    restyled AI turn — left border + a warm tint carry that at a glance. */
@@ -173,7 +177,7 @@
 .player-message.is-error { background: #fdeceb; }
 .player-message.is-error > strong { color: #b42318; }
 .player-message :where(ul, ol) { margin: .35rem 0 0; padding-left: 1.1rem; }
-.player-message :where(h1, h2, h3) { font-size: 1rem; margin: .3rem 0 0; }
+.player-message :where(h1, h2, h3) { font-size: 1.2rem; margin: .3rem 0 0; }
 .player-message a { color: var(--player-accent); }
 /* The block in play.
    ─────────────────────────────────────────────────────────────────────────

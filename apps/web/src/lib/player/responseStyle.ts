@@ -21,7 +21,7 @@ export type ResponseStyleViolation =
   | "control_marker"
   | "incomplete_ending";
 
-export type StyledPlayerIntent = "question" | "teach_back" | "lesson_entry" | "capstone" | "expand";
+export type StyledPlayerIntent = "question" | "teach_back" | "lesson_entry" | "capstone" | "expand" | "project";
 
 const MAX_SENTENCE_WORDS = 35;
 const NORMAL_CHARACTER_RANGE = { min: 200, max: 420 };
@@ -257,6 +257,22 @@ function intentCalibration(intent: StyledPlayerIntent | undefined): string[] {
       return [
         "CAPSTONE:",
         "- Name one useful project strength or gap without restating the submission. Ask about only one decision.",
+      ];
+    case "project":
+      return [
+        "PROJECT SUBMISSION:",
+        // A motivating-activity project block is a thinking exercise the
+        // lesson plays off, not a question the learner asked — the doc calls
+        // for relaying/acknowledging it, structured per the block's own
+        // instructions when it gives one (e.g. "group by A/B/C"), and moving
+        // on. `question`'s Socratic clarification behavior is wrong here:
+        // treating a submission as a vague question invites a follow-up
+        // question the learner never asked for, and there are a dozen more
+        // of these blocks in the course to hit the same way.
+        "- Relay the submission back, organized exactly per the block's own instructions if it gave one (e.g. the same groups or categories it asked for). Do not invent a structure it did not ask for.",
+        "- Never ask a clarifying, follow-up, or confirming question. Do not request more detail, another example, or a missing piece.",
+        "- Do not grade, score, or critique the submission. This is a thinking exercise being relayed, not graded work.",
+        "- End with a plain statement. Do not end with a question.",
       ];
     case "expand":
       return [

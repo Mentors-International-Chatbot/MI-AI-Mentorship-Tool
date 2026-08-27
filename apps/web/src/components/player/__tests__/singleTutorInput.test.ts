@@ -51,7 +51,7 @@ describe("lesson player has a single tutor input", () => {
 
   it("derives the tutor intent from the current block instead of the widget", () => {
     expect(source).toMatch(/const teachingBack = current\?\.blockType === "teach_back"/);
-    expect(source).toMatch(/teachingBack \? "teach_back" as const : "question" as const/);
+    expect(source).toMatch(/teachingBack \? "teach_back" as const : isProjectSubmission \? "project" as const : "question" as const/);
   });
 
   it("sends the block id on every tutor turn, so the server can count teach-back turns", () => {
@@ -73,7 +73,7 @@ describe("lesson player has a single tutor input", () => {
   it("renders finished block content from the lesson body, not from stored messages", () => {
     // historyContent returns authored strings only — no generated summary of a
     // block the learner already read.
-    expect(source).toMatch(/function historyContent\(block: Block\): string \| null/);
+    expect(source).toMatch(/function historyContent\(block: Block, surveyAnswers\?: Record<string, string>\): string \| null/);
     const helper = source.slice(source.indexOf("function historyContent"), source.indexOf("export function LessonPlayer"));
     expect(helper).not.toMatch(/api\/chat/);
   });

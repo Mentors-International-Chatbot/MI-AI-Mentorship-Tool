@@ -292,6 +292,19 @@ export const quizQuestionSchema = z
 export const passingSchema = z.object({
   dimensionKey: key, // dimension that gates completion (the "understanding" score)
   threshold: z.number(), // on that dimension's own scale
+  /**
+   * E.5.2 gotcha, costly enough to earn its own investigation stage — do not
+   * repeat it. `checkPassCondition` (runAssessmentTurn.ts) ANDs THREE
+   * independent conditions: turnCount >= minTurns, level >= threshold, AND
+   * confidence >= confidenceFloor. `threshold: 0` alone does NOT produce an
+   * always-pass gate — confidenceFloor still gates independently, defaults
+   * to 0.5, and early-turn sensed confidence is typically 0.2 or lower. A
+   * threshold-0 gate without also zeroing confidenceFloor will almost always
+   * fall through to the maxTurns safety-valve backstop instead of a genuine
+   * pass (bounded, not stranding — onMaxTurnsWithoutPass still resolves it —
+   * but not "clean"). An ungraded/always-pass reteach_gate block needs BOTH
+   * threshold: 0 AND confidenceFloor: 0 set explicitly.
+   */
   confidenceFloor: z.number().min(0).max(1).optional().default(0.5),
   minTurns: z.number().int().positive().optional().default(2), // no one-sentence pass
   maxTurns: z.number().int().positive().optional().default(12), // safety valve
@@ -706,6 +719,33 @@ export const baselineDiagnosticSchema = z.object({
   description: z.string().optional(),
   threshold: z.number().min(0).max(1),
   questions: z.array(quizQuestionSchema).min(1),
+  /**
+   * E.5.1: whether the learner sees their diagnostic score/per-question
+   * correctness. Defaults `true` — the diagnostic has shipped with scores
+   * unconditionally visible since before this field existed (confirmed
+   * live in `content/ai-essentials.package.json` and
+   * `content/ai-essentials-1.1.2.package.json`, both `mode: "baseline_quiz"`
+   * with a populated diagnostic) — defaulting to `false` would silently
+   * hide scores an existing course currently shows. A course that wants the
+   * diagnostic treated as a private baseline (not a judgment) sets this to
+   * `false` explicitly, same opt-in shape as `config.assessment`'s sibling
+   * `showScoreToLearner` field.
+   *
+   * `.optional().default(true)`, in that order — `.default(x).optional()`
+   * types the parsed output as `boolean | undefined` even though the
+   * runtime value is always a real boolean; the same ordering bug B.2
+   * Stage 2 caught for `config.assessment.showScoreToLearner`.
+   *
+   * Gated at the `submitDiagnostic` return boundary, not baked into
+   * `DiagnosticAttempt` — that table's `overallScore`/`dimensionScores`
+   * have exactly one other reader anywhere in the codebase
+   * (`learnerHome.ts`'s attempt `.count()`, which never touches the score
+   * fields), so there is no second read layer to protect the way
+   * `resolveReteachGateSignal`'s gated value later gets baked into
+   * `BlockProgress.score`. The stored row stays real; only what
+   * `submitDiagnostic` returns to the learner is gated.
+   */
+  showScoreToLearner: z.boolean().optional().default(true),
 });
 
 const projectSelectionDimensionSchema = z.enum([

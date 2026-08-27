@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
         let playerContext: ValidatedPlayerContext | undefined;
         if (body.context) {
             const candidate = body.context;
-            const intents: PlayerIntent[] = ['question', 'teach_back', 'lesson_entry', 'capstone', 'expand'];
+            const intents: PlayerIntent[] = ['question', 'teach_back', 'lesson_entry', 'capstone', 'expand', 'project'];
             const parentIntents: PlayerParentIntent[] = ['question', 'teach_back', 'lesson_entry', 'capstone'];
             // The course is no longer checked against a literal. `resolvePlayerAccess`
             // below is the real authority: it rejects an unknown code, an inactive

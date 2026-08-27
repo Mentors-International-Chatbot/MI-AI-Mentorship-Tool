@@ -9,26 +9,38 @@
  * `reports/e5-authoring-findings.md` — summarized here so the deviation is
  * visible right next to the content it affects:
  *
- *   - Block 0.2 (7-question onboarding survey) is DEFERRED, not authored here.
- *     `config.onboarding.mode: "survey"` has no player-surface runtime yet
- *     (Stage E.3.5, investigated in parallel with this stage, not yet built).
- *     The 7 questions are captured in the findings report as ready-to-slot-in
- *     `steps[]` content once E.3.5 ships.
- *   - Block 1.4 ("Experience-Gate") is authored as a `project` block per
- *     Michael's standing design decision (experience-gate absorbed into
- *     project, not a second block type) — but this is a real mechanical
- *     mismatch, not just a naming change: the doc wants a multi-turn
- *     chatbot conversation (3-5 follow-up questions); a `project` block
- *     is one prompt, one submission, done. See the findings report.
- *   - Blocks 1.11 and 6.3 reference earlier answers (the deferred 0.2 survey,
- *     and — for 1.11 — the diagnostic) that no prompt-assembly layer reads
- *     back into a later block's AI context today. Authored as written; the
- *     AI-reference clauses are not functional yet. See the findings report.
- *   - Block 0.3's diagnostic has no `showScoreToLearner`-equivalent gate.
- *     "Score not shown to the learner" (the doc's explicit ask) cannot
- *     actually be enforced by any existing schema field. See the findings
- *     report — this is the same class of gap E.1/B.2/B.3 already solved for
- *     `reteach_gate`/`web_quiz`, just never extended to `baselineDiagnosticSchema`.
+ *   - Block 0.2 (7-question onboarding survey), E.6.1: authored as
+ *     `blockType: "onboarding_survey"` (E.3.5), the first block of Lesson 1
+ *     (structural placement, not doc-numbering — see block b0-2's own
+ *     comment for why). Closing message reflects Q5 back via `{step:q5}`.
+ *   - Block 1.4 ("Experience-Gate"), E.5.2: re-authored from `project` to
+ *     `teach_back` + `assessment.mode: "reteach_gate"`, threshold 0,
+ *     confidenceFloor 0, matching the doc's genuine multi-turn conversation
+ *     (3-5 follow-up questions, explicit troubleshooting) — a single-submission
+ *     `project` block could not deliver that. See
+ *     `reports/e5.2-ungraded-gate-findings.md`.
+ *   - Blocks 1.11 and 6.3, E.6.1: reference Q5/Q6 via `{step:q5}`/`{step:q6}`
+ *     tokens, resolved cross-lesson at `getLessonDto`-render time
+ *     (`resolveCrossLessonAnswers` in `player/service.ts`) — no longer
+ *     placeholder-only content. 1.11's diagnostic-performance reference from
+ *     the original doc was dropped: 1.11 is a `project` block with no live
+ *     conversation, and (confirmed in `reports/e6-learner-context-investigation.md`)
+ *     its actual authored text never referenced the diagnostic in the first
+ *     place — only Q5. Context injection into a live AI turn (relevant only
+ *     to 6.3's `teach_back` conversation) remains deferred, bundled with
+ *     E.5.2's closing-message-framing gap into one future `buildAssessmentPrompt.ts`
+ *     design pass — see `reports/e6-learner-context-investigation.md`.
+ *   - Blocks 1.4 and 6.3 (E.5.2): both ungraded multi-turn reteach_gate
+ *     blocks inherit the standard "assessment"-flavored closing-message
+ *     framing (`buildAssessmentPrompt.ts`) regardless of `showScoreToLearner`
+ *     — a config-flag gap the palette doesn't have yet, reported not fixed.
+ *     See `reports/e5.2-ungraded-gate-findings.md`.
+ *   - Block 0.3's diagnostic score suppression (E.5.1, resolved after this
+ *     stage originally shipped): `baselineDiagnosticSchema` now has
+ *     `showScoreToLearner`, defaulting `true` to preserve every existing
+ *     course's current behavior; this course sets it `false` explicitly,
+ *     per the doc's "score not shown to the learner" — see
+ *     `reports/e5-authoring-findings.md` for the gap as originally found.
  * ----------------------------------------------------------------------------
  */
 import { journeyPackageSchema, type JourneyPackageInput } from "../journey-package.schema";
@@ -58,6 +70,26 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
       teachingStyle: "conversational teaching in short turns; state hard truths plainly, then give the honest counterweight",
       languageInstruction: "Respond in English. Keep turns to three sentences or fewer unless walking through a worked example.",
     },
+    /**
+     * Same values as `skills-tool-calls-package.ts`'s `responseStyle`, which
+     * that file's own comment says was copied from this course's original
+     * (pre-aug2026) package — confirmed still live in the DB for the old
+     * `ai-essentials` collection (`ProgramVersion` 1.1.1/1.1.2), whose source
+     * file no longer exists in the repo. The aug2026 rewrite dropped it:
+     * without `responseStyle`, `buildResponseStyleInstruction` and
+     * `responseStyleViolations` both return early (see `responseStyle.ts`),
+     * so `languageInstruction`'s "three sentences or fewer" above is prompt
+     * wording only — no validation, no repair loop, and `temperature: 0.7`
+     * instead of 0.3 (see `ai/service.ts`'s use of `responseStyle` for that).
+     * This restores the enforcement without touching `languageInstruction`.
+     */
+    responseStyle: {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: "none",
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    },
     // Block 0.3. Diagnostic-only for now — the 7-question survey (0.2) is
     // deferred to E.3.5; `mode` stays "baseline_quiz" so the existing,
     // working diagnostic gate runs. Once E.3.5 ships a sequencing mechanism,
@@ -70,6 +102,10 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
         title: "Before we start: a quick baseline",
         description: "Six quick questions on where you're starting from. This isn't graded and your score isn't shown — it just helps the tutor pitch things at the right level.",
         threshold: 0.5,
+        // E.5.1: baseline, not a judgment, per the doc's block 0.3 — the
+        // schema's own default is `true` (preserves existing courses'
+        // unconditional score visibility), so this course opts out explicitly.
+        showScoreToLearner: false,
         questions: [
           {
             id: "diag-q1", format: "multiple_choice", graded: true,
@@ -202,51 +238,90 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
         selfCheckQuestions: [],
         blocks: [
           {
-            id: "b1-1", order: 1, blockType: "project",
+            // E.6.1: Block 0.2 (onboarding survey). Structurally must live
+            // inside some lesson's blocks[] — `onboarding_survey` is a real
+            // lessonBlockSchema member, unlike 0.1 (metadata.introMessage)
+            // and 0.3 (config.onboarding.diagnostic), which aren't blocks at
+            // all. Placed first in Lesson 1 rather than a standalone
+            // "lesson-0": a lesson with only this one block would fail
+            // lessonSchema's "every lesson needs at least one teach block"
+            // refine, and doc numbering (0.1/0.2/0.3) already lives
+            // independently of structural lesson placement elsewhere in this
+            // file (e.g. b1-4's doc comment), so this follows that precedent
+            // rather than inventing a dummy pre-lesson.
+            id: "b0-2", order: 1, blockType: "onboarding_survey",
+            steps: [
+              { id: "q1", field: "preferredName", prompt: "What's your name — what would you like to be called?" },
+              { id: "q2", field: "majorAndYear", prompt: "What's your major, and what year are you in school?" },
+              { id: "q3", field: "targetRole", prompt: "What job or internship are you aiming for right now or after graduation?" },
+              { id: "q4", field: "currentAiUsage", prompt: "How do you use AI right now? (Not at all / occasionally for schoolwork / regularly / I build things with it)" },
+              { id: "q5", field: "tediousTask", prompt: "What's one task in a job you've had, or expect to have, that feels repetitive or tedious?" },
+              { id: "q6", field: "careerBelief", prompt: "What do you already believe about AI's effect on your future career?" },
+              { id: "q7", field: "modelConfidence", prompt: "On a scale of 1-5, how confident are you explaining to someone else how an AI model actually works?" },
+            ],
+            closingMessage: {
+              en: "Got it — so the process your final project will automate is: {step:q5}. Keep that in mind as you go.",
+            },
+          },
+          {
+            id: "b1-1", order: 2, blockType: "project",
             requiresSubmission: true, blocking: true,
             content: "**A day in the life of a ____**\n\nDescribe an ordinary workday in the job you're aiming for. What do you actually do all day — list 5-8 concrete tasks, not responsibilities.\n\nThen, mark each task as:\n(A) AI could do this today\n(B) AI could help but not replace\n(C) AI can't touch this.",
             handoff: "No grading here — this is a thinking exercise the whole lesson plays off. I'll relay your list back to you grouped by letter.",
           },
           {
-            id: "b1-2", order: 2, blockType: "teach", role: "example",
+            id: "b1-2", order: 3, blockType: "teach", role: "example",
             content: "Let's start with two concrete demonstrations rather than claims. Suno generates a completely original song from a text prompt. NotebookLM turns a stack of documents into a conversational podcast. The point isn't that these are impressive toys — it's that both do things that required trained professionals two years ago. The capability jump already happened. This isn't a forecast.",
           },
           {
-            id: "b1-3", order: 3, blockType: "resource",
+            id: "b1-3", order: 4, blockType: "resource",
             resource: { type: "weblink", url: "https://suno.com", label: "Suno", description: "Prompt it to create a song for you." },
             handoff: "Go try one — Suno or NotebookLM. Spend five minutes. Come back.",
           },
           {
-            id: "b1-3b", order: 4, blockType: "resource",
+            id: "b1-3b", order: 5, blockType: "resource",
             resource: { type: "weblink", url: "https://notebooklm.google.com", label: "NotebookLM", description: "Link an article on something in your space and have it create a podcast on the material." },
           },
           {
-            id: "b1-4", order: 5, blockType: "project",
-            requiresSubmission: true, blocking: true,
-            content: "Were you able to complete the experiment without any problems? If not, what problems did you run into?\n\nWhat surprised you about AI's ability?",
+            // E.5.2: re-authored from `project` to `teach_back` + reteach_gate
+            // — the doc's "3-5 follow-up questions" and explicit troubleshooting
+            // ("if not, ask what problems they ran into and try problem solving")
+            // is a genuine multi-turn conversation, which a single-submission
+            // `project` block can't deliver. Ungraded: threshold/confidenceFloor
+            // both 0 (see passingSchema's confidenceFloor doc for why both are
+            // required, not just threshold), showScoreToLearner: false. The
+            // closing-message framing still reads as "assessment" language
+            // regardless (a separate, reported-not-fixed gap — see
+            // reports/e5.2-ungraded-gate-findings.md).
+            id: "b1-4", order: 6, blockType: "teach_back",
+            prompt: "Ask whether they were able to complete the Suno/NotebookLM experiment without any problems. If they ran into issues, ask what went wrong and help them problem-solve until it works. Then ask what surprised them about AI's ability.",
+            dimensionKey: "comprehension",
+            evaluatesConcepts: ["hands-on AI experience"],
+            assessment: { mode: "reteach_gate", showScoreToLearner: false },
+            passingOverride: { dimensionKey: "comprehension", threshold: 0, confidenceFloor: 0, minTurns: 3, maxTurns: 5 },
           },
           {
-            id: "b1-5", order: 6, blockType: "teach", role: "explanation",
+            id: "b1-5", order: 7, blockType: "teach", role: "explanation",
             content: "Industrial revolutions have happened before — four of them, recognized. Steam power automated textile production. Electricity displaced craftsmen to factories. Computing and the internet took away factory jobs. Robotics and AI take away professionals. Each one replaced entire categories of work and created others. Each one provoked panic similar to what we're experiencing now. Each of the first three took decades to be widely implemented. There's a pattern of each new revolution being adopted quicker than the last — but it's not unlikely that AI will also take years, even decades, to fully reach the industries it will eventually replace.",
           },
           {
-            id: "b1-6", order: 7, blockType: "teach", role: "deepening",
+            id: "b1-6", order: 8, blockType: "teach", role: "deepening",
             content: "This revolution is different in scope. Previous revolutions automated physical labor and manual occupations. This one targets cognitive workers — analysts, writers, coders, marketers, consultants. The people who were previously safe because they were educated are the ones at risk of displacement this time.",
           },
           {
-            id: "b1-7", order: 8, blockType: "teach", role: "explanation",
+            id: "b1-7", order: 9, blockType: "teach", role: "explanation",
             content: "With the use of AI, one person is capable — now or soon — of doing the work of three. A company then needs fewer people for the same output. That's superhuman productivity.",
           },
           {
-            id: "b1-8", order: 9, blockType: "teach", role: "explanation",
+            id: "b1-8", order: 10, blockType: "teach", role: "explanation",
             content: "Jevons Paradox offers a historical silver lining: when efficiency rises, consumption often rises faster. Cheaper steam engines meant more coal used, not less. As lighting efficiency rose from candles to LEDs, the price fell 3,000 times while total consumption rose 40,000 times higher. Computing gets more efficient every year, and 95% of US households now have a computer. If AI analysis becomes cheap, organizations may demand far more analysis. The work doesn't vanish — it changes shape and expands.",
           },
           {
-            id: "b1-9", order: 10, blockType: "teach", role: "question",
+            id: "b1-9", order: 11, blockType: "teach", role: "question",
             content: "Physical labor-saving led to physical atrophy — which is why gyms became popular. Few people lifted weights for fun in 1850; they had jobs that did it for them. Now extend the pattern: if AI saves mental labor, what atrophies? Mental labor-saving leads to mental atrophy — leads to what? I don't have a tidy answer for you here. Sit with it.",
           },
           {
-            id: "b1-10", order: 11, blockType: "quiz_checkpoint",
+            id: "b1-10", order: 12, blockType: "quiz_checkpoint",
             title: "Lesson 1 check",
             assessment: { mode: "web_quiz" },
             questions: [
@@ -271,12 +346,16 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
             ],
           },
           {
-            id: "b1-11", order: 12, blockType: "project",
+            // E.6.1: {step:q5} resolved cross-lesson from block b0-2's
+            // accumulated answers, via resolveCrossLessonAnswers
+            // (player/service.ts). Sentence is written to stay grammatical
+            // if the fallback phrase substitutes instead of a real answer.
+            id: "b1-11", order: 13, blockType: "project",
             requiresSubmission: true, blocking: true,
-            content: "**Your gameplan, and your project process** — Milestone 1\n\nTwo parts:\n\n1. Gameplan: given everything in this lesson, what are three specific things you'll do in the next two years to be someone AI makes more valuable rather than less? Concrete — \"learn to prompt well\" is not concrete.\n2. Your project process: name the specific business process your AI tool will automate. Start from your onboarding answer and the task list in 1.1. One paragraph: what the process is, who does it now, and why it's tedious enough to be worth automating.\n\nPart 2 is the milestone. Everything downstream builds on this one paragraph.",
+            content: "**Your gameplan, and your project process** — Milestone 1\n\nTwo parts:\n\n1. Gameplan: given everything in this lesson, what are three specific things you'll do in the next two years to be someone AI makes more valuable rather than less? Concrete — \"learn to prompt well\" is not concrete.\n2. Your project process: name the specific business process your AI tool will automate. Start from what you told us about {step:q5} and the task list in 1.1. One paragraph: what the process is, who does it now, and why it's tedious enough to be worth automating.\n\nPart 2 is the milestone. Everything downstream builds on this one paragraph.",
           },
           {
-            id: "b1-12", order: 13, blockType: "teach_back",
+            id: "b1-12", order: 14, blockType: "teach_back",
             prompt: "Explain it back, in your own words: (1) why this industrial revolution differs from the previous ones, (2) what Jevons Paradox implies for your career, (3) what \"mental atrophy\" might mean in practice.",
             dimensionKey: "comprehension",
             evaluatesConcepts: ["industrial revolutions", "Jevons Paradox", "mental atrophy"],
@@ -725,15 +804,27 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
             content: "**Final submission.** Text covering: what you built, how you built it, what it does (one real example), how it applies the course (at least three concepts, with where each shows up), and what you'd do next. You may attach links (to the tool, a demo, a repo) but the write-up is the deliverable.\n\nIn-platform text submission for now — this does not yet post to Canvas.",
           },
           {
+            // E.6.1: {step:q6} resolved cross-lesson from block b0-2's
+            // accumulated answers, via resolveCrossLessonAnswers
+            // (player/service.ts). Sentence stays grammatical if the
+            // fallback phrase substitutes instead of a real answer.
             id: "b6-3", order: 3, blockType: "teach_back",
-            prompt: "Let's reflect. Revisit your onboarding answer about AI's effect on your career. What do you believe now? What changed?",
+            prompt: "Let's reflect. At the start of this course you told us this about {step:q6}. What do you believe now? What changed?",
             dimensionKey: "comprehension",
             evaluatesConcepts: [],
-            assessment: { mode: "reteach_gate" },
+            // E.5.2: showScoreToLearner must be set explicitly — without it
+            // this inherits the package-level default (true), which would
+            // show a raw comprehension score for an ungraded reflection.
+            assessment: { mode: "reteach_gate", showScoreToLearner: false },
             // Not graded — a closing conversation, not a gate. threshold 0
             // per the doc's own instruction ("if the block type requires a
-            // threshold, set it to 0").
-            passingOverride: { dimensionKey: "comprehension", threshold: 0, minTurns: 1, maxTurns: 4 },
+            // threshold, set it to 0"). confidenceFloor: 0 is required too —
+            // threshold 0 alone does not produce always-pass (see
+            // passingSchema's confidenceFloor doc). Without it this block
+            // would almost always fall through to the maxTurns backstop
+            // instead of a genuine pass — bounded, not stranding, but not
+            // "clean" either.
+            passingOverride: { dimensionKey: "comprehension", threshold: 0, confidenceFloor: 0, minTurns: 1, maxTurns: 4 },
             handoff: "This one's just a conversation — there's no score.",
           },
         ],

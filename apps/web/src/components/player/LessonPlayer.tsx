@@ -46,7 +46,7 @@ type Resource = BlockBase & { blockType: "resource"; resource: ResourceValue };
 type Project = BlockBase & { blockType: "project"; content: string; requiresSubmission?: boolean; blocking?: boolean };
 type OnboardingSurvey = BlockBase & { blockType: "onboarding_survey"; steps: Array<{ id: string; prompt: string; field: string }> };
 type Block = Teach | Quiz | Drag | TeachBack | Media | Resource | Project | OnboardingSurvey | BlockBase;
-type ProgressItem = { blockId: string; completedAt: string | null; state?: { turnCount?: number; stepIndex?: number; reviewPending?: boolean }; feedback?: unknown };
+type ProgressItem = { blockId: string; completedAt: string | null; state?: { turnCount?: number; stepIndex?: number; reviewPending?: boolean }; feedback?: unknown; surveyAnswers?: Record<string, string> };
 type LessonDto = {
   lesson: { key: string; title: string; category?: string; keyConcepts: string[]; blocks: Block[] };
   /** B.1: authored course opener, present only entering the course's first lesson. */
@@ -87,6 +87,7 @@ const TUTOR_CHIPS = ["Give me an example", "Can you rephrase that?"] as const;
 type ThreadItem =
   | { kind: "block"; key: string; content: string; externalLinks?: boolean }
   | { kind: "prompt"; key: string; content: string }
+  | { kind: "divider"; key: string }
   | {
       kind: "tutor";
       key: string;
@@ -165,10 +166,22 @@ export function hydrateBlockProgress(progress: ProgressItem[]) {
   return { completed, submittedComplete, feedback };
 }
 
-export function historyContent(block: Block): string | null {
+export function historyContent(block: Block, surveyAnswers?: Record<string, string>): string | null {
   if (block.blockType === "teach") return (block as Teach).content;
   if (block.blockType === "project") return (block as Project).content;
-  if (block.blockType === "onboarding_survey") return (block as OnboardingSurvey).steps.map((step) => `**${step.prompt}**`).join("\n\n");
+  // Bug 2: this used to join only the authored prompts, dropping every
+  // answer the learner actually gave — the live per-step bubbles show the
+  // question, but once the block completes its history collapsed to
+  // questions with no answers at all. `surveyAnswers` is keyed by `field`,
+  // same as the block's own accumulated response object.
+  if (block.blockType === "onboarding_survey") {
+    return (block as OnboardingSurvey).steps
+      .map((step) => {
+        const answer = surveyAnswers?.[step.field];
+        return answer !== undefined ? `**${step.prompt}**\n\n${answer}` : `**${step.prompt}**`;
+      })
+      .join("\n\n");
+  }
   if (block.blockType === "teach_back") return (block as TeachBack).prompt;
   if (block.blockType === "drag_order") return (block as Drag).prompt;
   if (block.blockType === "quiz_checkpoint") {
@@ -195,6 +208,33 @@ export function historyContent(block: Block): string | null {
       .join("\n\n");
   }
   return null;
+}
+
+/**
+ * The prompt bubbles for an onboarding_survey's steps up through the one
+ * currently showing, mirroring `teach_back`'s "a question being asked reads
+ * as a message" treatment (see the `teach_back` case in `threadItems`) —
+ * generalized to a block with several internal steps instead of one.
+ *
+ * A pure function of `(blockId, steps, stepIndex)`, not an event: called
+ * fresh on every `threadItems` recompute, so there is no "already mirrored"
+ * state to track and nothing to duplicate. The same `stepIndex` always
+ * produces the same array of stable keys, whether it was reached by
+ * stepping through the survey turn by turn or by loading straight into it
+ * mid-survey after a reload — history and live progression render identically.
+ */
+export function onboardingSurveyPromptBubbles(
+  blockId: string,
+  steps: ReadonlyArray<{ prompt: string }>,
+  stepIndex: number,
+): ThreadItem[] {
+  if (steps.length === 0) return [];
+  const answeredThrough = Math.min(Math.max(stepIndex, 0), steps.length - 1);
+  const items: ThreadItem[] = [];
+  for (let index = 0; index <= answeredThrough; index += 1) {
+    items.push({ kind: "prompt", key: `${blockId}-step-${index}-prompt`, content: steps[index].prompt });
+  }
+  return items;
 }
 
 function MediaBlock({ block }: { block: Media }) {
@@ -438,7 +478,12 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     const content = (preset ?? question).trim();
     if (!content) return false;
     const teachingBack = current?.blockType === "teach_back" && current.assessment?.mode !== "reteach_gate";
-    const intent = teachingBack ? "teach_back" as const : "question" as const;
+    // A motivating-activity project submission is relayed and acknowledged,
+    // not answered as a question — see the "project" case in
+    // `intentCalibration` (responseStyle.ts) for why `question`'s Socratic
+    // clarification behavior was the wrong contract for it.
+    const isProjectSubmission = current?.blockType === "project" && (current as Project).requiresSubmission === true;
+    const intent = teachingBack ? "teach_back" as const : isProjectSubmission ? "project" as const : "question" as const;
     const blockId = current?.id;
     setBusy(true); setError(""); setTutorError("");
     // Clear the box and echo the text into the thread straight away. On failure
@@ -558,13 +603,31 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       const isCurrent = current?.id === block.id;
       if (!isDone && !isCurrent) break;
       if (isDone) {
-        const history = historyContent(block);
+        const surveyAnswers = block.blockType === "onboarding_survey"
+          ? data.progress.find((item) => item.blockId === block.id)?.surveyAnswers
+          : undefined;
+        const history = historyContent(block, surveyAnswers);
         if (history) items.push({
           kind: "block",
           key: block.id,
           content: history,
           externalLinks: block.blockType === "resource" && (block as Resource).resource.type === "weblink",
         });
+      }
+      // Bug 3: a uniform, content-free signal that a new block just became
+      // current — independent of block type, and independent of whether
+      // that block has an authored `handoff` or a prompt-mirror of its own.
+      // Without this, a live AI reply belonging to the PREVIOUS block sits
+      // directly above the new pinned card with nothing marking the seam
+      // between them, for every block type that isn't teach_back or
+      // onboarding_survey (i.e. most of them: teach, project,
+      // quiz_checkpoint, drag_order, media, resource). Suppressed for
+      // teach_back/onboarding_survey specifically: their own prompt-mirror
+      // already reads as "something new just arrived" — stacking a second,
+      // wordless signal on top of an already-visible one is redundant, not
+      // clarifying.
+      if (isCurrent && block.blockType !== "teach_back" && block.blockType !== "onboarding_survey") {
+        items.push({ kind: "divider", key: `${block.id}-transition` });
       }
       // An authored transition into this block, so a quiz that follows a
       // conversation arrives as part of the flow instead of materializing
@@ -578,10 +641,17 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       if (isCurrent && block.blockType === "teach_back") {
         items.push({ kind: "prompt", key: `${block.id}-prompt`, content: (block as TeachBack).prompt });
       }
+      // Same treatment, generalized to onboarding_survey's several internal
+      // steps: every step up through the one currently showing reads as a
+      // message, so a learner who has answered three of seven questions sees
+      // all three as thread history, not just the one in front of them.
+      if (isCurrent && block.blockType === "onboarding_survey") {
+        items.push(...onboardingSurveyPromptBubbles(block.id, (block as OnboardingSurvey).steps, surveyStepIndex));
+      }
       items.push(...tutorFor(block.id));
     }
     return items;
-  }, [data, completed, current, threadMessages]);
+  }, [data, completed, current, threadMessages, surveyStepIndex]);
 
   /**
    * Keep the newest turn in view.
@@ -696,6 +766,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
               {item.role === "mentor" && !isHumanMentor && item.parentIntent && isLast && <button type="button" className="player-chip" disabled={busy} aria-label="Ask AI Mentor to explain the previous reply in more detail" onClick={() => explainMore(item.parentIntent!, item.blockId)}>Explain more</button>}
             </div>;
           }
+          if (item.kind === "divider") return <div key={item.key} className="player-thread-divider" role="separator" />;
           return <div key={item.key} className={`player-message lesson ${item.kind === "prompt" ? "is-prompt" : ""}`}>
             <strong>{item.kind === "prompt" ? "AI Mentor" : "Lesson"}</strong>
             <ReactMarkdown

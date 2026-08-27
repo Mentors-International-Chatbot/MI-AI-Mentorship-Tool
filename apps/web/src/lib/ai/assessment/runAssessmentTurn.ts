@@ -104,7 +104,8 @@ export type AssessmentTurnOutcome =
 // Pass/Fail Logic
 // ═══════════════════════════════════════════════════════════════════════════
 
-function checkPassCondition(
+/** Exported for direct unit testing — see checkPassCondition.test.ts (E.5.2). */
+export function checkPassCondition(
   state: DimensionStateMap,
   passing: AssessmentConfig['passing'],
   turnCount: number,
