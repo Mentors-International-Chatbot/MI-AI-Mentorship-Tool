@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { LessonDashboard } from "@/lib/player/dashboard";
 import { HelpRequestPanel } from "./HelpRequestPanel";
 
@@ -20,12 +21,15 @@ export function PlayerDashboard({
   lessonKey,
   blockId,
   helpRequestEnabled,
+  hasCapstone,
 }: {
   dashboard: LessonDashboard;
   course: string;
   lessonKey: string;
   blockId?: string;
   helpRequestEnabled: boolean;
+  /** Whether this course has a capstone page to link the progress card to. Not every projectSelection course declares an outcome. */
+  hasCapstone: boolean;
 }) {
   const { project, nextMilestone } = dashboard;
   const pct = dashboard.lessonsTotal > 0
@@ -33,13 +37,15 @@ export function PlayerDashboard({
     : 0;
 
   return (
-    <aside className="player-dash" aria-label="Your project">
+    <aside className="player-dash" aria-label={project ? "Your project" : "Your progress"}>
       {/*
-        B.3 Stage 2: `project` is nullable on the type now (a dashboard can
-        exist without one once `hasAttemptsData` in dashboard.ts is real),
-        even though nothing produces that state yet. The whole card is what
-        "Your project" names, so absent a project it doesn't render at all —
-        a defensive guard, not a new empty-state design.
+        `project` is nullable: a course can have the progress panel on
+        without `projectSelection` configured, or a learner may not have
+        confirmed a project yet even on a course that has it. The whole card
+        is what "Your project" names, so absent a project it doesn't render
+        at all — a defensive guard, not a new empty-state design. The
+        aside's own label follows the same branch so it never claims a
+        project section that isn't there.
       */}
       {project && (
         <section className="player-dash-card player-dash-project">
@@ -69,7 +75,18 @@ export function PlayerDashboard({
       )}
 
       <section className="player-dash-card">
-        <span className="player-eyebrow">Progress</span>
+        {/*
+          Clickable whenever this course has a capstone to click through to —
+          not every projectSelection course declares an outcome, so this
+          can't just follow from `dashboard` existing.
+        */}
+        {hasCapstone ? (
+          <Link className="player-dash-progress-link" href={`/learn/${course}/capstone`} aria-label="Open the capstone project">
+            <span className="player-eyebrow">Progress</span>
+          </Link>
+        ) : (
+          <span className="player-eyebrow">Progress</span>
+        )}
         <p className="player-dash-count">
           <strong>{dashboard.lessonsComplete}</strong> of {dashboard.lessonsTotal} lessons
         </p>
@@ -83,6 +100,29 @@ export function PlayerDashboard({
         >
           <span style={{ width: `${pct}%` }} />
         </div>
+
+        {/*
+          The whole course journey, not just the current lesson's slice of
+          it — every lesson this course declares, in course order. The
+          bar above already summarizes this; this is the same data,
+          per-lesson, so a learner can see where they actually are in the
+          five (or six, or ten) lesson arc rather than only a fraction.
+        */}
+        {dashboard.lessons.length > 0 && (
+          <ol className="player-dash-lessons">
+            {dashboard.lessons.map((lesson) => (
+              <li
+                key={lesson.lessonKey}
+                className={`player-dash-ls${lesson.complete ? " is-complete" : ""}${lesson.lessonKey === lessonKey ? " is-current" : ""}`}
+              >
+                <span aria-hidden="true" className="player-dash-ls-mark">
+                  {lesson.complete ? "✓" : lesson.lessonKey === lessonKey ? "○" : "·"}
+                </span>
+                <span>{lesson.title}</span>
+              </li>
+            ))}
+          </ol>
+        )}
 
         {dashboard.milestones.length > 0 && (
           <>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { playerFetch } from "@/lib/player/client";
@@ -12,6 +13,8 @@ type Capstone = {
   milestones: Array<{ key: string; name: string; available: boolean; reached: boolean; status: "reached" | "current" | "locked" }>;
   nextMilestone: { key: string; name: string } | null;
   completedMilestones: number; graduated: boolean;
+  /** First course lesson that isn't fully complete (last lesson if the whole course is). */
+  currentLessonKey: string | null;
 };
 
 export function CapstonePlayer({ course }: { course: string }) {
@@ -43,7 +46,7 @@ export function CapstonePlayer({ course }: { course: string }) {
     finally { setBusy(false); }
   }
   if (!data) return <main className="player-shell"><p>{error || "Loading capstone…"}</p></main>;
-  return <main className="player-shell"><header className="player-header"><div><span className="player-eyebrow">AI Essentials capstone</span><h1>{data.project.title}</h1><p>{data.project.description}</p>{data.nextMilestone && <p><strong>Next:</strong> {data.nextMilestone.name}</p>}</div><div className="player-progress"><span style={{ width: `${data.completedMilestones * 20}%` }} /></div></header><div className="capstone-grid"><section className="player-card"><h2>Deliverables</h2><ol>{data.project.deliverables.map((item) => <li key={item.name}><strong>{item.name}</strong>{item.description && <p>{item.description}</p>}</li>)}</ol><h2>Milestones</h2><ol>{data.milestones.map((item) => <li key={item.key} className={item.status === "locked" ? "capstone-locked" : ""}>{item.status === "reached" ? "✓" : item.status === "current" ? "○" : "🔒"} {item.name}</li>)}</ol>{data.graduated && <p className="capstone-graduated">Capstone complete — 100%</p>}</section><aside className="player-card"><h2>Work with AI Mentor</h2><div className="capstone-chat">{messages.map((item, index) => {
+  return <main className="player-shell"><header className="player-header"><div>{data.currentLessonKey && <div className="player-nav"><Link className="player-home-link" href={`/learn/${course}/${data.currentLessonKey}`}>← Back to lesson</Link></div>}<span className="player-eyebrow">AI Essentials capstone</span><h1>{data.project.title}</h1><p>{data.project.description}</p>{data.nextMilestone && <p><strong>Next:</strong> {data.nextMilestone.name}</p>}</div><div className="player-progress"><span style={{ width: `${data.completedMilestones * 20}%` }} /></div></header><div className="capstone-grid"><section className="player-card"><h2>Deliverables</h2><ol>{data.project.deliverables.map((item) => <li key={item.name}><strong>{item.name}</strong>{item.description && <p>{item.description}</p>}</li>)}</ol><h2>Milestones</h2><ol>{data.milestones.map((item) => <li key={item.key} className={item.status === "locked" ? "capstone-locked" : ""}>{item.status === "reached" ? "✓" : item.status === "current" ? "○" : "🔒"} {item.name}</li>)}</ol>{data.graduated && <p className="capstone-graduated">Capstone complete — 100%</p>}</section><aside className="player-card"><h2>Work with AI Mentor</h2><div className="capstone-chat">{messages.map((item, index) => {
     const isHumanMentor = item.role === "assistant" && item.senderType === "mentor";
     const canExpand = item.role === "assistant" && !isHumanMentor && item.metadata?.intent === "capstone" && index === messages.length - 1;
     return <div key={item.id} className={`player-message ${item.role === "user" ? "learner" : "mentor"}${isHumanMentor ? " human-mentor" : ""}`}><strong>{item.role === "user" ? "You" : isHumanMentor ? "Your Mentor" : "AI Mentor"}</strong>{isHumanMentor ? <p>{item.content}</p> : <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content}</ReactMarkdown>}{canExpand && <button type="button" className="player-chip" disabled={busy} aria-label="Ask AI Mentor to explain the previous reply in more detail" onClick={explainMore}>Explain more</button>}</div>;

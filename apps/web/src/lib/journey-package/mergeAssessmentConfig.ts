@@ -12,6 +12,7 @@ export type MergedAssessmentConfig = {
   allowRetake: boolean;
   showScoreToLearner: boolean;
   webQuizPassingScore: number;
+  webQuizMaxAttempts: number;
 };
 
 /**
@@ -51,5 +52,6 @@ export function mergeAssessmentConfig(
     allowRetake: override?.allowRetake ?? base.allowRetake ?? true,
     showScoreToLearner: override?.showScoreToLearner ?? base.showScoreToLearner ?? false,
     webQuizPassingScore: override?.webQuizPassingScore ?? base.webQuizPassingScore ?? 1,
+    webQuizMaxAttempts: override?.webQuizMaxAttempts ?? base.webQuizMaxAttempts ?? 2,
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { lessonBlockSchema } from "@/lib/journey-package/journey-package.schema";
-import { aggregateDiagnosticDimensionScores, capstoneTutorGrounding, gradePlayerBlock, matchesExpansionParent, mergeBlockAssessmentConfig, milestoneStates, passingDiagnosticDimensions, PlayerError, sanitizePlayerBlock } from "../service";
+import { programVersionConfigSchema } from "@/lib/journey-package/program-version-config.schema";
+import { aggregateDiagnosticDimensionScores, capstoneTutorGrounding, currentLessonKeyFor, diagnosticDto, gradePlayerBlock, matchesExpansionParent, mergeBlockAssessmentConfig, milestoneStates, passingDiagnosticDimensions, PlayerError, sanitizePlayerBlock, shuffleOptions, type PlayerAccess } from "../service";
 
 const quiz = lessonBlockSchema.parse({
   id: "quiz", order: 1, blockType: "quiz_checkpoint", concepts: ["ai_impact"],
@@ -20,6 +21,33 @@ describe("sequential milestone availability", () => {
 
   it("unlocks only the immediate successor on the next snapshot", () => {
     expect(milestoneStates(milestones, new Set(), new Set(["m1"])).map((item) => item.status)).toEqual(["reached", "current", "locked"]);
+  });
+});
+
+describe("currentLessonKeyFor — the capstone page's 'back to lesson' target", () => {
+  it("returns the first incomplete lesson", () => {
+    const lessons = [
+      { lessonKey: "lesson-1", complete: true },
+      { lessonKey: "lesson-2", complete: false },
+      { lessonKey: "lesson-3", complete: false },
+    ];
+    expect(currentLessonKeyFor(lessons)).toBe("lesson-2");
+  });
+
+  it("falls back to the last lesson once every lesson is complete", () => {
+    const lessons = [
+      { lessonKey: "lesson-1", complete: true },
+      { lessonKey: "lesson-2", complete: true },
+    ];
+    expect(currentLessonKeyFor(lessons)).toBe("lesson-2");
+  });
+
+  it("returns null for a course with no lessons", () => {
+    expect(currentLessonKeyFor([])).toBeNull();
+  });
+
+  it("returns the only lesson when nothing is complete yet", () => {
+    expect(currentLessonKeyFor([{ lessonKey: "lesson-1", complete: false }])).toBe("lesson-1");
   });
 });
 
@@ -216,6 +244,7 @@ describe("mergeBlockAssessmentConfig — mirrors mergePassingConfig's per-field 
     autoAppendTeachBack: false,
     showScoreToLearner: false,
     webQuizPassingScore: 1,
+    webQuizMaxAttempts: 2,
   };
 
   it("returns the base values untouched when no override is given", () => {
@@ -224,6 +253,7 @@ describe("mergeBlockAssessmentConfig — mirrors mergePassingConfig's per-field 
       allowRetake: true,
       showScoreToLearner: false,
       webQuizPassingScore: 1,
+      webQuizMaxAttempts: 2,
     });
   });
 
@@ -250,5 +280,95 @@ describe("mergeBlockAssessmentConfig — mirrors mergePassingConfig's per-field 
 
   it("allowRetake override wins over the base value", () => {
     expect(mergeBlockAssessmentConfig(base, { mode: "reteach_gate", allowRetake: false }).allowRetake).toBe(false);
+  });
+});
+
+describe("shuffleOptions", () => {
+  const options = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
+  it("returns every original element exactly once, in some order", () => {
+    const shuffled = shuffleOptions(options);
+    expect(shuffled).toHaveLength(options.length);
+    expect([...shuffled].sort()).toEqual([...options].sort());
+  });
+
+  it("does not mutate the input array", () => {
+    const copy = [...options];
+    shuffleOptions(options);
+    expect(options).toEqual(copy);
+  });
+
+  // Statistical, not flaky-deterministic: with 8 options there are 8! possible
+  // orders, so 50 independent calls landing on the exact same order as the
+  // input, or all being identical to each other, would require probability
+  // effectively zero from a real shuffle. This can't assert "always
+  // different" for any single pair of calls — a fair shuffle occasionally
+  // reproduces its input — only that it isn't a no-op or a constant.
+  it("produces a different order across repeated calls, not the same one every time", () => {
+    const results = Array.from({ length: 50 }, () => shuffleOptions(options).join(","));
+    const distinctOrders = new Set(results);
+    expect(distinctOrders.size).toBeGreaterThan(1);
+    expect(results.some((order) => order !== options.join(","))).toBe(true);
+  });
+});
+
+describe("multiple_choice option shuffle in sanitizePlayerBlock and diagnosticDto", () => {
+  it("shuffles multiple_choice options, grading stays correct regardless of the order shown", () => {
+    const shuffled = sanitizePlayerBlock(quiz) as { questions: Array<{ options?: string[] }> };
+    // Same two options either way (8 possible orderings from 2! here just
+    // means "unchanged or swapped" — the real order-variety case is covered
+    // by shuffleOptions itself above, which uses enough options for that).
+    expect([...(shuffled.questions[0].options ?? [])].sort()).toEqual(["A", "B"]);
+    // Grading is keyed by the answer's value, not its position in whatever
+    // order the client was shown — this is what makes shuffling safe at all.
+    expect(gradePlayerBlock(quiz, { q1: "B" })).toEqual(expect.objectContaining({ complete: true, score: 1 }));
+    expect(gradePlayerBlock(quiz, { q1: "A" }, 1)).toEqual(expect.objectContaining({ complete: false, score: 0 }));
+  });
+
+  it("does not touch drag_to_order's own rotation, only multiple_choice", () => {
+    const solvedFirst = lessonBlockSchema.parse({
+      id: "solved", order: 1, blockType: "quiz_checkpoint", assessment: { mode: "web_quiz" },
+      questions: [{ id: "order", prompt: "Order", format: "drag_to_order", options: ["A", "B", "C"], answerKey: ["A", "B", "C"], explanation: "ABC." }],
+    });
+    const safe = sanitizePlayerBlock(solvedFirst) as { questions: Array<{ options?: string[] }> };
+    // Exactly the pre-existing one-position rotation, not a full shuffle —
+    // pinning that the new multiple_choice branch doesn't also fire here.
+    expect(safe.questions[0].options).toEqual(["B", "C", "A"]);
+  });
+
+  it("leaves matching's shared option pool untouched (no positional grading to protect, and no shuffle branch for it)", () => {
+    const matching = lessonBlockSchema.parse({
+      id: "match", order: 1, blockType: "quiz_checkpoint", assessment: { mode: "web_quiz" },
+      questions: [{
+        id: "m1", prompt: "Match", format: "matching",
+        options: ["One", "Two"],
+        matchingPrompts: [{ id: "a", text: "A" }, { id: "b", text: "B" }],
+        answerKey: { a: "One", b: "Two" },
+      }],
+    });
+    const safe = sanitizePlayerBlock(matching) as { questions: Array<{ options?: string[] }> };
+    expect(safe.questions[0].options).toEqual(["One", "Two"]);
+  });
+
+  it("also shuffles diagnosticDto's multiple_choice questions (block 0.3's bug)", () => {
+    const config = programVersionConfigSchema.parse({
+      onboarding: {
+        mode: "baseline_quiz",
+        steps: [],
+        diagnostic: {
+          id: "diag", title: "Baseline", threshold: 0.5,
+          questions: [{
+            id: "diag-q1", format: "multiple_choice", graded: true,
+            prompt: "Pick", options: ["A", "B", "C", "D", "E", "F", "G", "H"],
+            answerKey: "B",
+          }],
+        },
+      },
+    });
+    const access = { config } as PlayerAccess;
+    const orders = Array.from({ length: 50 }, () => diagnosticDto(access).questions[0].options?.join(","));
+    expect(new Set(orders).size).toBeGreaterThan(1);
+    // Every shuffled result is still the same 8 options, none dropped or duplicated.
+    for (const order of orders) expect(order?.split(",").sort()).toEqual(["A", "B", "C", "D", "E", "F", "G", "H"]);
   });
 });

@@ -34,6 +34,14 @@ describe("rich quiz payload seam", () => {
     expect(fieldSource).toContain(`question.format === "${format}"`);
   });
 
+  it("renders the word bank before the free-text fallback, so a bank replaces typing rather than sitting beside it", () => {
+    const bankIndex = fieldSource.indexOf("question.wordBank");
+    const freeTextIndex = fieldSource.indexOf('question.format === "short_answer" || question.format === "fill_in_blank"');
+    expect(bankIndex).toBeGreaterThan(-1);
+    expect(freeTextIndex).toBeGreaterThan(-1);
+    expect(bankIndex).toBeLessThan(freeTextIndex);
+  });
+
   it("keeps format logic out of the generic shell", () => {
     expect(shellSource).not.toMatch(/fill_in_blank|drag_to_order|matching|QuizQuestionField/);
   });

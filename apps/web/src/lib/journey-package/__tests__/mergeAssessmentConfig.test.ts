@@ -15,6 +15,7 @@ const base = {
   autoAppendTeachBack: false,
   showScoreToLearner: false,
   webQuizPassingScore: 0.7,
+  webQuizMaxAttempts: 2,
 };
 
 describe("mergeAssessmentConfig", () => {
@@ -24,6 +25,7 @@ describe("mergeAssessmentConfig", () => {
       allowRetake: true,
       showScoreToLearner: false,
       webQuizPassingScore: 0.7,
+      webQuizMaxAttempts: 2,
     });
   });
 
@@ -39,7 +41,24 @@ describe("mergeAssessmentConfig", () => {
       allowRetake: false,
       showScoreToLearner: true,
       webQuizPassingScore: 0.7,
+      webQuizMaxAttempts: 2,
     });
+  });
+
+  it("lets a web quiz override the package's attempt cap", () => {
+    expect(mergeAssessmentConfig(base, {
+      mode: "web_quiz",
+      webQuizMaxAttempts: 5,
+    }).webQuizMaxAttempts).toBe(5);
+  });
+
+  it("falls back to 2 — the plain quiz_checkpoint QUIZ_ATTEMPT_LIMIT precedent — when neither package nor block configures it", () => {
+    // Simulates a config stored before this field existed — real provenance
+    // the `?? 2` fallback in mergeAssessmentConfig.ts exists to handle,
+    // same as webQuizPassingScore's own `?? 1` above it.
+    const { webQuizMaxAttempts, ...legacyBase } = base;
+    void webQuizMaxAttempts;
+    expect(mergeAssessmentConfig(legacyBase as typeof base).webQuizMaxAttempts).toBe(2);
   });
 
   it("lets a web quiz override the normalized package passing score", () => {

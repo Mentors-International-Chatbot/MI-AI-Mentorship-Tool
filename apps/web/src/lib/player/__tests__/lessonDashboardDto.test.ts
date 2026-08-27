@@ -1,11 +1,20 @@
 /**
  * The dashboard's place in the lesson DTO.
  *
+ * Three independent gates, not one: `progressPanel.enabled` (lesson progress
+ * + whole-course list — opt-in per course, since PB&J and skills-tool-calls
+ * are live courses that have never shown this panel), `outcome` (milestones
+ * + capstone link), and `projectSelection` (the project card, sourced from
+ * the learner's own AI-guided project selection). These used to be one gate
+ * (`projectSelection`), which meant no course could get lesson-progress
+ * visibility without also taking on project selection's separate mandatory
+ * pre-course conversation and 403 entry gate.
+ *
  * Two things worth holding at this level rather than the pure-function level:
- * that a course without `projectSelection` never even reads project state — the
- * guarantee that keeps MI and PB&J untouched and costs them nothing — and that
- * the project read is enrollment-scoped, so one learner's dashboard cannot be
- * built from another tenant's project.
+ * that a course with `progressPanel` off never reads any progress state at
+ * all — the guarantee that keeps every course untouched until it opts in —
+ * and that the project read is enrollment-scoped, so one learner's dashboard
+ * cannot be built from another tenant's project.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -46,6 +55,7 @@ const LESSON_BODY = {
   }],
 };
 
+const PROGRESS_PANEL = { enabled: true };
 const PROJECT_SELECTION = { presets: [], interestTopics: [] };
 
 const OUTCOME = {
@@ -80,12 +90,19 @@ beforeEach(() => {
   mocks.getCurrentLearnerProject.mockResolvedValue(null);
 });
 
-describe("getLessonDto — courses without project selection", () => {
-  it("returns a null dashboard and never reads project state (MI, PB&J)", async () => {
-    const dto = await getLessonDto(access({}), "l1");
+describe("getLessonDto — progressPanel not enabled", () => {
+  it("returns a null dashboard and reads no course-wide progress state, even with projectSelection/outcome configured", async () => {
+    const dto = await getLessonDto(
+      access({ projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
 
     expect(dto.dashboard).toBeNull();
     expect(mocks.getCurrentLearnerProject).not.toHaveBeenCalled();
+    // blockProgressFindMany is still called once here — that's getLessonDto's
+    // own per-lesson progress read (`{enrollmentId, lessonKey}`, unconditional,
+    // needed for `dto.progress` regardless of the dashboard). The dashboard's
+    // own course-wide read (`{enrollmentId}` only, via computeCourseProgress)
+    // is what stays untouched — milestoneProgressFindMany has no other caller,
+    // so this is still the clean signal that the dashboard path never ran.
     expect(mocks.milestoneProgressFindMany).not.toHaveBeenCalled();
   });
 
@@ -99,25 +116,55 @@ describe("getLessonDto — courses without project selection", () => {
   });
 });
 
-describe("getLessonDto — learner without a confirmed project", () => {
-  it("returns a null dashboard when no project row exists", async () => {
-    const dto = await getLessonDto(access({ projectSelection: PROJECT_SELECTION }), "l1");
+describe("getLessonDto — progressPanel enabled, no projectSelection, no outcome (skills-tool-calls shape)", () => {
+  it("renders lesson progress with no project card and no milestones", async () => {
+    const dto = await getLessonDto(access({ progressPanel: PROGRESS_PANEL }), "l1");
 
-    expect(dto.dashboard).toBeNull();
+    expect(dto.dashboard).not.toBeNull();
+    expect(dto.dashboard!.project).toBeNull();
+    expect(dto.dashboard!.lessonsTotal).toBe(1);
+    expect(dto.dashboard!.lessons).toEqual([{ lessonKey: "l1", title: "AI in a GSCM Day", complete: false }]);
+    expect(dto.dashboard!.milestones).toEqual([]);
+    expect(mocks.getCurrentLearnerProject).not.toHaveBeenCalled();
+  });
+});
+
+describe("getLessonDto — progressPanel enabled, outcome only, no projectSelection (PB&J shape)", () => {
+  it("renders milestones with no project card", async () => {
+    const dto = await getLessonDto(access({ progressPanel: PROGRESS_PANEL, outcome: OUTCOME }), "l1");
+
+    expect(dto.dashboard!.project).toBeNull();
+    expect(dto.dashboard!.milestones).toHaveLength(2);
+    expect(dto.dashboard!.nextMilestone).toMatchObject({ key: "m1", locked: true });
+    expect(mocks.getCurrentLearnerProject).not.toHaveBeenCalled();
+  });
+});
+
+describe("getLessonDto — progressPanel + projectSelection, learner without a confirmed project", () => {
+  it("still renders progress; only the project card is absent", async () => {
+    const dto = await getLessonDto(
+      access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION }), "l1");
+
+    expect(dto.dashboard).not.toBeNull();
+    expect(dto.dashboard!.project).toBeNull();
+    expect(dto.dashboard!.lessonsTotal).toBe(1);
     expect(mocks.getCurrentLearnerProject).toHaveBeenCalledTimes(1);
   });
 
-  it("returns a null dashboard while the project is still DRAFT", async () => {
+  it("renders progress without a project card while the project is still DRAFT", async () => {
     mocks.getCurrentLearnerProject.mockResolvedValue({
       title: null, oneLiner: null, context: null, status: "DRAFT",
     });
 
-    const dto = await getLessonDto(access({ projectSelection: PROJECT_SELECTION }), "l1");
-    expect(dto.dashboard).toBeNull();
+    const dto = await getLessonDto(
+      access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION }), "l1");
+
+    expect(dto.dashboard).not.toBeNull();
+    expect(dto.dashboard!.project).toBeNull();
   });
 });
 
-describe("getLessonDto — learner with an active project", () => {
+describe("getLessonDto — progressPanel + projectSelection, learner with an active project", () => {
   beforeEach(() => {
     mocks.getCurrentLearnerProject.mockResolvedValue({
       title: "Morning brief",
@@ -129,7 +176,7 @@ describe("getLessonDto — learner with an active project", () => {
 
   it("builds the dashboard with lesson progress leading", async () => {
     const dto = await getLessonDto(
-      access({ projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
+      access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
 
     expect(dto.dashboard).not.toBeNull();
     expect(dto.dashboard!.project!.title).toBe("Morning brief");
@@ -144,7 +191,7 @@ describe("getLessonDto — learner with an active project", () => {
   });
 
   it("scopes the project read to this learner's enrollment", async () => {
-    await getLessonDto(access({ projectSelection: PROJECT_SELECTION }), "l1");
+    await getLessonDto(access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION }), "l1");
 
     expect(mocks.getCurrentLearnerProject).toHaveBeenCalledWith(
       expect.objectContaining({ organizationId: "org-a", enrollmentId: "enrollment-a" }),
@@ -159,40 +206,70 @@ describe("getLessonDto — learner with an active project", () => {
     // another socio's progress, since a socio's enrollments are never
     // shared) while also isolating one enrollment from another of the same
     // socio's in the same collection.
-    await getLessonDto(access({ projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
+    //
+    // The query itself runs through computeCourseProgress, shared with
+    // getCourseProgress (the capstone page) — no `select:
+    // {milestoneKey: true}` narrowing, since getCourseProgress's own output
+    // contract needs `reachedAt` too. getLessonDashboard still only reads
+    // `.key` off the result.
+    await getLessonDto(
+      access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
 
-    expect(mocks.milestoneProgressFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { enrollmentId: "enrollment-a" },
-        select: { milestoneKey: true },
-      }),
-    );
+    expect(mocks.milestoneProgressFindMany).toHaveBeenCalledWith({
+      where: { enrollmentId: "enrollment-a" },
+      orderBy: { reachedAt: "asc" },
+    });
   });
 
   it("counts a milestone as reached from this learner's own progress rows", async () => {
     mocks.milestoneProgressFindMany.mockResolvedValue([{ milestoneKey: "m1" }]);
 
     const dto = await getLessonDto(
-      access({ projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
+      access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
 
     expect(dto.dashboard!.milestonesReached).toBe(1);
     expect(dto.dashboard!.milestones[0].status).toBe("reached");
   });
 
   it("still renders the project card when the course declares no outcome", async () => {
-    const dto = await getLessonDto(access({ projectSelection: PROJECT_SELECTION }), "l1");
+    const dto = await getLessonDto(
+      access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION }), "l1");
 
     expect(dto.dashboard!.milestones).toEqual([]);
     expect(dto.dashboard!.nextMilestone).toBeNull();
     expect(dto.dashboard!.project!.title).toBe("Morning brief");
   });
 
-  it("degrades to no dashboard rather than failing the lesson", async () => {
-    // A dashboard is decoration around the thing the learner came for.
+  it("degrades to no project card — not no dashboard — when the project read fails", async () => {
+    // A broken project read must not cost the learner the progress bar and
+    // milestone list, which don't depend on it.
     mocks.getCurrentLearnerProject.mockRejectedValue(new Error("project read failed"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const dto = await getLessonDto(access({ projectSelection: PROJECT_SELECTION }), "l1");
+    const dto = await getLessonDto(
+      access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
+
+    expect(dto.dashboard).not.toBeNull();
+    expect(dto.dashboard!.project).toBeNull();
+    expect(dto.dashboard!.lessonsTotal).toBe(1);
+    expect(dto.dashboard!.milestones).toHaveLength(2);
+    warn.mockRestore();
+  });
+
+  it("degrades to no dashboard when the progress read itself fails", async () => {
+    // Unlike a broken project read, a broken blockProgress/milestoneProgress
+    // read leaves nothing to build a dashboard from at all. Only fails
+    // computeCourseProgress's course-wide read (`{enrollmentId}` alone) —
+    // getLessonDto's own per-lesson read (`{enrollmentId, lessonKey}`) must
+    // keep succeeding, or the whole lesson load fails, not just the dashboard.
+    mocks.blockProgressFindMany.mockImplementation((args: { where: { lessonKey?: string } }) => {
+      if (args.where.lessonKey) return Promise.resolve([]);
+      return Promise.reject(new Error("progress read failed"));
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const dto = await getLessonDto(
+      access({ progressPanel: PROGRESS_PANEL, projectSelection: PROJECT_SELECTION, outcome: OUTCOME }), "l1");
 
     expect(dto.dashboard).toBeNull();
     expect(dto.lesson.title).toBe("AI in a GSCM Day");

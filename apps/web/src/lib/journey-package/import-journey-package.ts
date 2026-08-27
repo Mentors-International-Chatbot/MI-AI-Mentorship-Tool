@@ -240,6 +240,7 @@ export async function importJourneyPackage(
     responseStyle: pkg.config.responseStyle,
     projectSelection: pkg.config.projectSelection,
     helpRequest: pkg.config.helpRequest,
+    progressPanel: pkg.config.progressPanel,
     onboarding: pkg.config.onboarding,
     trackedDimensions: pkg.config.trackedDimensions,
     alertRules: pkg.config.alertRules,

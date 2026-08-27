@@ -966,7 +966,16 @@ model AssessmentSession {
   // approach. attemptNumber is now computed per-enrollment (see
   // createAssessmentSession.ts), so a new enrollment's first attempt is
   // numbered 1 regardless of how many attempts a prior enrollment logged.
-  @@unique([enrollmentId, lessonKey, attemptNumber])
+  //
+  // blockId added (E.6.2): createAssessmentSession.ts computes attemptNumber
+  // scoped by (enrollmentId, lessonKey, blockId) — correctly, "this block's
+  // first attempt" — but this constraint only enforced (enrollmentId,
+  // lessonKey), one column short. Every course until ai-essentials-aug2026
+  // happened to have at most one reteach_gate teach_back per lesson, so the
+  // gap was invisible: two DIFFERENT reteach_gate blocks in the SAME lesson
+  // (b1-4 and b1-12) each computing their own legitimate "attempt 1" collided
+  // on this index the first time a real learner reached the second one.
+  @@unique([enrollmentId, lessonKey, blockId, attemptNumber])
   @@index([organizationId])
   @@index([socioId, status])
   @@index([enrollmentId])

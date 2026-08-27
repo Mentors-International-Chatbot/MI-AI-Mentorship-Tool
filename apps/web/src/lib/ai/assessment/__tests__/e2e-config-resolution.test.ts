@@ -17,6 +17,7 @@ import type { TenantRepo } from '@/lib/repo/tenantRepo.types';
 import { pbjPackage } from '@/lib/journey-package/examples/pbj-journey-package';
 import { journeyPackageSchema } from '@/lib/journey-package/journey-package.schema';
 import type { ProgramVersionConfig } from '@/lib/journey-package/program-version-config.schema';
+import { DEFAULT_RESPONSE_STYLE } from '@/lib/player/responseStyle';
 
 // Parse the PB&J package to get the validated config
 const validatedPbj = journeyPackageSchema.parse(pbjPackage);
@@ -168,6 +169,51 @@ describe('E2E: Config Resolution from Journey Package', () => {
     // Verify the teach_back block fields
     expect(configSnapshot.teachBackPrompt).toContain("Explain, in your own order");
     expect(configSnapshot.evaluatesConcepts).toHaveLength(2);
+  });
+
+  // PB&J's real config has no `responseStyle` (verified live: pbj-basics,
+  // published, hasResponseStyle: false) — the same gap ai-essentials-aug2026
+  // and skills-tool-calls each shipped and had to fix after the fact.
+  // Defaulting on here closes it for every course that doesn't opt out,
+  // rather than requiring each one to remember to opt in.
+  it('defaults responseStyle on for a course that has not configured one', async () => {
+    expect(pbjProgramConfig.responseStyle).toBeUndefined();
+
+    const { createAssessmentSession, getSessionConfig } = await import('../createAssessmentSession');
+    const ctx = createTenantContext('org-1');
+
+    const session = await createAssessmentSession({
+      ctx,
+      repo: mockRepo as TenantRepo,
+      socioId: 'socio-1',
+      lessonKey: 'assemble-the-sandwich',
+      blockId: 'b8-gated-teach-back',
+      channel: 'web',
+    });
+
+    const configSnapshot = getSessionConfig(session);
+    expect(configSnapshot.responseStyle).toEqual(DEFAULT_RESPONSE_STYLE);
+  });
+
+  it('preserves an explicitly configured responseStyle instead of defaulting', async () => {
+    const customStyle = { maxSentences: 5, maxOutputTokens: 300, markdown: 'none' as const };
+    const mockRepoWithStyle = createMockRepo(pbjLesson, { ...pbjProgramConfig, responseStyle: customStyle });
+
+    const { createAssessmentSession, getSessionConfig } = await import('../createAssessmentSession');
+    const ctx = createTenantContext('org-1');
+
+    const session = await createAssessmentSession({
+      ctx,
+      repo: mockRepoWithStyle as TenantRepo,
+      socioId: 'socio-1',
+      lessonKey: 'assemble-the-sandwich',
+      blockId: 'b8-gated-teach-back',
+      channel: 'web',
+    });
+
+    const configSnapshot = getSessionConfig(session);
+    expect(configSnapshot.responseStyle).toEqual(customStyle);
+    expect(configSnapshot.responseStyle).not.toEqual(DEFAULT_RESPONSE_STYLE);
   });
 
   it('createAssessmentSession merges block passingOverride correctly', async () => {

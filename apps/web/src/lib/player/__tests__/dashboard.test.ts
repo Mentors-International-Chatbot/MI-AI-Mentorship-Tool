@@ -148,6 +148,11 @@ describe("buildLessonDashboard — renders with a project", () => {
     expect(dashboard!.milestonesReached).toBe(3);
     expect(dashboard!.milestones).toHaveLength(5);
     expect(dashboard!.nextMilestone?.key).toBe("capstone-4");
+    // The whole-journey list: same data lessonsComplete/lessonsTotal already
+    // summarized, now exposed per-lesson, in course order, for the sidebar's
+    // full progress list rather than just the aggregate count.
+    expect(dashboard!.lessons).toEqual(lessons.map((l) => ({ lessonKey: l.lessonKey, title: l.title, complete: l.complete })));
+    expect(dashboard!.lessons.filter((l) => l.complete)).toHaveLength(3);
   });
 
   it("reports 0 of 5 for a learner who has just confirmed a project", () => {
@@ -204,41 +209,67 @@ describe("buildLessonDashboard — renders with a project", () => {
   });
 });
 
-describe("buildLessonDashboard — renders nothing without a project", () => {
-  it("returns null when the learner has no project row", () => {
-    expect(buildLessonDashboard({
+describe("buildLessonDashboard — renders progress with no project card, not null", () => {
+  // Progress + lessons are gated on having lesson data, independent of
+  // project state — a course opts the whole panel in or out via
+  // progressPanel.enabled (service.ts), not by whether a project exists.
+  // These used to return null entirely; now they return a real dashboard
+  // with `project: null`.
+  it("renders with project: null when the learner has no project row", () => {
+    const dashboard = buildLessonDashboard({
       project: null,
       milestones: milestones(0),
       lessons: LESSONS,
       graduated: false,
-    })).toBeNull();
+    });
+    expect(dashboard).not.toBeNull();
+    expect(dashboard!.project).toBeNull();
+    expect(dashboard!.lessonsTotal).toBe(5);
   });
 
-  it("returns null mid-setup, while the project is still DRAFT", () => {
+  it("renders with project: null mid-setup, while the project is still DRAFT", () => {
     // A DRAFT has no confirmed title; a card headed by a half-chosen name is
-    // worse than no card.
-    expect(buildLessonDashboard({
+    // worse than no card — but the rest of the panel still has something to
+    // show.
+    const dashboard = buildLessonDashboard({
       project: project({ status: "DRAFT", title: null }),
       milestones: milestones(0),
       lessons: LESSONS,
       graduated: false,
-    })).toBeNull();
+    });
+    expect(dashboard).not.toBeNull();
+    expect(dashboard!.project).toBeNull();
   });
 
-  it.each(["DRAFT", "CHANGED", "ABANDONED"])("returns null for a %s project", (status) => {
-    expect(buildLessonDashboard({
+  it.each(["DRAFT", "CHANGED", "ABANDONED"])("renders with project: null for a %s project", (status) => {
+    const dashboard = buildLessonDashboard({
       project: project({ status }),
       milestones: milestones(0),
       lessons: LESSONS,
       graduated: false,
-    })).toBeNull();
+    });
+    expect(dashboard).not.toBeNull();
+    expect(dashboard!.project).toBeNull();
   });
 
-  it("returns null for an ACTIVE project with no title", () => {
-    expect(buildLessonDashboard({
+  it("renders with project: null for an ACTIVE project with no title", () => {
+    const dashboard = buildLessonDashboard({
       project: project({ title: null }),
       milestones: milestones(0),
       lessons: LESSONS,
+      graduated: false,
+    });
+    expect(dashboard).not.toBeNull();
+    expect(dashboard!.project).toBeNull();
+  });
+});
+
+describe("buildLessonDashboard — the genuine null case", () => {
+  it("returns null when there is no project, no attempts data, and no lessons at all", () => {
+    expect(buildLessonDashboard({
+      project: null,
+      milestones: milestones(0),
+      lessons: [],
       graduated: false,
     })).toBeNull();
   });

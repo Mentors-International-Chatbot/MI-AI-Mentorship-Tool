@@ -29,6 +29,7 @@ import {
   responseStyleSchema,
   projectSelectionSchema,
   helpRequestSchema,
+  progressPanelSchema,
   outcomeSchema,
 } from "./journey-package.schema";
 
@@ -122,6 +123,14 @@ export const programVersionConfigSchema = z.object({
    */
   helpRequest: helpRequestSchema.optional(),
 
+  /**
+   * Lesson-sidebar progress panel (lesson completion, whole-course lesson
+   * list, milestones when `outcome` is also declared). Opt-in; absent means
+   * no panel and no layout change, matching every course's look before this
+   * field existed.
+   */
+  progressPanel: progressPanelSchema.optional(),
+
   /** Onboarding flow configuration. */
   onboarding: z
     .object({
@@ -193,6 +202,15 @@ export const programVersionConfigSchema = z.object({
       showScoreToLearner: z.boolean().optional().default(false),
       /** Normalized 0–1 score required to complete a web quiz. */
       webQuizPassingScore: z.number().min(0).max(1).optional().default(1),
+      /**
+       * Attempts before a web_quiz reveals correctAnswer/explanation and
+       * auto-completes regardless of score. Mirrors
+       * `journeyPackageSchema`'s `config.assessment.webQuizMaxAttempts` — see
+       * that field's doc for why 2. A block's own
+       * `assessment.webQuizMaxAttempts` (see `blockAssessmentOverrideSchema`)
+       * can override it per block.
+       */
+      webQuizMaxAttempts: z.number().int().positive().optional().default(2),
     })
     .optional(),
 

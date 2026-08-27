@@ -12,6 +12,8 @@ export type QuizQuestionDto = {
   format: "multiple_choice" | "short_answer" | "fill_in_blank" | "drag_to_order" | "matching";
   options?: string[];
   matchingPrompts?: Array<{ id: string; text: string }>;
+  /** fill_in_blank only. When present, replaces the free-text input with a click-to-select bank. */
+  wordBank?: string[];
   graded: boolean;
 };
 
@@ -78,6 +80,29 @@ export function QuizQuestionField({ blockId, question, answer, onChange }: {
         {option}
       </label>
     ));
+  }
+
+  // A word bank replaces the free-text input entirely rather than sitting
+  // alongside it: the point is that every submitted answer is one of these
+  // exact strings, so grading's normalized match always succeeds for a
+  // learner who picks correctly. Free text next to it would reopen the same
+  // paraphrase-marked-wrong gap for anyone who typed instead of clicked.
+  if (question.format === "fill_in_blank" && question.wordBank && question.wordBank.length > 0) {
+    return (
+      <div className="player-wordbank" role="group" aria-label={question.prompt}>
+        {question.wordBank.map((word) => (
+          <button
+            type="button"
+            key={word}
+            className={`player-chip${answer === word ? " is-selected" : ""}`}
+            aria-pressed={answer === word}
+            onClick={() => onChange(word)}
+          >
+            {word}
+          </button>
+        ))}
+      </div>
+    );
   }
 
   if (question.format === "short_answer" || question.format === "fill_in_blank") {

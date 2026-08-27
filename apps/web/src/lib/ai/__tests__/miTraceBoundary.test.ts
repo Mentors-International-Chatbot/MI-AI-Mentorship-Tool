@@ -143,7 +143,10 @@ describe("MI lesson-delivery trace boundary", () => {
       metadata: { delivery: { surface: "player", supportedChannels: ["web"] } },
       program: { organizationId: "org-1" },
     });
-    mocks.chatInvoke.mockResolvedValue({ content: "Ordinary answer to the learner." });
+    // Long enough to clear DEFAULT_RESPONSE_STYLE's character floor on the
+    // first attempt — this test is about the MI/player routing boundary, not
+    // the repair loop, so the fixture must not trigger one incidentally.
+    mocks.chatInvoke.mockResolvedValue({ content: "That's a common daily task, and it's worth looking at closely. Repeating the same steps by hand every day is exactly the kind of work worth automating first. Think about which part takes the most time so we can focus there." });
 
     const result = await generateAIResponse(
       { ...socio, channelType: "web", curriculumCollectionKey: "skills-tool-calls" },

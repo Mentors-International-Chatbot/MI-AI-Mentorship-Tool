@@ -15,9 +15,10 @@
 import type { TenantContext } from '@/lib/repo/tenantContext';
 import type { TenantRepo, AssessmentSession } from '@/lib/repo/tenantRepo.types';
 import type { ProgramVersionConfig } from '@/lib/journey-package/program-version-config.schema';
-import type { PackageLesson, LessonBlock, TrackedDimension, PassingConfig } from '@/lib/journey-package/journey-package.schema';
+import type { PackageLesson, LessonBlock, TrackedDimension, PassingConfig, ResponseStyle } from '@/lib/journey-package/journey-package.schema';
 import { resolveDelivery, type DeliveryConfig } from '@/lib/journey-package/delivery';
 import { mergeAssessmentConfig } from '@/lib/journey-package/mergeAssessmentConfig';
+import { DEFAULT_RESPONSE_STYLE } from '@/lib/player/responseStyle';
 import { createInitialSessionState } from './senseAssessmentTurn';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -89,6 +90,12 @@ export interface SessionConfigSnapshot {
   keyConcepts: string[];
   evaluatesConcepts: string[];
   lessonContext: string;
+  // Learner-visible generation limits for the probe conversation. Defaults
+  // ON (see DEFAULT_RESPONSE_STYLE) when the course config doesn't declare
+  // its own — every course that has shipped without one has needed it added
+  // back in after the fact. Absent on snapshots created before this field
+  // existed; getSessionConfig leaves those as-is rather than backfilling.
+  responseStyle?: ResponseStyle;
 }
 
 export class AssessmentConfigError extends Error {
@@ -251,6 +258,7 @@ function buildConfigSnapshot(
     keyConcepts: lesson.keyConcepts || [],
     evaluatesConcepts: teachBackBlock.evaluatesConcepts || [],
     lessonContext: `${lesson.title}: ${lesson.keyConcepts?.join('; ') || ''}`,
+    responseStyle: programConfig.responseStyle ?? DEFAULT_RESPONSE_STYLE,
   };
 }
 

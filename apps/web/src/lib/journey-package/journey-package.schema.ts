@@ -131,6 +131,25 @@ export const quizQuestionSchema = z
     prompt: z.string().min(1),
     format: z.enum(["multiple_choice", "short_answer", "fill_in_blank", "drag_to_order", "matching"]),
     options: z.array(z.string()).optional(),
+    /**
+     * fill_in_blank only. A learner picks from this list instead of typing
+     * free text, so an answer the grader sees is always one of these exact
+     * strings — the paraphrase-marked-wrong failure mode (a correct-in-spirit
+     * answer that free-text grading's normalized string match can never
+     * catch, since it only ever compares against the authored `answerKey`
+     * set) cannot occur by construction. Not `options`: that field is
+     * explicitly forbidden on fill_in_blank below, and reusing it would
+     * conflate "the choice list IS the question" (multiple_choice) with "an
+     * optional aid alongside the blank" (this).
+     *
+     * Optional and additive: a question with no `wordBank` renders the
+     * existing free-text input unchanged. Whether to include distractors
+     * (harder, closer to a real recall check) or only the accepted answer(s)
+     * (easier, closer to matching) is an authoring decision per question,
+     * not something this schema decides — either is valid as long as every
+     * accepted `answerKey` value is selectable (enforced below).
+     */
+    wordBank: z.array(z.string()).optional(),
     matchingPrompts: z.array(z.object({ id: key, text: z.string().min(1) })).optional(),
     answerKey: z.union([z.string(), z.array(z.string()), z.record(key, z.string())]).optional(),
     explanation: z.string().min(1).optional(),
@@ -181,6 +200,10 @@ export const quizQuestionSchema = z
       return options;
     };
 
+    if (q.format !== "fill_in_blank" && q.wordBank !== undefined) {
+      ctx.addIssue({ code: "custom", message: "wordBank is only valid on fill_in_blank questions", path: ["wordBank"] });
+    }
+
     if (q.format === "multiple_choice") {
       const options = requireUniqueOptions("multiple_choice");
       // Graded questions keep the original requirement, unconditionally. An
@@ -210,18 +233,32 @@ export const quizQuestionSchema = z
       if (q.matchingPrompts !== undefined) {
         ctx.addIssue({ code: "custom", message: "fill_in_blank questions must not declare matchingPrompts", path: ["matchingPrompts"] });
       }
+      const accepted = typeof q.answerKey === "string"
+        ? [q.answerKey]
+        : Array.isArray(q.answerKey) ? q.answerKey : [];
+      const normalizedAccepted = accepted.map(normalizeOption);
       if (q.graded) {
-        const accepted = typeof q.answerKey === "string"
-          ? [q.answerKey]
-          : Array.isArray(q.answerKey) ? q.answerKey : [];
-        const normalized = accepted.map(normalizeOption);
-        if (accepted.length === 0 || normalized.some((value) => value.length === 0)) {
+        if (accepted.length === 0 || normalizedAccepted.some((value) => value.length === 0)) {
           ctx.addIssue({ code: "custom", message: "fill_in_blank answerKey must declare at least one non-empty accepted answer", path: ["answerKey"] });
-        } else if (new Set(normalized).size !== normalized.length) {
+        } else if (new Set(normalizedAccepted).size !== normalizedAccepted.length) {
           ctx.addIssue({ code: "custom", message: "fill_in_blank accepted answers must be unique after Unicode and whitespace normalization", path: ["answerKey"] });
         }
       } else {
         requireNoAnswerKeyWhenUngraded();
+      }
+      if (q.wordBank !== undefined) {
+        const normalizedBank = q.wordBank.map(normalizeOption);
+        if (q.wordBank.length === 0 || normalizedBank.some((value) => value.length === 0)) {
+          ctx.addIssue({ code: "custom", message: "fill_in_blank wordBank must not be empty or contain blank entries", path: ["wordBank"] });
+        } else if (new Set(normalizedBank).size !== normalizedBank.length) {
+          ctx.addIssue({ code: "custom", message: "fill_in_blank wordBank entries must be unique after Unicode and whitespace normalization", path: ["wordBank"] });
+        } else if (q.graded && !normalizedAccepted.every((value) => normalizedBank.includes(value))) {
+          // Every accepted answer must be selectable, or a learner who knows
+          // the material correctly could never produce a gradeable-correct
+          // answer — the bank would be quietly stricter than free text, the
+          // opposite of the problem it exists to solve.
+          ctx.addIssue({ code: "custom", message: "fill_in_blank wordBank must include every accepted answerKey value", path: ["wordBank"] });
+        }
       }
       return;
     }
@@ -332,6 +369,15 @@ export const blockAssessmentOverrideSchema = z.object({
   passingOverride: passingSchema.partial().optional(),
   /** Normalized 0–1 score required to complete a web quiz. */
   webQuizPassingScore: z.number().min(0).max(1).optional(),
+  /**
+   * Attempts before a web_quiz reveals correctAnswer/explanation and
+   * auto-completes regardless of score — porting the plain quiz_checkpoint
+   * path's QUIZ_ATTEMPT_LIMIT pattern (service.ts), which web_quiz never had:
+   * that path has always had a 2-attempt cap with reveal-then-move-on;
+   * web_quiz has always retried indefinitely with no reveal until passed.
+   * Package-level default of 2 matches that existing precedent.
+   */
+  webQuizMaxAttempts: z.number().int().positive().optional(),
   allowRetake: z.boolean().optional(),
   showScoreToLearner: z.boolean().optional(),
 });
@@ -661,6 +707,15 @@ export const trackedDimensionSchema = z
 //
 // Mentor tooling that is not course-specific (AI sliders, alert flags) is not
 // a panel — it renders for every course.
+//
+// NAME COLLISION, not the same system: this is the MENTOR-facing dashboard
+// (src/app/dashboard/learners/[id]), config-driven panels read by mentors
+// about one participant. The LEARNER-facing lesson-sidebar dashboard
+// (PlayerDashboard.tsx / lib/player/dashboard.ts's `LessonDashboard`) is a
+// completely separate, code-driven system with no relationship to this
+// schema — it was investigated and ruled out as a home for player-surface
+// course progress precisely because of this same name. If you're building a
+// learner-facing panel, this is very likely not where it belongs.
 
 export const dashboardPanelSchema = z.discriminatedUnion("type", [
   /** Trend of one tracked dimension, read from that dimension's observations. */
@@ -831,6 +886,26 @@ export const helpRequestSchema = z.object({
 
 export type HelpRequestConfig = z.infer<typeof helpRequestSchema>;
 
+/**
+ * The lesson player's right-rail progress sidebar (lesson completion, the
+ * whole-course lesson list, and — when the course also declares `outcome`
+ * — the milestone list and capstone link). Opt-in, deliberately: this panel
+ * used to piggyback on `projectSelection` (a genuinely unrelated feature,
+ * the AI-guided project-selection conversation) as its gate, which meant no
+ * course could ever get lesson-progress visibility without also taking on
+ * project selection's mandatory pre-course conversation and 403 gate. Now
+ * decoupled, but PB&J and skills-tool-calls are live courses that have never
+ * shown this panel — defaulting it on for them would be a production
+ * behavior and layout change (single-column to two-column) nobody asked for
+ * on those courses. Absent config means no panel, matching today's look for
+ * every course that doesn't explicitly turn it on.
+ */
+export const progressPanelSchema = z.object({
+  enabled: z.boolean(),
+});
+
+export type ProgressPanelConfig = z.infer<typeof progressPanelSchema>;
+
 // ── Config (-> ProgramVersion.config) ────────────────────────────────────────
 
 export const configSchema = z.object({
@@ -850,6 +925,8 @@ export const configSchema = z.object({
   projectSelection: projectSelectionSchema.optional(),
   /** Learner-initiated "request help from a human". Omission leaves it off. */
   helpRequest: helpRequestSchema.optional(),
+  /** Lesson-sidebar progress panel. Omission leaves it off — see progressPanelSchema's doc. */
+  progressPanel: progressPanelSchema.optional(),
   onboarding: z
     .object({
       mode: z.enum(["survey", "baseline_quiz", "skip"]),
@@ -910,6 +987,13 @@ export const configSchema = z.object({
       showScoreToLearner: z.boolean().optional().default(false),
       /** Package default for web quizzes; block assessment may override it. */
       webQuizPassingScore: z.number().min(0).max(1).optional().default(1),
+      /**
+       * Package default for web_quiz's attempt cap; block assessment may
+       * override it. See blockAssessmentOverrideSchema's webQuizMaxAttempts
+       * doc for why 2 — it matches the plain quiz_checkpoint path's existing
+       * QUIZ_ATTEMPT_LIMIT precedent, not an arbitrary choice.
+       */
+      webQuizMaxAttempts: z.number().int().positive().optional().default(2),
     })
     .optional(),
   /**

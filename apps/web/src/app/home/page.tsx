@@ -20,6 +20,19 @@ export default async function HomePage() {
     // territory) — this is deliberately the simplest possible list, not a
     // designed page. Ugly is acceptable here; silently picking one course
     // and hiding the other enrollment is not.
+    //
+    // BLOCKER before building the real picker (see D15,
+    // docs/Platform_Restructure_Plan_v1.2.md): LessonProgress
+    // (@@unique([socioId, lessonNumber])) and SocioDimensionState
+    // (@@unique([socioId, dimensionKey])) are not course-scoped. A learner
+    // with two ACTIVE enrollments — exactly what this page exists to show —
+    // will silently collide/merge lesson-number and dimension-state rows
+    // across their two courses via upsert, no error, just wrong data. This
+    // stub never triggers it (nothing here writes progress); a real
+    // course-picker built on top of it is the first thing that would put a
+    // real learner into the state that does. Widen both constraints to
+    // include a course/enrollment dimension before designing this page for
+    // real.
     return (
       <ul>
         {resolution.courses.map((course) => (

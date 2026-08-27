@@ -22,6 +22,14 @@
  * That inverts once the sequential (`after_milestone`) set lands, where reaching
  * a milestone is a conversation with the mentor rather than a side effect of
  * finishing pages. When it does, this is the comment that should change first.
+ *
+ * ── NAME COLLISION, not the same system ──────────────────────────────────
+ * `dashboardPanelSchema` (journey-package.schema.ts) is a different, unrelated
+ * "dashboard": mentor-facing, config-driven panels rendered on
+ * src/app/dashboard/learners/[id] for mentors reviewing one participant. This
+ * file is the learner-facing lesson sidebar, code-driven, with no
+ * relationship to that schema. Confirmed by direct investigation (course-wide
+ * progress panel, Aug 2026) before extending this file — don't rediscover it.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -82,6 +90,13 @@ export type LessonDashboard = {
    */
   lessonsComplete: number;
   lessonsTotal: number;
+  /**
+   * The whole course journey, in course order — every lesson this course
+   * declares, not just the current one. `buildLessonDashboard` already
+   * computed this for `lessonsComplete`/`lessonsTotal` above; this is the
+   * same list, not a second read.
+   */
+  lessons: Array<{ lessonKey: string; title: string; complete: boolean }>;
   /** Secondary structure. Empty when the course declares no outcome. */
   milestones: DashboardMilestone[];
   milestonesReached: number;
@@ -138,17 +153,15 @@ export function selectNextMilestone(
  * return condition its final shape now, so the stage that adds real attempts
  * data only has to fill this function in, not touch the condition again.
  *
- * Two things this stage deliberately leaves as open, deferred questions
- * rather than deciding them here: whether unblocking `skills-tool-calls` (the
- * one course with real quiz_checkpoint usage, and the reason this exists)
- * also requires opening `service.ts`'s outer `!access.config.projectSelection`
- * gate — this function is never reached for that course today, since that
- * gate runs first and returns null before `buildLessonDashboard` is called at
- * all; and what "milestone data" should precisely mean if it's ever added as
- * a second trigger alongside this one — the existing test fixtures prove
- * "milestones array is non-empty" is not it (a lesson-gated course reports 5
- * milestone entries at zero progress, and those are exactly the cases the
- * "no project" tests pin to null).
+ * One thing this stage deliberately leaves as an open, deferred question
+ * rather than deciding it here: what "attempts data" should precisely mean
+ * if it's ever wired in for `skills-tool-calls` (the one course with real
+ * quiz_checkpoint usage, and the reason this exists) — the existing test
+ * fixtures prove "milestones array is non-empty" is not it (a lesson-gated
+ * course reports 5 milestone entries at zero progress, and those are exactly
+ * the cases the "no project" tests pin to no project card). Whether that
+ * course's config also turns on `progressPanel` is a separate, later
+ * decision — this stub is not what's gating it today.
  */
 function hasAttemptsData(): boolean {
   return false;
@@ -157,14 +170,16 @@ function hasAttemptsData(): boolean {
 /**
  * Assembles the dashboard, or returns null when it must not render at all.
  *
- * Null is the whole compatibility story. A course with no `projectSelection`
- * never gets a project row, so MI and PB&J fall out here (via the caller's own
- * gate, before this function is even reached) and their players are
- * byte-identical to before. A learner mid-setup is null too: a DRAFT project
- * has no confirmed title, and a card headed by a half-chosen name is worse than
- * no card. Renders without a project only if something else has content
- * (`hasAttemptsData`) — today that's never true, so this is a no-op change in
- * behavior, not in shape.
+ * Null is the whole compatibility story, now for a course that opts the panel
+ * out entirely: the caller's own `progressPanel.enabled` gate keeps this
+ * function from ever being reached for a course that hasn't turned it on
+ * (PB&J and skills-tool-calls today), same "byte-identical to before" property
+ * this used to get from the `projectSelection` gate. For a course that HAS
+ * turned it on, this now renders on lesson data alone — a project (or
+ * `hasAttemptsData`) is what additionally unlocks the project card, not a
+ * precondition for the panel existing at all. A learner mid-setup still gets
+ * no project card: a DRAFT project has no confirmed title, and a card headed
+ * by a half-chosen name is worse than no card.
  */
 export function buildLessonDashboard(input: {
   project: DashboardProjectInput | null;
@@ -180,7 +195,7 @@ export function buildLessonDashboard(input: {
   const projectSection = project && project.status === "ACTIVE" && project.title
     ? { title: project.title, oneLiner: project.oneLiner, context: project.context }
     : null;
-  if (!projectSection && !hasAttemptsData()) return null;
+  if (!projectSection && !hasAttemptsData() && input.lessons.length === 0) return null;
 
   const lessonTitles = new Map(input.lessons.map((lesson) => [lesson.lessonKey, lesson.title]));
 
@@ -188,6 +203,11 @@ export function buildLessonDashboard(input: {
     project: projectSection,
     lessonsComplete: input.lessons.filter((lesson) => lesson.complete).length,
     lessonsTotal: input.lessons.length,
+    lessons: input.lessons.map((lesson) => ({
+      lessonKey: lesson.lessonKey,
+      title: lesson.title,
+      complete: lesson.complete,
+    })),
     milestones: input.milestones.map((milestone) => ({
       key: milestone.key,
       name: milestone.name,

@@ -17,7 +17,7 @@ import { tenantRepo, createTenantContext } from "../src/lib/repo";
 const PHONE = "+10000000002";
 const PASSWORD = "runthrough-2026";
 const ORG_SLUG = "ai-essentials-verification";
-const PROGRAM_VERSION_ID = "969dfa52-58d8-4f01-96b7-2346cedfbdee";
+const PROGRAM_VERSION_ID = "4b315eb2-a065-4e3c-be17-ea50243e8478";
 
 async function main() {
   const org = await prisma.organization.findUnique({ where: { slug: ORG_SLUG } });

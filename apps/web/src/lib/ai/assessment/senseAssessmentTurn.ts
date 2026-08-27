@@ -13,7 +13,7 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
 import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
-import { applySensedToState } from '@/lib/ai/sensing/updateDimensionState';
+import { calculateTrend } from '@/lib/ai/sensing/updateDimensionState';
 import { isTrivialMessage } from '@/lib/ai/sensing/triviality';
 import type { DimensionStateMap, SensedDimension } from '@/lib/ai/sensing/types';
 import type { TrackedDimension } from '@/lib/journey-package/journey-package.schema';
@@ -224,6 +224,57 @@ function getDefaultAssessmentDimensions(dimensions: TrackedDimension[]): SensedD
  *
  * ANTI-CHEAT: priorState comes from session.liveState, NOT global SocioDimensionState.
  */
+/**
+ * Assessment-specific aggregation — deliberately NOT
+ * calculateNewLevel/DIMENSION_SMOOTHING from updateDimensionState.ts.
+ *
+ * That EMA is tuned for general chat sensing across a long relationship,
+ * where slow convergence guards against one-off noise. A reteach-gate
+ * conversation is 2-5 turns against a hard 0-10 pass/fail threshold, and
+ * DIMENSION_SMOOTHING=0.3 caps even a maximally-confident turn at moving the
+ * composite 30% of the way to the observed value — a first answer the model
+ * itself scores 9 at confidence 0.9 (exactly what buildAssessmentSensingPrompt's
+ * "score it fully and report HIGH confidence" instruction asks for on a clear
+ * early answer) only ever registered ~2.7. Confirmed against live sessions:
+ * scores clustered in 4.3-7.5 regardless of subject matter or answer quality,
+ * with the same near-miss shape (b1-12 sessions landing at 6.20 and 6.41
+ * against a 7.0 threshold) independent of how strong the actual explanation
+ * was — a mathematical ceiling effect, not a grading-leniency problem (see
+ * the prompt above, already generous).
+ *
+ * Here the model's own reported confidence IS the EMA weight, with no
+ * separate base multiplier discounting it further: a turn the model is
+ * genuinely confident about moves the composite (nearly) all the way to what
+ * it observed; a genuinely thin/uncertain turn — which the prompt's own
+ * TIMING guidance already tells the model to report at confidence ≤0.5 —
+ * still moves it only a little. Same protection against one weak answer
+ * settling the outcome, just without a fixed 0.3 ceiling sitting on top of a
+ * confidence signal the prompt is already carefully calibrating.
+ */
+function applyAssessmentSensedToState(
+  prior: DimensionStateMap,
+  sensed: SensedDimension[],
+): DimensionStateMap {
+  const updated: DimensionStateMap = { ...prior };
+  const now = new Date();
+  for (const s of sensed) {
+    const priorDimensionState = prior[s.dimensionKey];
+    const priorLevel = priorDimensionState?.level ?? null;
+    const newLevel = priorLevel === null
+      ? s.level
+      : Math.max(0, Math.min(10, priorLevel + s.confidence * (s.level - priorLevel)));
+    updated[s.dimensionKey] = {
+      dimensionKey: s.dimensionKey,
+      level: newLevel,
+      trend: calculateTrend(s.dimensionKey, newLevel, priorLevel),
+      confidence: s.confidence,
+      evidence: s.evidence,
+      updatedAt: now,
+    };
+  }
+  return updated;
+}
+
 export async function senseAssessmentTurn(params: {
   studentText: string;
   priorState: DimensionStateMap;
@@ -308,8 +359,9 @@ export async function senseAssessmentTurn(params: {
       fullSensed.map((d) => `${d.dimensionKey}=${d.level}@${d.confidence}`).join(' '),
     );
 
-    // Apply the pure EMA function to get new state
-    return applySensedToState(priorState, fullSensed);
+    // Assessment-specific aggregation — see applyAssessmentSensedToState's
+    // doc comment for why this isn't the general updateDimensionState.ts EMA.
+    return applyAssessmentSensedToState(priorState, fullSensed);
   } catch (error) {
     console.error('[AssessmentSensing] LLM call failed:', error);
     // Return prior state unchanged on failure

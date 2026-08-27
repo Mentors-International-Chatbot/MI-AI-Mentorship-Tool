@@ -97,6 +97,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       showScoreToLearner: configSnapshot.showScoreToLearner,
       onMaxTurnsPolicy: configSnapshot.onMaxTurnsWithoutPass,
       dimensions: configSnapshot.trackedDimensions,
+      responseStyle: configSnapshot.responseStyle,
     };
 
     // ─── Store student message ──────────────────────────────────────────────

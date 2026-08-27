@@ -71,7 +71,16 @@
 .player-dash-count strong { font-size: 1.6rem; font-family: Georgia, serif; }
 .player-dash-bar { height: 8px; border-radius: 99px; background: #d6e4e1; overflow: hidden; }
 .player-dash-bar span { display: block; height: 100%; background: var(--player-accent); transition: width .25s ease; }
+.player-dash-progress-link { display: inline-block; text-decoration: none; }
+.player-dash-progress-link:hover .player-eyebrow, .player-dash-progress-link:focus-visible .player-eyebrow { color: var(--player-accent); }
 .player-dash-sub { color: var(--player-muted); font-size: .8rem; font-weight: 700; margin: .9rem 0 .4rem; }
+.player-dash-lessons { list-style: none; margin: .9rem 0 0; padding: 0 0 .8rem; display: grid; gap: .35rem; border-bottom: 1px solid var(--player-line); }
+.player-dash-ls { display: grid; grid-template-columns: 1.1rem 1fr; gap: .5rem; font-size: .85rem; line-height: 1.35; color: var(--player-muted); }
+.player-dash-ls-mark { color: var(--player-muted); font-weight: 800; }
+.player-dash-ls.is-complete { color: var(--player-ink); }
+.player-dash-ls.is-complete .player-dash-ls-mark { color: var(--player-accent); }
+.player-dash-ls.is-current { font-weight: 750; color: var(--player-ink); }
+.player-dash-ls.is-current .player-dash-ls-mark { color: var(--player-accent); }
 .player-dash-milestones { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
 .player-dash-ms { display: grid; grid-template-columns: 1.1rem 1fr; gap: .5rem; font-size: .85rem; line-height: 1.35; }
 .player-dash-ms-mark { color: var(--player-muted); font-weight: 800; }
@@ -104,6 +113,10 @@
 .player-bounded-input button { justify-self: start; }
 .player-bounded-short-answer { width: 100%; border: 1px solid #bcccdc; border-radius: 10px; padding: .75rem .85rem; font: inherit; }
 .player-bounded-short-answer.is-fill { border-style: dashed; }
+.player-wordbank { display: flex; flex-wrap: wrap; gap: .4rem; }
+.player-wordbank .player-chip { margin-top: 0; background: #f4f8f7; color: var(--player-ink); border: 1px solid var(--player-line); font-weight: 700; }
+.player-wordbank .player-chip:hover:enabled { border-color: var(--player-accent); }
+.player-wordbank .player-chip.is-selected { background: #e8f5f1; color: var(--player-accent); border-color: var(--player-accent); }
 .player-matching-grid { display: grid; gap: .8rem; }
 .player-matching-grid label { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 1.4fr); gap: 1rem; align-items: center; }
 .player-matching-grid label > span { font-weight: 700; }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { playerFetch } from "@/lib/player/client";
 import { BoundedAssessmentContainer, type BoundedAssessmentPhase } from "./BoundedAssessmentContainer";
 
@@ -67,6 +67,19 @@ export function ReteachGateExperience({
     passed: true,
     message: "Your conversation is complete.",
   } : null);
+
+  /**
+   * `.player-bounded-conversation` is its own fixed-height (420px) scrollbox,
+   * separate from the page — the page-level scroll LessonPlayer's `bottomRef`
+   * handles doesn't reach in here. Without this, a new turn renders below the
+   * fold of that box and the learner has to notice and scroll manually.
+   */
+  const conversationRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = conversationRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages.length]);
 
   async function enter() {
     setBusy(true);
@@ -200,7 +213,7 @@ export function ReteachGateExperience({
     >
       {phase === "active" && (
         <>
-          <div className="player-bounded-conversation" aria-label="Assessment conversation">
+          <div className="player-bounded-conversation" aria-label="Assessment conversation" ref={conversationRef}>
             {messages.map((message) => (
               <div key={message.id} className={`player-message ${message.role === "user" ? "learner" : ""}`}>
                 <strong>{message.role === "user" ? "You" : "AI Mentor"}</strong>

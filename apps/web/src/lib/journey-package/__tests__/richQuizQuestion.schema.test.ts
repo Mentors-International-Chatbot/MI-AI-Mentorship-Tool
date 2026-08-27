@@ -29,6 +29,48 @@ describe("rich quiz question schema", () => {
     expect(JSON.stringify(result.error?.issues)).toContain("accepted answers must be unique");
   });
 
+  it("accepts a fill_in_blank question with a word bank that covers every accepted answer", () => {
+    const result = quizQuestionSchema.safeParse({ ...fill, wordBank: ["token", "word", "sentence", "letter"] });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a word bank with no distractors — just the accepted answer(s)", () => {
+    const result = quizQuestionSchema.safeParse({
+      id: "fill2", prompt: "Complete it: ___.", format: "fill_in_blank" as const,
+      answerKey: "Gyms", explanation: "Gyms.", wordBank: ["Gyms"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a word bank missing one of the accepted answers", () => {
+    const result = quizQuestionSchema.safeParse({ ...fill, wordBank: ["sentence", "letter"] });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toContain("must include every accepted answerKey value");
+  });
+
+  it("rejects duplicate word bank entries after normalization", () => {
+    const result = quizQuestionSchema.safeParse({ ...fill, wordBank: ["token", "word", "Token"] });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toContain("wordBank entries must be unique");
+  });
+
+  it("rejects an empty word bank", () => {
+    const result = quizQuestionSchema.safeParse({ ...fill, wordBank: [] });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toContain("must not be empty");
+  });
+
+  it("rejects a word bank on any format other than fill_in_blank", () => {
+    const result = quizQuestionSchema.safeParse({ ...order, wordBank: ["Check", "Send"] });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toContain("only valid on fill_in_blank");
+  });
+
+  it("still allows a fill_in_blank question with no word bank — the free-text fallback", () => {
+    expect(quizQuestionSchema.safeParse(fill).success).toBe(true);
+    expect(quizQuestionSchema.parse(fill)).not.toHaveProperty("wordBank");
+  });
+
   it("requires a complete drag permutation", () => {
     const result = quizQuestionSchema.safeParse({ ...order, answerKey: ["Collect", "Collect", "Send"] });
     expect(result.success).toBe(false);

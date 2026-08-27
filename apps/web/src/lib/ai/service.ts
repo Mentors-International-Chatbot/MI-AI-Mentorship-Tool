@@ -50,6 +50,7 @@ import {
     buildResponseStyleRepairInstruction,
     responseStyleViolations,
     resolvePlayerMaxTokens,
+    DEFAULT_RESPONSE_STYLE,
 } from '@/lib/player/responseStyle';
 import { assembleOrderedModelMessages } from '@/lib/ai/modelMessages';
 
@@ -74,7 +75,8 @@ import { assembleOrderedModelMessages } from '@/lib/ai/modelMessages';
  */
 const AI_TIMEOUT_MS = 12000;
 const MAX_STYLE_REPAIRS = 1;
-const PLAYER_REPAIR_SYSTEM_PROMPT = "You are a precise copy editor. Preserve the draft's meaning and system markers; change only what the stated output contract requires.";
+/** Exported so other styled-response callers (e.g. runAssessmentTurn.ts's probe path) can trace repair-stage calls under the same prompt text this file uses. */
+export const PLAYER_REPAIR_SYSTEM_PROMPT = "You are a precise copy editor. Preserve the draft's meaning and system markers; change only what the stated output contract requires.";
 
 type BufferedInvokeResponse = { content: unknown; response_metadata?: unknown };
 type BufferedMessages = (SystemMessage | HumanMessage | AIMessage)[];
@@ -536,7 +538,15 @@ export async function generateAIResponse(
         }
         chatDelivery = { ...delivery, surface: 'chat' };
     }
-    const responseStyle = parsedPlayerConfig?.success ? parsedPlayerConfig.data.responseStyle : undefined;
+    // Every course that has ever shipped without an explicit `responseStyle`
+    // has needed one added back in after the fact (ai-essentials-aug2026's
+    // launch, skills-tool-calls, the b1-12 reteach-gate probe) — defaulting
+    // on removes that as something a course package has to remember. Scoped
+    // to `playerTurn`: MI never sets one, so this branch (and therefore the
+    // default) never applies to it regardless of what falls out below.
+    const responseStyle = playerTurn
+        ? (parsedPlayerConfig?.success ? parsedPlayerConfig.data.responseStyle : undefined) ?? DEFAULT_RESPONSE_STYLE
+        : undefined;
     const playerMetadata = playerConfig?.metadata && typeof playerConfig.metadata === 'object' && !Array.isArray(playerConfig.metadata)
         ? playerConfig.metadata as Record<string, unknown> : {};
     const playerIdentity = playerMetadata.identity && typeof playerMetadata.identity === 'object' && !Array.isArray(playerMetadata.identity)
@@ -545,8 +555,9 @@ export async function generateAIResponse(
     const expanded = playerTurn?.context.intent === 'expand';
     const maxTokens = resolvePlayerMaxTokens(responseStyle, expanded);
     // Styled player replies are constrained coaching, not creative writing.
-    // Lower variance improves adherence to the verified lesson and intent while
-    // leaving MI, PB&J, sensing, and every unconfigured path unchanged.
+    // Lower variance improves adherence to the verified lesson and intent.
+    // MI (never sets playerTurn) is untouched; PB&J now gets the default style
+    // above instead of the unconfigured path it ran on before.
     const chat = createOpenRouterChat({
         temperature: responseStyle ? 0.3 : 0.7,
         ...(maxTokens ? { maxTokens } : {}),

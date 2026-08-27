@@ -1,6 +1,24 @@
 import type { ResponseStyle } from "@/lib/journey-package/journey-package.schema";
 import { deliveredTextMetrics } from "@/lib/player/telemetryMetrics";
 
+/**
+ * Applied wherever a course's config has no `responseStyle` of its own — see
+ * the two `?? DEFAULT_RESPONSE_STYLE` call sites (service.ts's player-turn
+ * config read, createAssessmentSession.ts's config snapshot). Every course
+ * that has ever shipped without an explicit `responseStyle` has needed one
+ * fixed in after the fact (ai-essentials-aug2026's launch, skills-tool-calls,
+ * and the b1-12 reteach-gate probe finding) — nobody has wanted an
+ * unconstrained tutor. Values match what those courses converged on
+ * independently.
+ */
+export const DEFAULT_RESPONSE_STYLE: ResponseStyle = {
+  maxSentences: 3,
+  maxOutputTokens: 240,
+  markdown: "none",
+  maxQuestions: 1,
+  expanded: { maxSentences: 6, maxOutputTokens: 480 },
+};
+
 export type ResponseStyleViolation =
   | "sentence_limit"
   | "sentence_word_limit"

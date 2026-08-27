@@ -53,7 +53,26 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
     title: "AI Essentials",
     description: "A five-lesson course on working with AI well: what it can do, how it works, how to use it right, how to choose a model, and how to build a real tool with it.",
     languages: ["en"],
-    version: "2026.8",
+    // Bumped from "2026.8": importJourneyPackage refuses to re-import over a
+    // published/non-draft ProgramVersion (immutability guarantee in
+    // import-journey-package.ts) — the l1q4/l1q5 fill_in_blank fix needed a
+    // new version string to actually reach the DB.
+    // Bumped again from "2026.8.1" for the same reason: b2-6's real video URL.
+    // Bumped again from "2026.8.2": capstone project.description framing
+    // ("you'll unlock this as you learn it").
+    // Bumped again from "2026.8.3": progressPanel.enabled — opts this course
+    // into the decoupled lesson-sidebar progress panel.
+    // Bumped again from "2026.8.4": that version published before
+    // import-journey-package.ts's explicit config field list actually
+    // included progressPanel, so it validated but never reached the DB.
+    // Bumped again from "2026.8.5": l1q4/l1q5 moved back to fill_in_blank
+    // with a word bank, now that the bank exists to fix the underlying
+    // grading-strictness problem the multiple_choice workaround sidestepped.
+    // Bumped again from "2026.8.6": web_quiz now caps at the default
+    // webQuizMaxAttempts (2) instead of retrying indefinitely — affects all
+    // five web_quiz blocks (b1-10, b2-8, b3-10, b4-13, b5-8), none of which
+    // override it.
+    version: "2026.8.7",
     author: { name: "Sam", organizationKey: "mentors-international" },
     delivery: { surface: "player", supportedChannels: ["web"] },
     // Block 0.1: authored verbatim, delivered as the thread's first item,
@@ -90,6 +109,11 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
       maxQuestions: 1,
       expanded: { maxSentences: 6, maxOutputTokens: 480 },
     },
+    // Lesson-sidebar progress panel (lesson completion, whole-course lesson
+    // list, milestones + capstone link — the last two follow from `outcome`
+    // below, not from this flag). Opt-in per course; PB&J and
+    // skills-tool-calls don't set this yet.
+    progressPanel: { enabled: true },
     // Block 0.3. Diagnostic-only for now — the 7-question survey (0.2) is
     // deferred to E.3.5; `mode` stays "baseline_quiz" so the existing,
     // working diagnostic gate runs. Once E.3.5 ships a sequencing mechanism,
@@ -328,8 +352,26 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
               { id: "l1q1", format: "multiple_choice", graded: true, dimensionKey: "comprehension", prompt: "What makes this industrial revolution different in scope from the previous three?", options: ["It happened faster than the others", "It targets cognitive work, not just physical/manual work", "It only affects one country", "It doesn't create any new jobs"], answerKey: "It targets cognitive work, not just physical/manual work", explanation: "Previous revolutions automated physical/manual labor; this one targets cognitive workers — the people previously considered safe because they were educated." },
               { id: "l1q2", format: "multiple_choice", graded: true, dimensionKey: "comprehension", prompt: "What does Jevons Paradox predict?", options: ["Efficiency gains always reduce total consumption", "Rising efficiency often makes total consumption rise even faster", "AI will have no economic effect", "Only physical goods are subject to it"], answerKey: "Rising efficiency often makes total consumption rise even faster", explanation: "As something gets cheaper/more efficient to produce, demand for it often rises faster than the efficiency gain — total consumption goes up, not down." },
               { id: "l1q3", format: "multiple_choice", graded: true, dimensionKey: "comprehension", prompt: "Which category of work is most exposed by this revolution, per the lesson?", options: ["Manual labor", "Cognitive knowledge work", "Agricultural work", "Skilled trades requiring physical dexterity"], answerKey: "Cognitive knowledge work", explanation: "This revolution targets cognitive workers — analysts, writers, coders, marketers, consultants." },
-              { id: "l1q4", format: "fill_in_blank", graded: true, dimensionKey: "comprehension", prompt: "Complete the atrophy analogy: physical labor-saving → physical atrophy → the ____.", answerKey: ["gym", "gyms"], explanation: "Physical labor-saving led to physical atrophy, which is why gyms became popular." },
-              { id: "l1q5", format: "fill_in_blank", graded: true, dimensionKey: "comprehension", prompt: "Complete the parallel: mental labor-saving → mental atrophy → ____.", answerKey: ["unknown", "an open question", "we don't know yet"], explanation: "This is deliberately left open in the lesson — there's no settled answer yet for what mental atrophy leads to." },
+              // Moved back to fill_in_blank now that a word bank exists
+              // (QuizQuestionField.tsx / journey-package.schema.ts's
+              // `wordBank`). These were originally fill_in_blank; a
+              // correct-in-spirit paraphrase ("gyms became popular") was
+              // graded wrong because gradeQuizQuestion's fill_in_blank branch
+              // only normalizes and compares against the literal answerKey
+              // strings — no room for a learner restating the idea in their
+              // own words. That was worked around by converting to
+              // multiple_choice, which sidesteps free-text grading entirely
+              // rather than fixing the underlying match. A word bank fixes it
+              // at the root instead: the learner picks rather than types, so
+              // the submitted answer is always one of these exact strings —
+              // paraphrase mismatch cannot occur — while the question still
+              // reads and behaves as a completion, not a multiple-choice pick
+              // among four unrelated distractors.
+              { id: "l1q4", format: "fill_in_blank", graded: true, dimensionKey: "comprehension", prompt: "Complete the atrophy analogy: physical labor-saving → physical atrophy → ____.", answerKey: "Gyms", wordBank: ["Gyms", "Home cooking", "Public transit", "Reading"], explanation: "Physical labor-saving led to physical atrophy, which is why gyms became popular." },
+              // Shortened from the original multiple_choice option's full
+              // sentence to a blank-shaped phrase — a word bank chip reading
+              // a whole sentence doesn't read as completing "____."
+              { id: "l1q5", format: "fill_in_blank", graded: true, dimensionKey: "comprehension", prompt: "Complete the parallel: mental labor-saving → mental atrophy → ____.", answerKey: "no settled answer yet", wordBank: ["no settled answer yet", "complete loss of critical thinking", "widespread laziness", "a return to physical labor"], explanation: "This is deliberately left open in the lesson — there's no settled answer yet for what mental atrophy leads to." },
               {
                 id: "l1q6", format: "matching", graded: true, dimensionKey: "comprehension",
                 prompt: "Match each revolution to the work it primarily displaced.",
@@ -398,12 +440,9 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
             id: "b2-6", order: 6, blockType: "resource",
             resource: {
               type: "weblink",
-              // TBD per the doc — "specific link TBD; 3Blue1Brown's neural
-              // network series is the strongest candidate." Not invented per
-              // instruction #10. See reports/e5-authoring-findings.md.
-              url: "https://TODO-see-e5-findings-report.example/2.6-neural-network-video",
-              label: "TBD — a visual walkthrough of neural network training",
-              description: "Placeholder. Doc's candidate: 3Blue1Brown's neural network series. Needs a real URL before this course ships.",
+              url: "https://youtu.be/LPZh9BOjkQs",
+              label: "3Blue1Brown: Large Language Models explained briefly",
+              description: "A visual walkthrough of how LLMs actually work — ties directly into the training-loop and pattern-detection ideas from this lesson.",
             },
           },
           {
@@ -835,7 +874,7 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
   outcome: {
     project: {
       title: "A working AI tool for a real business process",
-      description: "A working AI tool, built across the course's five milestones, that automates part of a real business process the learner chose in Lesson 1.",
+      description: "A working AI tool, built across the course's five milestones, that automates part of a real business process the learner chose in Lesson 1. Each milestone unlocks on its own as you finish the lesson that teaches it — a locked milestone just means that part of the course is still ahead of you, not that anything is being held back.",
       deliverables: [
         { name: "Final write-up", description: "What was built, how, what it does, how it applies the course, and what's next." },
       ],

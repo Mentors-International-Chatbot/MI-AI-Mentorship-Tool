@@ -257,6 +257,84 @@ describe('Prompt-Leak Prevention', () => {
       expect(prompt).toContain('HIDDEN RUBRIC');
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Regression coverage for the b1-12 live-conversation finding: the probe
+  // told a student "You are [done]" while the server-side gate had not
+  // cleared (comprehension 6.2 vs. threshold 7). This is only ever a prompt
+  // problem, not a data-flow one — see runAssessmentTurn's "Terminal Outcome
+  // Discards The Probe" test below for why the probe text can carry this
+  // constraint on its own, with no need to thread the sensed result into it.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('buildAssessmentPrompt: status-question honesty', () => {
+    const baseParams = {
+      teachBackPrompt: 'Explain what you learned about budgeting.',
+      keyConcepts: ['income tracking', 'expense categories', 'savings goals'],
+      evaluatesConcepts: ['income tracking', 'savings goals'],
+      aiBehavior: { tone: 'Warm', languageInstruction: 'Respond in Spanish' },
+      liveState: {},
+      turnCount: 1,
+      maxTurns: 12,
+      minTurns: 2,
+    };
+
+    it('instructs the evaluator that a status question always gets "not yet" here', () => {
+      const prompt = buildAssessmentPrompt(baseParams);
+
+      expect(prompt).toContain('STATUS QUESTIONS');
+      expect(prompt).toContain('the check has NOT concluded');
+      expect(prompt).toContain('true answer is always "not yet,"');
+    });
+
+    it('forbids guessing status from conversational tone', () => {
+      const prompt = buildAssessmentPrompt(baseParams);
+
+      expect(prompt).toContain('Do not guess, hedge, or imply');
+      expect(prompt).toContain('regardless of how well the conversation has');
+    });
+
+    it('requires the probe to keep asking even after answering a status question', () => {
+      const prompt = buildAssessmentPrompt(baseParams);
+
+      expect(prompt).toContain('A status question is not\n  a reason to stop probing.');
+    });
+  });
+
+  describe('buildAssessmentPrompt: no closure language before the gate clears', () => {
+    const baseParams = {
+      teachBackPrompt: 'Explain what you learned about budgeting.',
+      keyConcepts: ['income tracking', 'expense categories', 'savings goals'],
+      evaluatesConcepts: ['income tracking', 'savings goals'],
+      aiBehavior: { tone: 'Warm', languageInstruction: 'Respond in Spanish' },
+      liveState: {},
+      turnCount: 1,
+      maxTurns: 12,
+      minTurns: 2,
+    };
+
+    it('tells the evaluator this reply is always a continuation, never a verdict', () => {
+      const prompt = buildAssessmentPrompt(baseParams);
+
+      expect(prompt).toContain('this reply is always a CONTINUATION, never a verdict');
+      expect(prompt).toContain('you do not know the outcome yet');
+    });
+
+    it('explicitly bans the phrases that caused the live-conversation false positive', () => {
+      const prompt = buildAssessmentPrompt(baseParams);
+
+      // The exact phrases the evaluator used on b1-12 session 44d09c3f before
+      // the sensed score (6.2) had cleared the threshold (7).
+      expect(prompt).toContain('"well done"');
+      expect(prompt).toContain('"you\'ve got it"');
+      expect(prompt).toContain('"I\'ve\nheard what I need [to hear]"');
+    });
+
+    it('no longer tells the evaluator to "wind down" on a good answer', () => {
+      const prompt = buildAssessmentPrompt(baseParams);
+
+      expect(prompt).not.toContain('wind down');
+    });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

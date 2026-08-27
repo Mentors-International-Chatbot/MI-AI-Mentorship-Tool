@@ -80,11 +80,21 @@ describe("AI Essentials Aug 2026 package", () => {
     }
   });
 
-  it("leaves the 2.6 and 5.4 placeholder links clearly marked as TBD, not invented URLs", () => {
+  it("leaves the still-unresolved 5.4 placeholder link clearly marked as TBD, not an invented URL", () => {
     const placeholders = aiEssentialsAug2026Package.curriculum.lessons.flatMap((l) => l.blocks)
       .filter((b): b is Extract<typeof b, { blockType: "resource" }> => b.blockType === "resource")
       .filter((b) => b.resource.type === "weblink" && b.resource.url.includes("TODO-see-e5-findings-report"));
-    expect(placeholders).toHaveLength(2);
+    expect(placeholders).toHaveLength(1);
+    expect(placeholders[0].id).toBe("b5-4");
+  });
+
+  it("resolves 2.6's placeholder to a real 3Blue1Brown video, not a TODO URL", () => {
+    const block = aiEssentialsAug2026Package.curriculum.lessons
+      .find((l) => l.key === "lesson-2")!.blocks.find((b) => b.id === "b2-6")!;
+    expect(block.blockType).toBe("resource");
+    const resource = "resource" in block ? block.resource : undefined;
+    expect(resource?.type === "weblink" ? resource.url : undefined).toBe("https://youtu.be/LPZh9BOjkQs");
+    expect(resource?.type === "weblink" ? resource.url : "").not.toContain("TODO-see-e5-findings-report");
   });
 });
 

@@ -9,7 +9,7 @@ import { lessonSchema, normalizeMilestoneAvailability, type LocalizedString, typ
 import { programVersionConfigSchema, type ProgramVersionConfig } from "@/lib/journey-package/program-version-config.schema";
 import { mergeAssessmentConfig } from "@/lib/journey-package/mergeAssessmentConfig";
 import { getCurrentLearnerProject, learnerProjectSelectionRequired } from "./learnerProject";
-import { buildLessonDashboard, type LessonDashboard } from "./dashboard";
+import { buildLessonDashboard, type LessonDashboard, type DashboardProjectInput } from "./dashboard";
 import { createAssessmentSession } from "@/lib/ai/assessment/createAssessmentSession";
 import { gradeQuizQuestion } from "./quizGrading";
 
@@ -162,6 +162,23 @@ export async function resolvePlayerAccess(identity: RequestIdentity, courseCode:
   };
 }
 
+/**
+ * Fisher-Yates, computed fresh on every call. Grading is order-independent
+ * (`gradeQuizQuestion`'s multiple_choice branch compares the submitted
+ * *value* against `answerKey`, never a position), so shuffling here is pure
+ * presentation and never touches stored content — a reload gets a new
+ * random order because this runs again on every fetch, not because
+ * anything was written back.
+ */
+export function shuffleOptions<T>(options: readonly T[]): T[] {
+  const result = [...options];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 export function sanitizePlayerBlock(block: LessonBlock) {
   if (block.blockType === "quiz_checkpoint") {
     return { ...block, questions: block.questions.map((question) => {
@@ -177,6 +194,19 @@ export function sanitizePlayerBlock(block: LessonBlock) {
         // Never hand the browser an already-solved initial sequence merely
         // because the author listed the option pool in key order.
         safe.options = [...question.options.slice(1), question.options[0]];
+      }
+      // Gated on the format explicitly, not "has options" — drag_to_order
+      // has its own handling just above (a full shuffle there would break
+      // the "check against answerKey order" grading contract for a
+      // sequencing question), and matching's options are a shared pool
+      // grading doesn't compare positionally in the first place.
+      if (question.format === "multiple_choice" && question.options) {
+        safe.options = shuffleOptions(question.options);
+      }
+      // Same reasoning as multiple_choice's options: the accepted answer
+      // must not always land in the same (authored) position in the bank.
+      if (question.format === "fill_in_blank" && question.wordBank) {
+        safe.wordBank = shuffleOptions(question.wordBank);
       }
       delete safe.answerKey;
       delete safe.explanation;
@@ -358,62 +388,56 @@ export async function recordPlayerTutorSuccess(socioId: string, context: Validat
 }
 
 /**
- * The project dashboard for the lesson player, or null when it must not render.
+ * The lesson player's sidebar panel, or null when it must not render.
  *
  * Composed here rather than behind a fourth endpoint. The player already awaits
- * the lesson DTO, and the two reads this adds are cheap next to what that call
+ * the lesson DTO, and the reads this adds are cheap next to what that call
  * already does — `rows` is threaded in from the caller precisely so this does
  * not re-run `lessonRows`, which is the expensive part and which
  * `getCourseProgress` would otherwise repeat.
  *
- * Fails open to null, never throws. A dashboard is decoration around the thing
- * the learner came for; a broken project read must not cost them the lesson.
+ * Three independent things, each gated on its own config, not on each other:
+ *   - lesson progress (bar + whole-course list): gated on `progressPanel.enabled`
+ *     only — every course has lesson/block data, so nothing course-specific is
+ *     required beyond opting the panel in at all.
+ *   - milestones + capstone link: gated on `access.config.outcome`, the same
+ *     flag `hasCapstone` on the lesson DTO already uses. A course can have a
+ *     capstone with no learner-chosen "project."
+ *   - the project card: gated on `access.config.projectSelection`, unchanged —
+ *     that flag names one specific feature (the AI-guided project-selection
+ *     conversation), not "does this course want a sidebar."
+ *
+ * These used to be one gate (`projectSelection`), which meant no course could
+ * get lesson-progress visibility without also taking on project selection's
+ * mandatory pre-course conversation and 403 entry gate — two unrelated
+ * features coupled by accident. `progressPanel.enabled` is itself opt-in
+ * (rather than defaulting on for every course) because PB&J and
+ * skills-tool-calls are live courses that have never shown this panel, and
+ * turning it on for them is a production layout change (their lesson page
+ * goes from one column to two) nobody has asked for on those courses yet.
+ *
+ * A broken project read degrades to no project card, not no panel at all —
+ * scoped narrower than the outer try/catch so a project-selection bug can't
+ * take down progress/milestones, which don't depend on it.
  */
 async function getLessonDashboard(
   access: PlayerAccess,
   rows: Awaited<ReturnType<typeof lessonRows>>,
 ): Promise<LessonDashboard | null> {
-  // Courses that do not configure project selection have no project to show.
-  // This is the branch that leaves MI and PB&J untouched — no course code is
-  // consulted anywhere in this path.
-  if (!access.config.projectSelection) return null;
+  if (!access.config.progressPanel?.enabled) return null;
 
   try {
-    const project = await getCurrentLearnerProject(access);
-    if (!project) return null;
-
     // A.6.1 addendum: enrollment-scoped, not socioId+collectionKey — a
     // retake must not show the dashboard as already complete from the
     // archived enrollment's rows.
-    const blockProgress = await playerRuntimeRepo.blockProgress.findMany({
-      where: { enrollmentId: access.enrollmentId },
-    });
-    const lessons = rows.map((row) => {
-      const parsed = row.versions[0] ? lessonSchema.safeParse(row.versions[0].body) : null;
-      const body = parsed?.success ? parsed.data : null;
-      return {
-        lessonKey: row.slug,
-        title: body?.title ?? row.slug,
-        complete: body
-          ? body.blocks.every((block) => blockProgress.some((item) =>
-              item.lessonKey === row.slug
-              && item.blockId === block.id
-              && item.contentVersion === block.contentVersion
-              && item.completedAt))
-          : false,
-      };
-    });
+    const progress = await computeCourseProgress(rows, access.enrollmentId);
+    const lessons = progress.lessons;
 
     const outcome = access.config.outcome;
     let milestones: ReturnType<typeof milestoneStates> = [];
     let graduated = false;
     if (outcome) {
-      const reached = new Set(
-        (await playerRuntimeRepo.milestoneProgress.findMany({
-          where: { enrollmentId: access.enrollmentId },
-          select: { milestoneKey: true },
-        })).map((item) => item.milestoneKey),
-      );
+      const reached = new Set(progress.milestones.map((milestone) => milestone.key));
       const completedLessonKeys = new Set(
         lessons.filter((lesson) => lesson.complete).map((lesson) => lesson.lessonKey),
       );
@@ -424,6 +448,15 @@ async function getLessonDashboard(
       );
       graduated = outcome.milestones.length > 0
         && outcome.milestones.every((milestone) => reached.has(milestone.key));
+    }
+
+    let project: DashboardProjectInput | null = null;
+    if (access.config.projectSelection) {
+      try {
+        project = await getCurrentLearnerProject(access);
+      } catch (error) {
+        console.warn("[PlayerDashboard] project read failed; rendering the panel without it", error);
+      }
     }
 
     return buildLessonDashboard({ project, milestones, lessons, graduated });
@@ -820,25 +853,31 @@ export function gradePlayerBlock(
     // satisfy) — a label difference, not a functional break.
     if (block.assessment?.mode === "web_quiz") {
       const merged = mergeBlockAssessmentConfig(
-        packageAssessment ?? { passing: { dimensionKey: "", threshold: 0, confidenceFloor: 0.5, minTurns: 2, maxTurns: 12 }, allowRetake: true, blocking: true, onMaxTurnsWithoutPass: "complete_with_scores", autoAppendTeachBack: false, showScoreToLearner: false, webQuizPassingScore: 1 },
+        packageAssessment ?? { passing: { dimensionKey: "", threshold: 0, confidenceFloor: 0.5, minTurns: 2, maxTurns: 12 }, allowRetake: true, blocking: true, onMaxTurnsWithoutPass: "complete_with_scores", autoAppendTeachBack: false, showScoreToLearner: false, webQuizPassingScore: 1, webQuizMaxAttempts: 2 },
         block.assessment,
       );
       const passed = rawScore === null || rawScore >= merged.webQuizPassingScore;
+      // Ported from the plain quiz_checkpoint path below (QUIZ_ATTEMPT_LIMIT):
+      // a learner who never reaches the passing score used to retry forever,
+      // with no reveal and no way to move on. The cap gives web_quiz the same
+      // floor that path has always had — reveal, then complete regardless of
+      // score, on the attempt the cap is reached.
+      const lastAttempt = passed || attempt >= merged.webQuizMaxAttempts;
       const rawFeedback: PlayerFeedback | null = results.length > 0 ? {
         kind: "quiz" as const,
         correct: allCorrect,
         passed,
-        // Below-threshold web quizzes have no exhaustion point: every failed
-        // attempt stays open and can be revised until the configured score is met.
-        retryAvailable: !passed,
+        // Below-threshold web quizzes retry in place up to the cap; the last
+        // attempt (passed or exhausted) has nothing left to retry into.
+        retryAvailable: !lastAttempt,
         questions: results.map(({ question, correct }) => (
-          correct || passed
+          correct || lastAttempt
             ? { questionId: question.id, correct, correctAnswer: question.answerKey, explanation: question.explanation }
             : { questionId: question.id, correct }
         )),
       } : null;
       return {
-        complete: passed,
+        complete: lastAttempt,
         score: merged.showScoreToLearner ? rawScore : null,
         response: answers,
         feedback: merged.showScoreToLearner ? rawFeedback : null,
@@ -1132,23 +1171,54 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
   return { blockId, completed: grade.complete, score: grade.score, feedback: grade.feedback, reviewPending, lessonComplete };
 }
 
-export async function getCourseProgress(access: PlayerAccess) {
-  const rows = await lessonRows(access);
-  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: access.enrollmentId } });
-  const milestones = await playerRuntimeRepo.milestoneProgress.findMany({ where: { enrollmentId: access.enrollmentId }, orderBy: { reachedAt: "asc" } });
+/**
+ * Course-wide BlockProgress + milestone aggregation, shared by
+ * `getCourseProgress` (the capstone page, fetches `rows` itself) and
+ * `getLessonDashboard` (the per-lesson sidebar, passes in the `rows` its
+ * caller already fetched).
+ *
+ * Takes `rows` as a parameter rather than fetching them — that split is
+ * deliberate and preserved from `getLessonDashboard`'s original comment:
+ * the per-lesson page load already has `rows` from loading the lesson
+ * itself, and re-running `lessonRows()` here would repeat its most
+ * expensive part for no reason. `getCourseProgress` has no such prior
+ * fetch, so it still calls `lessonRows()` once, up front, and passes the
+ * result in like any other caller.
+ *
+ * Uses `safeParse` throughout (previously `getCourseProgress`'s own
+ * `lessons` field used `.parse`, which would throw the whole call on one
+ * malformed lesson body, while its `completedBlocks` field a few lines
+ * below already used `.safeParse` for the same data — an inconsistency
+ * within that one function, not a behavior this helper needed to keep).
+ * On valid lesson bodies — the only case either caller's tests or normal
+ * operation exercises — `.parse` and `.safeParse` agree, so this does not
+ * change observable output for real content.
+ */
+async function computeCourseProgress(
+  rows: Awaited<ReturnType<typeof lessonRows>>,
+  enrollmentId: string,
+) {
+  const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId } });
+  const milestoneRows = await playerRuntimeRepo.milestoneProgress.findMany({ where: { enrollmentId }, orderBy: { reachedAt: "asc" } });
   return {
     lessons: rows.map((row) => {
-      const lesson = row.versions[0] ? lessonSchema.parse(row.versions[0].body) : null;
+      const parsed = row.versions[0] ? lessonSchema.safeParse(row.versions[0].body) : null;
+      const lesson = parsed?.success ? parsed.data : null;
       const complete = lesson ? lesson.blocks.every((block) => progress.some((item) => item.lessonKey === row.slug && item.blockId === block.id && item.contentVersion === block.contentVersion && item.completedAt)) : false;
       return { lessonKey: row.slug, orderIndex: row.orderIndex, title: lesson?.title ?? row.slug, complete };
     }),
     completedBlocks: rows.reduce((count, row) => {
-      const lesson = row.versions[0] ? lessonSchema.safeParse(row.versions[0].body) : null;
-      if (!lesson?.success) return count;
-      return count + lesson.data.blocks.filter((block) => progress.some((item) => item.lessonKey === row.slug && item.blockId === block.id && item.contentVersion === block.contentVersion && item.completedAt)).length;
+      const parsed = row.versions[0] ? lessonSchema.safeParse(row.versions[0].body) : null;
+      if (!parsed?.success) return count;
+      return count + parsed.data.blocks.filter((block) => progress.some((item) => item.lessonKey === row.slug && item.blockId === block.id && item.contentVersion === block.contentVersion && item.completedAt)).length;
     }, 0),
-    milestones: milestones.map((item) => ({ key: item.milestoneKey, reachedAt: item.reachedAt })),
+    milestones: milestoneRows.map((item) => ({ key: item.milestoneKey, reachedAt: item.reachedAt })),
   };
+}
+
+export async function getCourseProgress(access: PlayerAccess) {
+  const rows = await lessonRows(access);
+  return computeCourseProgress(rows, access.enrollmentId);
 }
 
 export async function getCapstoneDto(access: PlayerAccess) {
@@ -1164,7 +1234,25 @@ export async function getCapstoneDto(access: PlayerAccess) {
     nextMilestone: states.find((milestone) => milestone.status === "current") ?? null,
     completedMilestones: reached.size,
     graduated: outcome.milestones.length > 0 && outcome.milestones.every((milestone) => reached.has(milestone.key)),
+    // Reuses `progress` (already fetched above for milestone eligibility)
+    // rather than a second query.
+    currentLessonKey: currentLessonKeyFor(progress.lessons),
   };
+}
+
+/**
+ * Same "first incomplete" derivation LessonPlayer.tsx uses for the current
+ * BLOCK within a lesson (`data.lesson.blocks.find((block) => !completed.has(block.id))`),
+ * one level up: the first course lesson that isn't fully complete, falling
+ * back to the last lesson once every lesson is. No block-level position to
+ * resolve here — navigating to this lessonKey re-derives the current block
+ * the same way LessonPlayer already does on every load, so there is nothing
+ * else to reproduce.
+ */
+export function currentLessonKeyFor(lessons: ReadonlyArray<{ lessonKey: string; complete: boolean }>): string | null {
+  return lessons.find((lesson) => !lesson.complete)?.lessonKey
+    ?? lessons.at(-1)?.lessonKey
+    ?? null;
 }
 
 export function milestoneStates(
@@ -1214,6 +1302,16 @@ export function diagnosticDto(access: PlayerAccess) {
   if (!diagnostic) throw new PlayerError(404, "diagnostic_not_found", "This course has no diagnostic");
   return { ...diagnostic, questions: diagnostic.questions.map((question) => {
     const safe = { ...question } as Partial<typeof question>;
+    // `baselineDiagnosticSchema.questions` reuses the full quizQuestionSchema
+    // (any format is legal), but DiagnosticPlayer.tsx renders every question
+    // as a plain radio list regardless of authored format — a drag_to_order
+    // or matching diagnostic question would render wrong today. Known gap,
+    // not fixed here: gating this shuffle on multiple_choice specifically
+    // (rather than "has options") means it does nothing for those formats
+    // either way, so it neither masks nor worsens that gap.
+    if (question.format === "multiple_choice" && question.options) {
+      safe.options = shuffleOptions(question.options);
+    }
     delete safe.answerKey;
     delete safe.explanation;
     return safe;

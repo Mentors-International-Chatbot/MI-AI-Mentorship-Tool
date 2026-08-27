@@ -918,6 +918,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           lessonKey={lessonKey}
           blockId={current?.id}
           helpRequestEnabled={data.helpRequestEnabled === true}
+          hasCapstone={data.hasCapstone}
         />
       )}
       </div>

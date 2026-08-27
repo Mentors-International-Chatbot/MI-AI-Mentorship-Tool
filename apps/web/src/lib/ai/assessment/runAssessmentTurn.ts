@@ -23,6 +23,8 @@
 import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
 import { createOpenRouterChat } from '@/lib/ai/openrouter';
 import { invokeTraced } from '@/lib/ai/trace/invokeTraced';
+import { invokeStyledPlayerResponse, contentToText, PLAYER_REPAIR_SYSTEM_PROMPT } from '@/lib/ai/service';
+import { buildResponseStyleInstruction, resolvePlayerMaxTokens } from '@/lib/player/responseStyle';
 import {
   senseAssessmentTurn,
   createInitialSessionState,
@@ -36,7 +38,7 @@ import {
   type AssessmentPromptParams,
 } from './buildAssessmentPrompt';
 import type { DimensionStateMap } from '@/lib/ai/sensing/types';
-import type { TrackedDimension } from '@/lib/journey-package/journey-package.schema';
+import type { TrackedDimension, ResponseStyle } from '@/lib/journey-package/journey-package.schema';
 
 const EVALUATOR_MODEL = "anthropic/claude-haiku-4.5";
 const EVALUATOR_TIMEOUT_MS = 15000;
@@ -76,6 +78,15 @@ export interface AssessmentConfig {
   onMaxTurnsPolicy: 'complete_with_scores' | 'return_for_reteach' | 'flag_mentor';
   /** Tracked dimensions for sensing */
   dimensions: TrackedDimension[];
+  /**
+   * Learner-visible generation limits for the probe reply. Undefined only for
+   * sessions created before this field existed (see SessionConfigSnapshot's
+   * own comment) — new sessions always carry one, since createAssessmentSession
+   * defaults it on. When present, `generateEvaluatorResponse` enforces it the
+   * same way `invokeStyledPlayerResponse` enforces it for teach/teach_back
+   * turns: a hard instruction plus a repair-then-accept-or-fallback loop.
+   */
+  responseStyle?: ResponseStyle;
 }
 
 export interface AssessmentTurnInput {
@@ -147,19 +158,24 @@ async function generateEvaluatorResponse(params: {
   systemPrompt: string;
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   studentText: string;
+  responseStyle?: ResponseStyle;
   trace?: AssessmentTraceContext;
 }): Promise<string> {
-  const { systemPrompt, conversationHistory, studentText } = params;
+  const { systemPrompt, conversationHistory, studentText, responseStyle, trace } = params;
+
+  const styledSystemPrompt = responseStyle
+    ? `${systemPrompt}\n\n${buildResponseStyleInstruction(responseStyle, false)}`
+    : systemPrompt;
 
   const chat = createOpenRouterChat({
     model: EVALUATOR_MODEL,
-    temperature: 0.7,
-    maxTokens: 500,
+    temperature: responseStyle ? 0.3 : 0.7,
+    maxTokens: resolvePlayerMaxTokens(responseStyle, false) ?? 500,
   });
 
   // Build messages: system + history + current student message
   const messages = [
-    new SystemMessage(systemPrompt),
+    new SystemMessage(styledSystemPrompt),
     ...conversationHistory.map((msg) =>
       msg.role === 'user' ? new HumanMessage(msg.content) : new AIMessage(msg.content)
     ),
@@ -167,26 +183,64 @@ async function generateEvaluatorResponse(params: {
   ];
 
   try {
-    const response = await invokeTraced({
-      operation: 'assessment_turn',
-      model: EVALUATOR_MODEL,
-      promptVersion: { evaluator: ASSESSMENT_EVALUATOR_PROMPT_VERSION },
-      systemPrompt,
-      socioId: params.trace?.socioId,
-      organizationId: params.trace?.organizationId,
-      assessmentSessionId: params.trace?.assessmentSessionId,
-      mode: 'probe',
-      invoke: () => Promise.race([
-        chat.invoke(messages),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Evaluator response timeout')), EVALUATOR_TIMEOUT_MS)
-        ),
-      ]),
-    });
+    if (!responseStyle) {
+      // No configured style — only possible for a session created before
+      // this field existed (see AssessmentConfig.responseStyle's comment).
+      // Unchanged from before: one attempt, no enforcement, no repair.
+      const response = await invokeTraced({
+        operation: 'assessment_turn',
+        model: EVALUATOR_MODEL,
+        promptVersion: { evaluator: ASSESSMENT_EVALUATOR_PROMPT_VERSION },
+        systemPrompt: styledSystemPrompt,
+        socioId: trace?.socioId,
+        organizationId: trace?.organizationId,
+        assessmentSessionId: trace?.assessmentSessionId,
+        mode: 'probe',
+        invoke: () => Promise.race([
+          chat.invoke(messages),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Evaluator response timeout')), EVALUATOR_TIMEOUT_MS)
+          ),
+        ]),
+      });
+      return contentToText(response.content);
+    }
 
-    return typeof response.content === 'string'
-      ? response.content
-      : JSON.stringify(response.content);
+    // Same repair-then-accept-or-fallback loop teach/teach_back/project turns
+    // already run through (invokeStyledPlayerResponse, service.ts). No player
+    // `intent` is passed: the probe's own system prompt already states its
+    // question shape (RECOGNIZE UNDERSTANDING FAST / STATUS QUESTIONS in
+    // buildAssessmentPrompt.ts), and a player intent would borrow calibration
+    // language (e.g. teach_back's "never begin with you") that doesn't apply
+    // to a probe turn. An unrepairable draft throws inside
+    // invokeStyledPlayerResponse; the catch below turns that into the same
+    // gentle fallback a transient provider error already falls back to, so a
+    // style failure never surfaces as a hard error on the assessment route.
+    const response = await invokeStyledPlayerResponse(
+      chat,
+      messages,
+      responseStyle,
+      false,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      studentText,
+      { timeoutMs: EVALUATOR_TIMEOUT_MS },
+      ({ stage, repairIndex, providerAttempt, invoke }) => invokeTraced({
+        operation: 'assessment_turn',
+        model: EVALUATOR_MODEL,
+        promptVersion: { evaluator: ASSESSMENT_EVALUATOR_PROMPT_VERSION },
+        systemPrompt: stage === 'initial' ? styledSystemPrompt : PLAYER_REPAIR_SYSTEM_PROMPT,
+        socioId: trace?.socioId,
+        organizationId: trace?.organizationId,
+        assessmentSessionId: trace?.assessmentSessionId,
+        mode: 'probe',
+        context: { generationStage: stage, repairIndex, providerAttempt },
+        invoke: () => invoke(),
+      }),
+    );
+    return contentToText(response.content);
   } catch (error) {
     console.error('[AssessmentTurn] Evaluator response failed:', error);
     // Fallback: gentle probe that doesn't give away answers
@@ -293,6 +347,7 @@ export async function runAssessmentTurn(input: AssessmentTurnInput): Promise<Ass
     systemPrompt: buildAssessmentPrompt(probePromptParams),
     conversationHistory,
     studentText,
+    responseStyle: config.responseStyle,
     trace,
   });
 
