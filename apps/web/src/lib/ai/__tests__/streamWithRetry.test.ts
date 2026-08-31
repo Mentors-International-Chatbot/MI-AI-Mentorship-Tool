@@ -151,6 +151,87 @@ describe('invokeStyledPlayerResponse — the delivery contract', () => {
     expect(chat.invoke).toHaveBeenCalledTimes(2);
   });
 
+  // Live production bug (AI Essentials Aug 2026): a learner reply that pushes
+  // the model to address two things at once (e.g. naming two separate tasks)
+  // reliably produces a draft that is both an enumerated list AND an
+  // overlong sentence — sentence_word_limit and comma_chained_enumeration
+  // firing together, since both are downstream of the same multi-item-answer
+  // shape. The old carve-out only matched violations.length === 1, so this
+  // exact pairing fell through to the generic AI_ERROR_FALLBACK every time,
+  // confirmed via a real production error log. It must now be accepted, same
+  // as a lone comma_chained_enumeration was already accepted above.
+  it('accepts a repaired draft when sentence_word_limit and comma_chained_enumeration are the only violations left after the one repair attempt', async () => {
+    const firstDraft = 'This first sentence is fine. This second sentence is also fine. This third sentence adds detail. This fourth sentence pushes it over the limit and forces a repair attempt to happen next.';
+    const repairedDraft = "Name the role, task, context, constraints, and audience before you draft anything. Skipping any one of those five elements consistently leads the model to invent details nobody actually gave it while guessing wildly at what truly matters most in the entire situation you are facing right now without exception. What's one constraint you would add first?";
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: firstDraft })
+        .mockResolvedValueOnce({ content: repairedDraft }),
+    };
+
+    const response = await invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, 'question');
+
+    expect(response.content).toBe(repairedDraft);
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  // Boundary check on the widened carve-out: `.every()` over {comma_chained_
+  // enumeration, sentence_word_limit} necessarily also accepts sentence_word_
+  // limit on its own, not just the pair. Confirmed intentional side effect,
+  // not a silent widening — see PR/task notes. Pinned here so a future change
+  // that narrows this back to "the pair only" is a deliberate decision, not
+  // an accidental regression caught by surprise.
+  it('accepts a repaired draft when sentence_word_limit alone is the only violation left after the one repair attempt', async () => {
+    const firstDraft = 'This first sentence is fine. This second sentence is also fine. This third sentence adds detail. This fourth sentence pushes it over the limit and forces a repair attempt to happen next.';
+    const repairedDraft = "Skills combine into one workflow when several tool calls run in sequence and each step passes its own result forward so the next call always has real input to work with instead of guessing blindly about what came before it in the chain. What's one task you would want to automate this way?";
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: firstDraft })
+        .mockResolvedValueOnce({ content: repairedDraft }),
+    };
+
+    const response = await invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, 'question');
+
+    expect(response.content).toBe(repairedDraft);
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  // The carve-out is scoped to exactly {comma_chained_enumeration,
+  // sentence_word_limit} — a third, unrelated violation (self_reference here)
+  // must still hard-fail, proving `.every()` is not "any set containing these
+  // two" but "only these two kinds, in any combination."
+  it('still throws when a third violation accompanies sentence_word_limit and comma_chained_enumeration', async () => {
+    const firstDraft = 'This first sentence is fine. This second sentence is also fine. This third sentence adds detail. This fourth sentence pushes it over the limit and forces a repair attempt to happen next.';
+    const repairedDraft = "Name the role, task, context, constraints, and audience before you draft anything. Skipping any one of those five elements consistently leads the model to invent details nobody actually gave it while guessing wildly at what truly matters most in the entire situation you are facing right now without exception and I'm here to help you get it right. What's one constraint you would add first?";
+    const chat = {
+      invoke: vi.fn()
+        .mockResolvedValueOnce({ content: firstDraft })
+        .mockResolvedValueOnce({ content: repairedDraft }),
+    };
+
+    await expect(invokeStyledPlayerResponse(chat, NO_MESSAGES, {
+      maxSentences: 3,
+      maxOutputTokens: 240,
+      markdown: 'none',
+      maxQuestions: 1,
+      expanded: { maxSentences: 6, maxOutputTokens: 480 },
+    }, false, undefined, undefined, 'question')).rejects.toThrow('Player response style contract failed after 1 repair');
+
+    expect(chat.invoke).toHaveBeenCalledTimes(2);
+  });
+
   // Fix 2: AI Essentials was newly wired into this exact responseStyle
   // config (see ai-essentials-aug2026-package.ts) so that its own
   // languageInstruction prose ("three sentences or fewer") is backed by real

@@ -269,12 +269,27 @@ export async function invokeStyledPlayerResponse(
             // markdown/punctuation stripping), so throwing to the generic
             // AI_ERROR_FALLBACK trades a real, on-topic answer with an
             // unremoved list for a message unrelated to what actually failed.
+            // sentence_word_limit shares that same non-mechanical-fix problem
+            // when it rides along with comma_chained_enumeration: both are
+            // downstream of one root cause, a draft that tries to address two
+            // things at once (e.g. naming two separate tasks), which produces
+            // an enumerated list AND a longer sentence in the same breath.
+            // Requiring the violation set to be exactly one item made the
+            // carve-out disappear the moment that natural pairing occurred,
+            // which is the common case, not the exception — confirmed live in
+            // production (learner reply naming two tasks at once repeatedly
+            // fell through to the generic fallback with exactly this pair).
+            // Widened to accept any combination drawn only from this known
+            // pair, still gated on a non-empty delivered draft.
             // Deliberately a separate branch from the lesson_entry carve-out
             // above, not merged into one predicate: different justification
             // (semantic-fix difficulty vs. intent framing), and the two may
             // diverge later (e.g. if lesson_entry ever needs its own repair
             // budget).
-            if (violations.length === 1 && violations[0] === 'comma_chained_enumeration' && delivered.trim().length > 0) return response;
+            const onlyKnownHardToFixViolations = violations.every(
+                (v) => v === 'comma_chained_enumeration' || v === 'sentence_word_limit',
+            );
+            if (onlyKnownHardToFixViolations && delivered.trim().length > 0) return response;
             throw new Error(`Player response style contract failed after ${MAX_STYLE_REPAIRS} repair: ${violations.join(', ')}`);
         }
         // Repair is copy-editing, not a second teaching turn. Re-sending the
