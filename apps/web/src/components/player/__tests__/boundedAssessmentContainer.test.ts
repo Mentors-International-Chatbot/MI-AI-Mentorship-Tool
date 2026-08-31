@@ -23,7 +23,10 @@ describe("bounded assessment container", () => {
     expect(lessonPlayer).toMatch(/boundedMode === "web_quiz"/);
     expect(lessonPlayer).toMatch(/<ReteachGateExperience/);
     expect(lessonPlayer).toMatch(/<WebQuizExperience/);
-    expect(lessonPlayer).toMatch(/\{!boundedMode && <aside className="player-card">/);
+    // The aside is also suppressed for text-answer block types now that their
+    // input merges into the pinned card (see singleTutorInput.test.ts) — the
+    // bounded-mode part of this gate is what belongs to this file.
+    expect(lessonPlayer).toMatch(/\{!boundedMode && !isTextAnswerBlock && <aside className="player-card">/);
   });
 
   it("keeps reteach on AssessmentSession and writes its terminal result to BlockProgress", () => {

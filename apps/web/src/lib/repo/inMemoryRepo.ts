@@ -112,7 +112,10 @@ export const inMemoryRepo: Repo = {
         return msg;
     },
 
-    async getMessages(socioId, limit) {
+    // `includeAssessment` is a no-op here: this store never filters
+    // assessment-session messages out to begin with (see getMessagesWithSentiment
+    // below, same story).
+    async getMessages(socioId, limit, _opts) {
         const arr = messagesBySocio.get(socioId) ?? [];
         if (limit) {
             return arr.slice(Math.max(0, arr.length - limit));

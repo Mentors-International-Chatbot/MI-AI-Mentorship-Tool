@@ -109,6 +109,8 @@ export interface DashboardStrings {
   roleAI: string;
   roleMentor: string;
   roleSystem: string;
+  /** Badge on a reteach_gate/assessment-session turn, shown inline with its role label. */
+  assessmentBadge: string;
   // AI toggle
   aiActive: string;
   aiPausedLabel: string;
@@ -186,6 +188,23 @@ export interface DashboardStrings {
   lessonPending: string;
   lessonCompleted: string;
   lessonInProgress: string;
+  // Block activity strip (socio detail) — player-surface courses record most
+  // progress as BlockProgress, not chat messages; this panel makes that
+  // progress visible to mentors reading the transcript.
+  activityStripTitle: string;
+  activityStripBlocksCompleted: (completed: number, total: number) => string;
+  activityStripBlocksCompletedNoTotal: (completed: number) => string;
+  activityStripLastActive: (when: string) => string;
+  // Written test / quiz answers (socio detail) — quiz_checkpoint, drag_order,
+  // and onboarding_survey are graded deterministically and never post through
+  // /api/chat, so this is the only place a mentor can read what the learner
+  // actually answered.
+  blockAnswersTitle: string;
+  blockAnswersQuizLabel: string;
+  blockAnswersDragOrderLabel: string;
+  blockAnswersSurveyLabel: string;
+  blockAnswersCorrect: string;
+  blockAnswersIncorrect: string;
   // Weekly summaries (socio detail)
   weeklySummariesTitle: string;
   summaryGenerate: string;
@@ -315,6 +334,7 @@ const es: DashboardStrings = {
   roleAI: 'IA',
   roleMentor: 'Mentor',
   roleSystem: 'Sistema',
+  assessmentBadge: 'Evaluación',
   aiActive: 'Chatbot activo',
   aiPausedLabel: 'Chatbot pausado',
   takeOver: 'Pausar chatbot y responder manualmente',
@@ -402,6 +422,16 @@ const es: DashboardStrings = {
   lessonPending: 'Pendiente',
   lessonCompleted: 'Completada',
   lessonInProgress: 'En progreso',
+  activityStripTitle: 'Actividad reciente',
+  activityStripBlocksCompleted: (completed, total) => `${completed} de ${total} bloques`,
+  activityStripBlocksCompletedNoTotal: (completed) => `${completed} bloques completados`,
+  activityStripLastActive: (when) => `Última actividad: ${when}`,
+  blockAnswersTitle: 'Respuestas de pruebas',
+  blockAnswersQuizLabel: 'Cuestionario',
+  blockAnswersDragOrderLabel: 'Orden',
+  blockAnswersSurveyLabel: 'Encuesta',
+  blockAnswersCorrect: 'Correcta',
+  blockAnswersIncorrect: 'Incorrecta',
   weeklySummariesTitle: 'Resúmenes semanales',
   summaryGenerate: 'Generar resumen',
   summaryGenerating: 'Generando...',
@@ -508,6 +538,7 @@ const en: DashboardStrings = {
   roleAI: 'AI',
   roleMentor: 'Mentor',
   roleSystem: 'System',
+  assessmentBadge: 'Assessment',
   aiActive: 'Chatbot active',
   aiPausedLabel: 'Chatbot paused',
   takeOver: 'Pause chatbot & respond manually',
@@ -595,6 +626,16 @@ const en: DashboardStrings = {
   lessonPending: 'Pending',
   lessonCompleted: 'Completed',
   lessonInProgress: 'In progress',
+  activityStripTitle: 'Recent activity',
+  activityStripBlocksCompleted: (completed, total) => `${completed} of ${total} blocks`,
+  activityStripBlocksCompletedNoTotal: (completed) => `${completed} blocks completed`,
+  activityStripLastActive: (when) => `Last active: ${when}`,
+  blockAnswersTitle: 'Test & quiz answers',
+  blockAnswersQuizLabel: 'Quiz',
+  blockAnswersDragOrderLabel: 'Order',
+  blockAnswersSurveyLabel: 'Survey',
+  blockAnswersCorrect: 'Correct',
+  blockAnswersIncorrect: 'Incorrect',
   weeklySummariesTitle: 'Weekly summaries',
   summaryGenerate: 'Generate summary',
   summaryGenerating: 'Generating...',
@@ -701,6 +742,7 @@ const pt: DashboardStrings = {
   roleAI: 'IA',
   roleMentor: 'Mentor',
   roleSystem: 'Sistema',
+  assessmentBadge: 'Avaliação',
   aiActive: 'Chatbot ativo',
   aiPausedLabel: 'Chatbot pausado',
   takeOver: 'Pausar chatbot e responder manualmente',
@@ -788,6 +830,16 @@ const pt: DashboardStrings = {
   lessonPending: 'Pendente',
   lessonCompleted: 'Concluída',
   lessonInProgress: 'Em andamento',
+  activityStripTitle: 'Atividade recente',
+  activityStripBlocksCompleted: (completed, total) => `${completed} de ${total} blocos`,
+  activityStripBlocksCompletedNoTotal: (completed) => `${completed} blocos concluídos`,
+  activityStripLastActive: (when) => `Última atividade: ${when}`,
+  blockAnswersTitle: 'Respostas de testes',
+  blockAnswersQuizLabel: 'Questionário',
+  blockAnswersDragOrderLabel: 'Ordem',
+  blockAnswersSurveyLabel: 'Pesquisa',
+  blockAnswersCorrect: 'Correta',
+  blockAnswersIncorrect: 'Incorreta',
   weeklySummariesTitle: 'Resumos semanais',
   summaryGenerate: 'Gerar resumo',
   summaryGenerating: 'Gerando...',

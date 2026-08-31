@@ -9,6 +9,7 @@ import type {
   ProgramVersion,
   Cohort,
   Enrollment,
+  BlockProgress,
   LearnerProject,
   LearnerProjectStatus,
   StageLearnerProjectInput,
@@ -37,6 +38,7 @@ import type {
   ProgramVersion as PrismaProgramVersion,
   Cohort as PrismaCohort,
   Enrollment as PrismaEnrollment,
+  BlockProgress as PrismaBlockProgress,
   LearnerProject as PrismaLearnerProject,
   EnrollmentInvitation as PrismaEnrollmentInvitation,
   ParticipantProfile as PrismaParticipantProfile,
@@ -153,6 +155,20 @@ function toCohort(p: PrismaCohort): Cohort {
     startsAt: p.startsAt,
     endsAt: p.endsAt,
     createdAt: p.createdAt,
+  };
+}
+
+function toBlockProgress(p: PrismaBlockProgress): BlockProgress {
+  return {
+    id: p.id,
+    enrollmentId: p.enrollmentId,
+    lessonKey: p.lessonKey,
+    blockId: p.blockId,
+    contentVersion: p.contentVersion,
+    startedAt: p.startedAt,
+    completedAt: p.completedAt,
+    score: p.score,
+    response: p.response,
   };
 }
 
@@ -1160,6 +1176,15 @@ export const tenantPrismaRepo: TenantRepo = {
       orderBy: { enrolledAt: 'desc' },
     });
     return enrollments.map(toEnrollment);
+  },
+
+  async getBlockProgressForEnrollment(ctx, enrollmentId) {
+    await verifyEnrollmentOwnership(ctx, enrollmentId);
+    const rows = await prisma.blockProgress.findMany({
+      where: { enrollmentId, completedAt: { not: null } },
+      orderBy: { completedAt: 'asc' },
+    });
+    return rows.map(toBlockProgress);
   },
 
   async createEnrollment(ctx, cohortId, participantId) {

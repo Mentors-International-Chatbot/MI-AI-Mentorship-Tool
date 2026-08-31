@@ -72,7 +72,9 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
     // webQuizMaxAttempts (2) instead of retrying indefinitely — affects all
     // five web_quiz blocks (b1-10, b2-8, b3-10, b4-13, b5-8), none of which
     // override it.
-    version: "2026.8.7",
+    // Bumped again from "2026.8.7": helpRequest.enabled — turns on "Request
+    // help from a human", matching the original ai-essentials course.
+    version: "2026.8.8",
     author: { name: "Sam", organizationKey: "mentors-international" },
     delivery: { surface: "player", supportedChannels: ["web"] },
     // Block 0.1: authored verbatim, delivered as the thread's first item,
@@ -109,6 +111,10 @@ export const aiEssentialsAug2026Package: JourneyPackageInput = {
       maxQuestions: 1,
       expanded: { maxSentences: 6, maxOutputTokens: 480 },
     },
+    // "Request help from a human" on the delivery surface. Opt-in per
+    // course, matching the original (pre-aug2026) ai-essentials course
+    // (see content/ai-essentials-v2-manifest.json's helpRequest key).
+    helpRequest: { enabled: true },
     // Lesson-sidebar progress panel (lesson completion, whole-course lesson
     // list, milestones + capstone link — the last two follow from `outcome`
     // below, not from this flag). Opt-in per course; PB&J and

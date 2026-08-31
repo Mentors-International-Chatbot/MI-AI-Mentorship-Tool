@@ -11,6 +11,14 @@ import { describe, expect, it } from "vitest";
  * one screen is the complaint the redesign exists to remove, so this pins the
  * shape rather than the styling.
  *
+ * A later pass merged that surviving input into the pinned `.player-current`
+ * card for every block type that asks the learner for typed text
+ * (onboarding_survey, teach_back, requiresResponse), leaving the docked aside
+ * only for blocks that don't ask for anything. The single-textarea invariant
+ * below now also guarantees that merge: `tutorInputPanel` is written once in
+ * the source and referenced from two mutually-exclusive render spots, so
+ * there is structurally nowhere for a second box to come from.
+ *
  * Asserted against source, not a rendered tree: the app has no component test
  * environment (vitest runs in `node`, and there are no .tsx tests), and adding
  * one to guard a structural rule would cost more than it pins. The same
@@ -47,6 +55,34 @@ describe("lesson player has a single tutor input", () => {
 
   it("has no separate teach-back sender", () => {
     expect(source).not.toMatch(/sendTeachBack/);
+  });
+
+  it("defines the single input panel once and reuses it, never a second literal input block", () => {
+    expect(source.match(/const tutorInputPanel = current \? <>/g) ?? []).toHaveLength(1);
+    // Exactly three identifier occurrences once comments are stripped: the
+    // definition, the merged-card spot, and the aside spot below. A fourth
+    // would be a sign a copy crept back in somewhere.
+    expect(code.match(/tutorInputPanel/g) ?? []).toHaveLength(3);
+  });
+
+  it("merges the input into the card for every text-answer block type, and only those", () => {
+    expect(source).toMatch(/const isTextAnswerBlock = isSurvey \|\| teachingBack \|\| requiresResponse;/);
+    expect(source).toMatch(/\{isTextAnswerBlock && !\(isSurvey && submittedComplete\.has\(current\.id\)\) && tutorInputPanel\}/);
+  });
+
+  it("keeps the aside only for blocks that don't ask for text, so it never doubles up with the merged input", () => {
+    expect(source).toMatch(/\{!boundedMode && !isTextAnswerBlock && <aside className="player-card">/);
+  });
+
+  it("leaves onboarding_survey with no input at all once it is submittedComplete, not an empty box", () => {
+    // isTextAnswerBlock is true for onboarding_survey regardless of review
+    // state, so the exclusion has to be the second, narrower condition — the
+    // bug this guards against is a bare <textarea> with nothing else in it.
+    const mergedGate = source.slice(
+      source.indexOf("{isTextAnswerBlock && !(isSurvey"),
+      source.indexOf("{isTextAnswerBlock && !(isSurvey") + "{isTextAnswerBlock && !(isSurvey && submittedComplete.has(current.id)) && tutorInputPanel}".length,
+    );
+    expect(mergedGate).toContain("isSurvey && submittedComplete.has(current.id)");
   });
 
   it("derives the tutor intent from the current block instead of the widget", () => {

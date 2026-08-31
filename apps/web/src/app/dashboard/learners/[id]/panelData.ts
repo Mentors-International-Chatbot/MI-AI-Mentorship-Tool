@@ -9,10 +9,12 @@
 import { repo } from '@/lib/repo';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { createTenantContext, type TenantContext } from '@/lib/repo/tenantContext';
-import type { DashboardPanel, LocalizedString } from '@/lib/journey-package/journey-package.schema';
+import { lessonSchema, type DashboardPanel, type LocalizedString, type ParsedLessonBlock } from '@/lib/journey-package/journey-package.schema';
 import type { AssessmentScoreRow } from './AssessmentScoresPanel';
 import type { DimensionTrendPoint } from './DimensionTrendPanel';
 import type { RevenueChartPoint } from './RevenueChart';
+import { buildActivityStrip, type ActivityStripData } from './blockActivity';
+import { buildBlockAnswers, type AnsweredBlock } from './blockAnswers';
 
 export type SerializedLessonProgress = {
   id: string;
@@ -212,4 +214,122 @@ export async function loadPanelData(
   );
 
   return resolved.filter((p): p is ResolvedPanel => p !== null);
+}
+
+/**
+ * Block-activity strip: the read-only counterpart to `getMessages` for
+ * player-surface courses, where most learner activity lands in BlockProgress
+ * rather than a chat turn (see the mentor learner-detail activity strip).
+ * Additive only — this never touches what gets persisted.
+ *
+ * Mirrors resolvePlayerAccess's tie-break (most recently enrolled ACTIVE
+ * enrollment) rather than introducing a new one. A learner with two active
+ * enrollments only gets one course's activity shown here; that's an accepted
+ * simplification, not a data gap — see the ticket that added this panel.
+ */
+export async function loadActivityStrip(
+  socioId: string,
+  organizationId: string,
+): Promise<ActivityStripData> {
+  try {
+    const ctx = createTenantContext(organizationId);
+
+    const participant = await tenantPrismaRepo.getParticipantBySocioId(ctx, socioId);
+    if (!participant) return null;
+
+    const enrollments = await tenantPrismaRepo.getEnrollmentsByParticipant(ctx, participant.id);
+    const enrollment = enrollments.find((e) => e.status === 'active' && e.collectionKey);
+    if (!enrollment || !enrollment.collectionKey) return null;
+
+    const rows = await tenantPrismaRepo.getBlockProgressForEnrollment(ctx, enrollment.id);
+    if (rows.length === 0) return null;
+
+    const lessonKeys = [...new Set(rows.map((r) => r.lessonKey))];
+    const lessonTotals = new Map<string, number | null>();
+    await Promise.all(
+      lessonKeys.map(async (lessonKey) => {
+        try {
+          const version = await tenantPrismaRepo.getActiveLessonVersionBySlug(
+            ctx,
+            enrollment.collectionKey!,
+            lessonKey,
+          );
+          const parsed = version ? lessonSchema.safeParse(version.body) : null;
+          lessonTotals.set(lessonKey, parsed?.success ? parsed.data.blocks.length : null);
+        } catch {
+          lessonTotals.set(lessonKey, null);
+        }
+      }),
+    );
+
+    return buildActivityStrip(
+      rows
+        .filter((r): r is typeof r & { completedAt: Date } => r.completedAt !== null)
+        .map((r) => ({ lessonKey: r.lessonKey, blockId: r.blockId, completedAt: r.completedAt })),
+      lessonTotals,
+    );
+  } catch {
+    // A panel that cannot load its data is dropped, not fatal.
+    return null;
+  }
+}
+
+/**
+ * The learner's actual answers to quiz_checkpoint, drag_order, and
+ * onboarding_survey blocks — the "written tests" a mentor could not see
+ * before, since those three block types never post through `/api/chat` and
+ * so never produce a `Message` row (see blockAnswers.ts's docblock).
+ *
+ * Same enrollment tie-break and same-lesson-content lookup as
+ * `loadActivityStrip`, deliberately not merged with it: that one only ever
+ * needs a block *count* per lesson, this one needs the full block bodies
+ * (questions, items, correct answers) to render the answers meaningfully.
+ */
+export async function loadBlockAnswers(
+  socioId: string,
+  organizationId: string,
+): Promise<AnsweredBlock[]> {
+  try {
+    const ctx = createTenantContext(organizationId);
+
+    const participant = await tenantPrismaRepo.getParticipantBySocioId(ctx, socioId);
+    if (!participant) return [];
+
+    const enrollments = await tenantPrismaRepo.getEnrollmentsByParticipant(ctx, participant.id);
+    const enrollment = enrollments.find((e) => e.status === 'active' && e.collectionKey);
+    if (!enrollment || !enrollment.collectionKey) return [];
+
+    const rows = await tenantPrismaRepo.getBlockProgressForEnrollment(ctx, enrollment.id);
+    if (rows.length === 0) return [];
+
+    const lessonKeys = [...new Set(rows.map((r) => r.lessonKey))];
+    const blocksByKey = new Map<string, ParsedLessonBlock>();
+    await Promise.all(
+      lessonKeys.map(async (lessonKey) => {
+        try {
+          const version = await tenantPrismaRepo.getActiveLessonVersionBySlug(
+            ctx,
+            enrollment.collectionKey!,
+            lessonKey,
+          );
+          const parsed = version ? lessonSchema.safeParse(version.body) : null;
+          if (!parsed?.success) return;
+          for (const block of parsed.data.blocks) blocksByKey.set(`${lessonKey}:${block.id}`, block);
+        } catch {
+          // Skip this lesson's content; its rows are simply dropped by
+          // buildBlockAnswers below (no entry in blocksByKey).
+        }
+      }),
+    );
+
+    return buildBlockAnswers(
+      rows
+        .filter((r): r is typeof r & { completedAt: Date } => r.completedAt !== null)
+        .map((r) => ({ lessonKey: r.lessonKey, blockId: r.blockId, response: r.response, completedAt: r.completedAt })),
+      blocksByKey,
+    );
+  } catch {
+    // A panel that cannot load its data is dropped, not fatal.
+    return [];
+  }
 }

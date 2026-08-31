@@ -8,6 +8,7 @@ type SerializedMessage = {
   role: string;
   content: string;
   createdAt: string;
+  isAssessment?: boolean;
 };
 
 const ROLE_STYLES: Record<string, string> = {
@@ -97,6 +98,9 @@ export function ChatHistory({
           >
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-semibold opacity-75">{roleLabels[msg.role] ?? msg.role}</span>
+              {msg.isAssessment && (
+                <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-black/10">{t.assessmentBadge}</span>
+              )}
               <span className="text-xs opacity-50">{formatTime(msg.createdAt)}</span>
             </div>
             <p className="text-sm whitespace-pre-wrap">{msg.content}</p>

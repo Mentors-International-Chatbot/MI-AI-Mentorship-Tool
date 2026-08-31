@@ -316,9 +316,9 @@ export const prismaRepo: Repo = {
         return toMessage(msg);
     },
 
-    async getMessages(socioId, limit) {
+    async getMessages(socioId, limit, opts) {
         const messages = await prisma.message.findMany({
-            where: { socioId, assessmentSessionId: null },
+            where: { socioId, ...(opts?.includeAssessment ? {} : { assessmentSessionId: null }) },
             orderBy: { createdAt: "desc" },
             ...(limit ? { take: limit } : {}),
         });
@@ -351,7 +351,7 @@ export const prismaRepo: Repo = {
         const messages = await prisma.message.findMany({
             where: {
                 socioId,
-                assessmentSessionId: null,
+                ...(opts?.includeAssessment ? {} : { assessmentSessionId: null }),
                 ...(opts?.since ? { createdAt: { gt: opts.since } } : {}),
             },
             orderBy: { createdAt: "desc" },

@@ -10,8 +10,10 @@ import { getDashboardStrings } from '@/lib/i18n/dashboard';
 import { resolveDashboardLanguage } from '@/lib/i18n/resolveDashboardLanguage';
 import { resolveDashboardPanels } from '@/lib/journey-package/dashboard-panels';
 import { resolveLocalized } from '@/lib/courses/course-meta';
-import { loadPanelData } from './panelData';
+import { loadPanelData, loadActivityStrip, loadBlockAnswers } from './panelData';
 import { ChatHistory } from './ChatHistory';
+import { ActivityStrip } from './ActivityStrip';
+import { BlockAnswersPanel } from './BlockAnswersPanel';
 import { SendMessageForm } from './SendMessageForm';
 import { SliderPanel } from './SliderPanel';
 import { FlagsPanel } from './FlagsPanel';
@@ -80,13 +82,18 @@ export default async function SocioDetailPage({
     socio.curriculumCollectionKey,
   );
 
-  const [health, progress, flags, messages, feedback, panels] = await Promise.all([
+  const [health, progress, flags, messages, feedback, panels, activity, blockAnswers] = await Promise.all([
     computeSocioHealth(id),
     repo.getSocioProgress(id),
     repo.getFlags(id),
-    repo.getMessages(id, 50),
+    // Unbounded and including reteach_gate/assessment turns: a mentor is
+    // looking at the whole relationship, not reconstructing what the model
+    // can see for its own next reply (that's the getMessages default).
+    repo.getMessages(id, undefined, { includeAssessment: true }),
     repo.getFeedback(id),
     loadPanelData(id, org.organizationId, panelConfig),
+    loadActivityStrip(id, org.organizationId),
+    loadBlockAnswers(id, org.organizationId),
   ]);
 
   const latestFeedback = feedback[0] ?? null;
@@ -98,6 +105,7 @@ export default async function SocioDetailPage({
     role: m.role,
     content: m.content,
     createdAt: m.createdAt.toISOString(),
+    isAssessment: m.assessmentSessionId != null,
   }));
 
   // The resolution note lives on the FlagEvent, not the flag, so pull the
@@ -161,7 +169,9 @@ export default async function SocioDetailPage({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column: Chat + Send */}
         <div className="lg:col-span-2 space-y-4">
+          {activity && <ActivityStrip lessons={activity.lessons} />}
           <ChatHistory socioId={id} messages={serializedMessages} />
+          <BlockAnswersPanel blocks={blockAnswers} />
           <SendMessageForm socioId={id} initialAiPaused={socio.aiPaused} />
         </div>
 

@@ -82,6 +82,19 @@ export type Enrollment = {
   metadata: Record<string, unknown> | null;
 };
 
+export type BlockProgress = {
+  id: string;
+  enrollmentId: string | null;
+  lessonKey: string;
+  blockId: string;
+  contentVersion: number;
+  startedAt: Date;
+  completedAt: Date | null;
+  score: number | null;
+  /** The learner's submitted answer — quiz choices, drag order, survey field values, etc. */
+  response: unknown;
+};
+
 export type LearnerProjectStatus = 'DRAFT' | 'ACTIVE' | 'CHANGED' | 'ABANDONED';
 
 export type LearnerProject = {
@@ -400,6 +413,13 @@ export interface TenantRepo {
   getEnrollments(ctx: TenantContext, cohortId: string): Promise<Enrollment[]>;
   getEnrollmentById(ctx: TenantContext, enrollmentId: string): Promise<Enrollment | null>;
   getEnrollmentsByParticipant(ctx: TenantContext, participantId: string): Promise<Enrollment[]>;
+  /**
+   * Completed BlockProgress rows for one enrollment, oldest first. The player
+   * surface (block-based courses) records most learner activity here rather
+   * than as `Message` rows — see the mentor learner-detail activity strip,
+   * which is this method's only reader.
+   */
+  getBlockProgressForEnrollment(ctx: TenantContext, enrollmentId: string): Promise<BlockProgress[]>;
   createEnrollment(ctx: TenantContext, cohortId: string, participantId: string): Promise<Enrollment>;
   updateEnrollmentStatus(ctx: TenantContext, enrollmentId: string, status: Enrollment['status']): Promise<Enrollment>;
   /**

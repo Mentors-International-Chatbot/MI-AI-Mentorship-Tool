@@ -211,28 +211,42 @@ export function historyContent(block: Block, surveyAnswers?: Record<string, stri
 }
 
 /**
- * The prompt bubbles for an onboarding_survey's steps up through the one
+ * The prompt bubbles for an onboarding_survey's steps *before* the one
  * currently showing, mirroring `teach_back`'s "a question being asked reads
  * as a message" treatment (see the `teach_back` case in `threadItems`) —
  * generalized to a block with several internal steps instead of one.
  *
- * A pure function of `(blockId, steps, stepIndex)`, not an event: called
- * fresh on every `threadItems` recompute, so there is no "already mirrored"
- * state to track and nothing to duplicate. The same `stepIndex` always
- * produces the same array of stable keys, whether it was reached by
- * stepping through the survey turn by turn or by loading straight into it
- * mid-survey after a reload — history and live progression render identically.
+ * The live step is deliberately excluded: it now lives in the pinned card
+ * (see the merged input in the render below), so mirroring it into the
+ * thread too printed the same question twice. Each mirrored step carries its
+ * answer, keyed by `field` out of the same `surveyAnswers` map the completed
+ * -history branch reads, so the thread reads as Q&A rather than a stack of
+ * bare questions.
+ *
+ * A pure function of `(blockId, steps, stepIndex, answers)`, not an event:
+ * called fresh on every `threadItems` recompute, so there is no "already
+ * mirrored" state to track and nothing to duplicate. The same inputs always
+ * produce the same array of stable keys, whether reached by stepping through
+ * the survey turn by turn or by loading straight into it mid-survey after a
+ * reload — history and live progression render identically.
  */
 export function onboardingSurveyPromptBubbles(
   blockId: string,
-  steps: ReadonlyArray<{ prompt: string }>,
+  steps: ReadonlyArray<{ prompt: string; field: string }>,
   stepIndex: number,
+  answers?: Record<string, string>,
 ): ThreadItem[] {
   if (steps.length === 0) return [];
-  const answeredThrough = Math.min(Math.max(stepIndex, 0), steps.length - 1);
+  const answeredThrough = Math.min(Math.max(stepIndex, 0), steps.length);
   const items: ThreadItem[] = [];
-  for (let index = 0; index <= answeredThrough; index += 1) {
-    items.push({ kind: "prompt", key: `${blockId}-step-${index}-prompt`, content: steps[index].prompt });
+  for (let index = 0; index < answeredThrough; index += 1) {
+    const step = steps[index];
+    const answer = answers?.[step.field];
+    items.push({
+      kind: "prompt",
+      key: `${blockId}-step-${index}-prompt`,
+      content: answer !== undefined ? `**${step.prompt}**\n\n${answer}` : `**${step.prompt}**`,
+    });
   }
   return items;
 }
@@ -356,6 +370,15 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   const requiresResponse = (current?.blockType === "teach" && (current as Teach).expectsResponse === true)
     || (current?.blockType === "project" && (current as Project).requiresSubmission === true);
   const isSurvey = current?.blockType === "onboarding_survey";
+  /**
+   * A block that asks for typed text gets its input merged into the pinned
+   * lesson card instead of the docked aside below it — one box, directly
+   * under whatever is asking, rather than two or three disconnected cards.
+   * Decided by block type alone, not by review state:
+   * `tutorInputPanel` below is what decides whether that merged box has
+   * anything in it once a block is `submittedComplete`.
+   */
+  const isTextAnswerBlock = isSurvey || teachingBack || requiresResponse;
   useEffect(() => {
     if (current?.blockType === "drag_order") setOrder((current as Drag).items.map((_, index) => index));
     const savedTurn = data?.progress.find((item) => item.blockId === current?.id)?.state?.turnCount;
@@ -439,6 +462,36 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     // who doesn't know to reload sees a frozen screen and re-answers it,
     // which the server then silently files under the next unanswered field.
     if (result && !result.completed) setSurveyStepIndex((value) => value + 1);
+    // Mirror the answer into local `data.progress` too, not just the step
+    // pointer: `onboardingSurveyPromptBubbles` reads surveyAnswers from
+    // `data.progress`, the same place the completed-history branch reads it
+    // from. Without this, a step answered this session — before any reload
+    // refetches the lesson — mirrored into the thread as a bare question
+    // again once the live step moved past it: the exact bug Part 2 removes,
+    // just shifted from the live step to the one behind it.
+    //
+    // Also writes the same next index into that item's `state.stepIndex`.
+    // The block-change effect below reruns on any `data` change (it depends
+    // on `[current, data]`) and re-derives `surveyStepIndex` from exactly
+    // that field — leaving it stale here would have the effect stamp
+    // `surveyStepIndex` right back down the moment this `setData` commits.
+    if (result && !result.completed) {
+      const surveyBlock = current?.blockType === "onboarding_survey" ? current as OnboardingSurvey : undefined;
+      const field = surveyBlock?.steps[surveyStepIndex]?.field;
+      if (surveyBlock && field) {
+        const nextStepIndex = surveyStepIndex + 1;
+        setData((value) => value && {
+          ...value,
+          progress: value.progress.map((item) => item.blockId === surveyBlock.id
+            ? {
+                ...item,
+                surveyAnswers: { ...item.surveyAnswers, [field]: answer },
+                state: { ...(item.state ?? {}), stepIndex: nextStepIndex },
+              }
+            : item),
+        });
+      }
+    }
   }
 
   async function advanceReviewedBlock() {
@@ -602,10 +655,10 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       const isDone = completed.has(block.id);
       const isCurrent = current?.id === block.id;
       if (!isDone && !isCurrent) break;
+      const surveyAnswers = block.blockType === "onboarding_survey"
+        ? data.progress.find((item) => item.blockId === block.id)?.surveyAnswers
+        : undefined;
       if (isDone) {
-        const surveyAnswers = block.blockType === "onboarding_survey"
-          ? data.progress.find((item) => item.blockId === block.id)?.surveyAnswers
-          : undefined;
         const history = historyContent(block, surveyAnswers);
         if (history) items.push({
           kind: "block",
@@ -646,7 +699,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       // message, so a learner who has answered three of seven questions sees
       // all three as thread history, not just the one in front of them.
       if (isCurrent && block.blockType === "onboarding_survey") {
-        items.push(...onboardingSurveyPromptBubbles(block.id, (block as OnboardingSurvey).steps, surveyStepIndex));
+        items.push(...onboardingSurveyPromptBubbles(block.id, (block as OnboardingSurvey).steps, surveyStepIndex, surveyAnswers));
       }
       items.push(...tutorFor(block.id));
     }
@@ -713,6 +766,38 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
 
   const total = data.lesson.blocks.length;
   const done = completed.size;
+  /**
+   * The one piece of markup for sending typed text, defined once so there is
+   * exactly one text box in this file no matter which of the two spots below
+   * ends up rendering it. `isTextAnswerBlock` picks the spot — merged into
+   * the pinned card, or the docked aside — this only decides what the box
+   * itself looks like once it is there.
+   */
+  const tutorInputPanel = current ? <>
+    <textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} disabled={busy} placeholder={isSurvey ? "Type your answer…" : teachingBack ? "Explain it in your own words…" : requiresResponse ? "Type your response…" : "Ask about this lesson…"} />
+    {/* One control on a block that requires text: it sends and advances,
+        and it is disabled until there is something to send. On every other
+        block this stays what it was — a way to ask, next to the card's own
+        way forward. */}
+    {/* Once reviewed — graded or gated on an open question — this falls to
+        the ask-only branch below, same as every other reviewed block:
+        no live advance control competing with the Continue on the card. */}
+    {/* onboarding_survey never falls to the ask-tutor branch: its steps are
+        canned questions, not something to converse about. */}
+    {isSurvey && !submittedComplete.has(current.id)
+      ? <button disabled={busy || !question.trim()} onClick={submitSurveyStep}>Send and continue</button>
+      : requiresResponse && !submittedComplete.has(current.id)
+      ? <button disabled={busy || !question.trim()} onClick={() => advance({ acknowledged: true })}>Send and continue</button>
+      : !isSurvey && <button disabled={busy || !question.trim()} onClick={() => askTutor()}>{teachingBack ? (teachBackTurn === 1 ? "Share with AI Mentor" : "Send follow-up") : "Ask a question"}</button>}
+    {(isSurvey || requiresResponse) && !submittedComplete.has(current.id) && !question.trim() && <p className="player-teachback-hint">Type your {isSurvey ? "answer" : "response"} to continue.</p>}
+    {/* Only after a send has actually failed twice, and only here. This is
+        not a second way forward competing with the button above it: until
+        the tutor breaks it does not exist. Without it a tutor outage on the
+        first block of a lesson is a locked door. onboarding_survey never
+        calls the tutor, so it has no equivalent failure mode to fall back
+        from. */}
+    {requiresResponse && !isSurvey && !submittedComplete.has(current.id) && sendFailures >= 2 && <button type="button" className="player-secondary" disabled={busy} onClick={() => complete({ acknowledged: true })}>Continue without sending</button>}
+  </> : null;
   return (
     <main className="player-shell">
       <header className="player-header">
@@ -799,7 +884,13 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       {/* The current block. Scrolls with the thread since the sticky
           positioning came out; see the note on `.player-current`. */}
       {current ? <><section className="player-card player-current" aria-live="polite">
-        <div className="player-step">Step {done + 1} of {total}</div>
+        {/* onboarding_survey collapses the lesson-level block counter and its
+            own internal step counter into one line, since both were stacked
+            directly above the same question. Every other block type keeps
+            the plain lesson-level counter untouched. */}
+        {current.blockType === "onboarding_survey"
+          ? (!submittedComplete.has(current.id) && <div className="player-step player-survey-step">Step {done + 1} of {total} · Question {Math.min(surveyStepIndex, (current as OnboardingSurvey).steps.length - 1) + 1} of {(current as OnboardingSurvey).steps.length}</div>)
+          : <div className="player-step">Step {done + 1} of {total}</div>}
         {/* A block that asks for typed text carries no button of its own. Its
             one control lives under the box, so the card reads as the
             invitation it is and the action sits with the writing. */}
@@ -833,12 +924,8 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
         ) : <>
         {current.blockType === "teach" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
         {current.blockType === "project" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Project).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
-        {/* The lesson-level "Step {done+1} of {total}" above counts blocks,
-            not survey questions — b0-2 is one block with several internal
-            steps, so that counter stays flat for the whole survey. This is
-            a second, separate counter for the survey's own progress; it does
-            not replace or feed into the lesson-level one. */}
-        {current.blockType === "onboarding_survey" && !submittedComplete.has(current.id) && <div className="player-step player-survey-step">Question {Math.min(surveyStepIndex, (current as OnboardingSurvey).steps.length - 1) + 1} of {(current as OnboardingSurvey).steps.length}</div>}
+        {/* The counter above collapses lesson-step and survey-step into one
+            line for this block type; see its render higher up. */}
         {current.blockType === "onboarding_survey" && !submittedComplete.has(current.id) && <ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as OnboardingSurvey).steps[Math.min(surveyStepIndex, (current as OnboardingSurvey).steps.length - 1)]?.prompt ?? ""}</ReactMarkdown>}
         {current.blockType === "quiz_checkpoint" && !submittedComplete.has(current.id) && <>
           {(current as Quiz).title && <h2>{(current as Quiz).title}</h2>}
@@ -874,31 +961,14 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           items={current.blockType === "drag_order" ? (current as Drag).items : undefined}
         />
         {submittedComplete.has(current.id) && <button disabled={busy} onClick={advanceReviewedBlock}>Continue</button>}
+        {/* Merged input: exactly one box, directly under whatever is asking,
+            for every block type that asks for typed text. onboarding_survey
+            is the one exception — once it is submittedComplete it never
+            talks to the tutor, so no box (empty or otherwise) belongs here. */}
+        {isTextAnswerBlock && !(isSurvey && submittedComplete.has(current.id)) && tutorInputPanel}
         </>}
         {error && <p className="player-error">{error}</p>}
-      </section>{!boundedMode && <aside className="player-card"><h2>{isSurvey ? "Your answer" : requiresResponse ? "Your response" : "Ask AI Mentor"}</h2><textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} disabled={busy} placeholder={isSurvey ? "Type your answer…" : teachingBack ? "Explain it in your own words…" : requiresResponse ? "Type your response…" : "Ask about this lesson…"} />
-        {/* One control on a block that requires text: it sends and advances,
-            and it is disabled until there is something to send. On every other
-            block this stays what it was — a way to ask, next to the card's own
-            way forward. */}
-        {/* Once reviewed — graded or gated on an open question — this falls to
-            the ask-only branch below, same as every other reviewed block:
-            no live advance control competing with the Continue on the card. */}
-        {/* onboarding_survey never falls to the ask-tutor branch: its steps are
-            canned questions, not something to converse about. */}
-        {isSurvey && !submittedComplete.has(current.id)
-          ? <button disabled={busy || !question.trim()} onClick={submitSurveyStep}>Send and continue</button>
-          : requiresResponse && !submittedComplete.has(current.id)
-          ? <button disabled={busy || !question.trim()} onClick={() => advance({ acknowledged: true })}>Send and continue</button>
-          : !isSurvey && <button disabled={busy || !question.trim()} onClick={() => askTutor()}>{teachingBack ? (teachBackTurn === 1 ? "Share with AI Mentor" : "Send follow-up") : "Ask a question"}</button>}
-        {(isSurvey || requiresResponse) && !submittedComplete.has(current.id) && !question.trim() && <p className="player-teachback-hint">Type your {isSurvey ? "answer" : "response"} to continue.</p>}
-        {/* Only after a send has actually failed twice, and only here. This is
-            not a second way forward competing with the button above it: until
-            the tutor breaks it does not exist. Without it a tutor outage on the
-            first block of a lesson is a locked door. onboarding_survey never
-            calls the tutor, so it has no equivalent failure mode to fall back
-            from. */}
-        {requiresResponse && !isSurvey && !submittedComplete.has(current.id) && sendFailures >= 2 && <button type="button" className="player-secondary" disabled={busy} onClick={() => complete({ acknowledged: true })}>Continue without sending</button>}
+      </section>{!boundedMode && !isTextAnswerBlock && <aside className="player-card"><h2>Ask AI Mentor</h2>{tutorInputPanel}
         {/* Chips are for asking about the lesson. During a teach-back the box is
             the learner's own explanation, and a canned question is not that. */}
         {!teachingBack && !requiresResponse && !isSurvey && <div className="player-chip-row">{TUTOR_CHIPS.map((chip) => <button type="button" className="player-chip" key={chip} disabled={busy} onClick={() => askTutor(chip)}>{chip}</button>)}</div>}

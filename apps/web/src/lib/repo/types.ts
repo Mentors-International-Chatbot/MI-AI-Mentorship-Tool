@@ -313,7 +313,14 @@ export interface Repo {
     updateSocio(socioId: string, data: Partial<Socio>): Promise<Socio>;
 
     addMessage(data: Omit<Message, "id" | "createdAt">): Promise<Message>;
-    getMessages(socioId: string, limit?: number): Promise<Message[]>;
+    /**
+     * `includeAssessment` defaults false, excluding reteach_gate/assessment-session
+     * turns — that default is what makes this safe to hand the model as "the
+     * conversation so far" (see `getLastAssistantMessageAt` below). A human
+     * looking at the whole relationship, not just what the model can see —
+     * the mentor dashboard's use case — passes `includeAssessment: true`.
+     */
+    getMessages(socioId: string, limit?: number, opts?: { includeAssessment?: boolean }): Promise<Message[]>;
     /**
      * When the AI (or a mentor) last spoke in the main thread, or null if never.
      *
@@ -323,7 +330,7 @@ export interface Repo {
      * part of the conversation the model can see.
      */
     getLastAssistantMessageAt(socioId: string): Promise<Date | null>;
-    getMessagesWithSentiment(socioId: string, opts?: { limit?: number; since?: Date }): Promise<(Message & { sentiment?: { confusion: number; frustration: number; urgency: number; sentiment: string } })[]>;
+    getMessagesWithSentiment(socioId: string, opts?: { limit?: number; since?: Date; includeAssessment?: boolean }): Promise<(Message & { sentiment?: { confusion: number; frustration: number; urgency: number; sentiment: string } })[]>;
     /**
      * Timestamps of the socio's own messages, ascending. Deliberately narrow:
      * the quiet-return signal only needs to find gaps between messages, and

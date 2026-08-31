@@ -11,12 +11,17 @@ export async function GET(
   const auth = await verifyMentorOwnership(socioId);
   if (!auth.authorized) return auth.response;
 
-  const limit = Number(req.nextUrl.searchParams.get('limit') ?? 50);
+  // No default cap: this feeds the mentor's view of the whole relationship.
+  // A caller may still pass `limit` explicitly (unused today, kept for a
+  // future paginated caller).
+  const limitParam = req.nextUrl.searchParams.get('limit');
+  const limit = limitParam ? Number(limitParam) : undefined;
   const since = req.nextUrl.searchParams.get('since');
 
   const messages = await repo.getMessagesWithSentiment(socioId, {
     limit,
     since: since ? new Date(since) : undefined,
+    includeAssessment: true,
   });
 
   return NextResponse.json({
@@ -27,6 +32,7 @@ export async function GET(
       content: m.content,
       createdAt: m.createdAt,
       sentiment: m.sentiment ?? undefined,
+      isAssessment: m.assessmentSessionId != null,
     })),
   });
 }
