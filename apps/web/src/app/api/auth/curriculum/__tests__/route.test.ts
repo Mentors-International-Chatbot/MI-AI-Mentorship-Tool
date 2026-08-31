@@ -383,4 +383,67 @@ describe('POST /api/auth/curriculum — chat-surface enrollment (G3)', () => {
     expect(res.status).toBe(200);
     expect(mocks.resolveOrCreateActiveEnrollment).not.toHaveBeenCalled();
   });
+
+  // These two no-op reasons used to be genuinely silent — no exception, no log
+  // — even though the blocking condition (a tenant mismatch, or no single
+  // tenant-safe published version) can be permanent for a given socio/org, not
+  // just first-selection noise. The comment above this branch claims
+  // "idempotent re-entry... guarantees eventually," which is false unless the
+  // skip is at least observable for backfill. These pin that both skip paths
+  // now log a warn, while still returning success (fail-open, chat unaffected).
+  it('logs a warn (not an error) when no single tenant-safe published version supports web delivery', async () => {
+    mocks.resolveOrganizationForSocio.mockResolvedValue({
+      organizationId: ORG_ID,
+      source: 'collection_key',
+    });
+    // participant is anchored to a different org than the only candidate, so
+    // selectPublishedPlayerVersion's tenant filter leaves zero eligible
+    // candidates and returns null — this is the ambiguity-fails-closed case,
+    // not an exception.
+    mocks.participantFindUnique.mockResolvedValue({ id: 'participant-mismatched', organizationId: 'org-other-000000000002' });
+    mocks.programVersionFindMany.mockResolvedValue([{
+      id: 'chat-version-1',
+      programId: 'chat-program-1',
+      metadata: null,
+      program: { organizationId: ORG_ID, organization: { settings: null } },
+    }]);
+
+    const res = await POST(postRequest());
+
+    expect(res.status).toBe(200);
+    expect(mocks.resolveOrCreateActiveEnrollment).not.toHaveBeenCalled();
+    const logged = loggedAt('warn');
+    expect(logged).toBeDefined();
+    expect(logged!.message).toContain('no single tenant-safe published version');
+    expect(mocks.logEvent).not.toHaveBeenCalledWith('error', expect.anything(), expect.anything(), expect.anything());
+  });
+
+  it('logs a warn (not an error) when the resolved participant tenant does not match the course organization', async () => {
+    mocks.resolveOrganizationForSocio.mockResolvedValue({
+      organizationId: 'org-other-000000000002',
+      source: 'collection_key',
+    });
+    // Unanchored at the time selectPublishedPlayerVersion runs (no participant
+    // yet), so the single non-synthetic candidate is picked on org ORG_ID.
+    // anchorParticipantProfile then creates the real profile on a DIFFERENT
+    // org — the second findUnique call (behind `??=`) surfaces that mismatch.
+    mocks.participantFindUnique
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ id: 'participant-late', organizationId: 'org-other-000000000002' });
+    mocks.programVersionFindMany.mockResolvedValue([{
+      id: 'chat-version-1',
+      programId: 'chat-program-1',
+      metadata: null,
+      program: { organizationId: ORG_ID, organization: { settings: null } },
+    }]);
+
+    const res = await POST(postRequest());
+
+    expect(res.status).toBe(200);
+    expect(mocks.resolveOrCreateActiveEnrollment).not.toHaveBeenCalled();
+    const logged = loggedAt('warn');
+    expect(logged).toBeDefined();
+    expect(logged!.message).toContain('does not match the resolved course');
+    expect(mocks.logEvent).not.toHaveBeenCalledWith('error', expect.anything(), expect.anything(), expect.anything());
+  });
 });

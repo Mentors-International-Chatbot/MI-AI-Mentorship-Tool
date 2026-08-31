@@ -216,7 +216,39 @@ export async function POST(req: NextRequest) {
                         programVersionId: chatVersion.id,
                         channel: 'web',
                     });
+                } else {
+                    // Not an error — chat delivery does not depend on this row, so this
+                    // stays fail-open. But "idempotent re-entry guarantees it eventually
+                    // happens" only holds if the blocking condition is transient. A
+                    // tenant mismatch between this socio's ParticipantProfile and the
+                    // resolved course's organization is not transient — every future
+                    // selection of this same collection hits the same mismatch and
+                    // no-ops the same way, forever, with nothing logged until now.
+                    await logEvent(
+                        'warn',
+                        'system',
+                        `[Curriculum] chat-surface Enrollment skipped for socio ${socio.id} ` +
+                            `(collection "${collectionKey}") — no ParticipantProfile, or its ` +
+                            `organization does not match the resolved course's organization. ` +
+                            `Socio needs backfill if this does not resolve on its own.`,
+                        { socioId: socio.id, collectionKey, participantOrganizationId: participant?.organizationId ?? null, courseOrganizationId: chatVersion.program.organizationId },
+                    );
                 }
+            } else {
+                // Same fail-open reasoning as above: no single tenant-safe published
+                // version supports web delivery for this collection right now. Ambiguity
+                // (selectPublishedPlayerVersion) and channel gating are both conditions
+                // that can persist indefinitely for a given org, not just first-selection
+                // noise, so this must be observable rather than a silent no-op.
+                await logEvent(
+                    'warn',
+                    'system',
+                    `[Curriculum] chat-surface Enrollment skipped for socio ${socio.id} ` +
+                        `(collection "${collectionKey}") — no single tenant-safe published ` +
+                        `version supports web delivery. Socio needs backfill if this does not ` +
+                        `resolve on its own.`,
+                    { socioId: socio.id, collectionKey, participantOrganizationId: participant?.organizationId ?? null, candidateCount: candidates.length },
+                );
             }
         } catch (error) {
             await logEvent(
