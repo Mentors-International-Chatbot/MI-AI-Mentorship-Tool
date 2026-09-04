@@ -28,7 +28,11 @@ export type AdminScope =
   // socioIds is the actual scope a panel filters on; collectionKeys is
   // derived convenience data for a course picker, never the filter itself.
   | { kind: 'mentor'; actorId: string; organizationId: string; socioIds: string[]; collectionKeys: string[] }
-  | { kind: 'none'; actorId: string; reason: 'no_profile' | 'no_caseload' | 'no_membership' };
+  | {
+      kind: 'none';
+      actorId: string;
+      reason: 'no_profile' | 'no_caseload' | 'no_membership' | 'ambiguous_org_mentor' | 'ambiguous_org_course_lead';
+    };
 
 export async function resolveAdminScope(session: SessionPayload): Promise<AdminScope> {
   if (session.role === 'admin') {
@@ -46,16 +50,17 @@ export async function resolveAdminScope(session: SessionPayload): Promise<AdminS
       // no per-row uniqueness tying a membership to a single org globally).
       // AdminScope's course_admin variant carries exactly one organizationId,
       // so picking one here would be the same "absence reads as permission"
-      // trap the union exists to avoid. Fails closed instead. Flag for
-      // Michael: if a real cross-org course lead is a legitimate case (not
-      // just a fixture artifact), this needs its own multi-scope handling.
+      // trap the union exists to avoid. Fails closed instead, under its own
+      // reason distinct from plain no_membership — an anomaly and an
+      // ordinary empty case must not be indistinguishable to a caller
+      // deciding whether to alert on it.
       await logEvent(
         'warn',
         'system',
         `[AdminScope] course_lead ${session.userId} has writable scopes across multiple organizations: ${organizationIds.join(', ')}.`,
         { userId: session.userId, organizationIds },
       );
-      return { kind: 'none', actorId: session.userId, reason: 'no_membership' };
+      return { kind: 'none', actorId: session.userId, reason: 'ambiguous_org_course_lead' };
     }
 
     return {
@@ -73,21 +78,20 @@ export async function resolveAdminScope(session: SessionPayload): Promise<AdminS
     if (caseload.status === 'no_profile') return { kind: 'none', actorId: session.userId, reason: 'no_profile' };
 
     if (caseload.status === 'ambiguous_org') {
-      // Not one of the three ordinary reasons above — a caseload spanning
-      // multiple orgs is a tenant-isolation anomaly (mentor assignment
-      // should never cross orgs), not a routine "nothing to show" state.
-      // Folded under no_profile (same "no usable anchor" contract for
-      // callers) rather than adding a fourth union member for something
-      // that should not happen; logged loudly so it does not stay silent.
-      // Flag for Michael: confirm this fold-in is the right call, or add a
-      // dedicated reason if it turns out to fire in practice.
+      // Not one of the ordinary reasons above — a caseload spanning multiple
+      // orgs is a tenant-isolation anomaly (mentor assignment should never
+      // cross orgs), not a routine "nothing to show" state. Its own reason,
+      // distinct from no_profile, so a caller can alert on the anomaly
+      // without being unable to tell it apart from an unremarkable
+      // unanchored caseload. Logged loudly so it does not stay silent either
+      // way.
       await logEvent(
         'error',
         'system',
         `[AdminScope] mentor ${session.userId} caseload spans multiple organizations: ${caseload.organizationIds.join(', ')} — mentor assignment should never cross tenants.`,
         { mentorId: session.userId, organizationIds: caseload.organizationIds },
       );
-      return { kind: 'none', actorId: session.userId, reason: 'no_profile' };
+      return { kind: 'none', actorId: session.userId, reason: 'ambiguous_org_mentor' };
     }
 
     return {

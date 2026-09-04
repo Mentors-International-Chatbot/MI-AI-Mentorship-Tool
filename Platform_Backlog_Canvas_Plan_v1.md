@@ -13,6 +13,7 @@ Six items captured **2026-07-27**. Ordered by dependency and value, not arrival.
 | 5 | Dashboard panels (revenue trends, weekly summaries, dimensions) configurable per course | M | Bucket 3 / config |
 | 6 | Canvas integration (LTI 1.3 launch + REST API grade sync) | L | New integration |
 | 7 | Enrollment guard — course selection can drift from the socio's anchored org | XS–S | Multi-tenancy |
+| 11 | Quiz wrong-answer nudging, parts (b)/(c): progressive partial reveal + per-pair matching feedback | M | Player / quiz UX |
 
 ## 1. Password visibility toggle (bug)
 
@@ -364,3 +365,14 @@ divergence expressed in org terms, and it is the mechanism behind the 5 above.
 `Socio` has no `organizationId` column, so at least there is no third copy of
 *that* fact. The fix is to make list-scoping call the same resolver the rest of
 the codebase calls, rather than reimplementing tier 1 inline.
+
+## 11. Quiz wrong-answer nudging, parts (b)/(c): progressive reveal + per-pair matching feedback
+
+Captured **2026-08-27**, alongside shipping the word-bank fix and parts (a)/(d) of the same investigation (reveal-after-N-attempts and cap-then-complete for `web_quiz` mode, both delivered — see `gradePlayerBlock`'s `web_quiz` branch in `apps/web/src/lib/player/service.ts`).
+
+Two approaches investigated but deliberately not built, because both need real new grading + DTO + UI work rather than porting an existing pattern:
+
+- **(b) Progressive partial reveal per attempt** — no "partial" concept exists today for any quiz format except `drag_to_order`, which already reveals a misplaced-*count* (`misplacedPositions.length`) without the answer itself — the existing precedent to copy the shape of if this gets built. Single-value formats (`multiple_choice`/`fill_in_blank`/`short_answer`) have no natural partial to reveal — one blank is atomic, correct or not. Mostly only makes sense for `matching`, which folds into the item below.
+- **(c) Per-part feedback on `matching`** — `gradeQuizQuestion`'s `matching` branch (`apps/web/src/lib/player/quizGrading.ts`) collapses to one boolean for the whole question (`promptIds.every((id) => answer[id] === answerKey[id])`); there is no per-pair correctness computed anywhere to surface. Needs: a new grading return shape (e.g. `correctPairs: Record<string, boolean>`), a new field on `QuizFeedback.questions[]` (`BlockFeedback.tsx`'s learner-facing type), and new rendering to highlight which specific matches were wrong without leaking the rest of the answer key.
+
+Scope: both are `quiz_checkpoint`/`web_quiz`-wide (shared `gradeQuizQuestion`/`BlockFeedback.tsx`), not course-specific — whichever course has the next `matching` question in a graded checkpoint is the natural forcing function to build (c) for real rather than in the abstract.

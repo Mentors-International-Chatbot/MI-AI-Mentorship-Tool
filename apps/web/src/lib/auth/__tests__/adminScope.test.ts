@@ -23,6 +23,8 @@ vi.mock('@/lib/auth/mentorCaseloadScope', () => ({ mentorCaseloadScope: mocks.me
 vi.mock('@/lib/logging/logger', () => ({ logEvent: mocks.logEvent }));
 
 const { resolveAdminScope } = await import('@/lib/auth/adminScope');
+type AdminScopeModule = typeof import('@/lib/auth/adminScope');
+type AdminScopeNoneReason = Extract<Awaited<ReturnType<AdminScopeModule['resolveAdminScope']>>, { kind: 'none' }>['reason'];
 
 const ORG_A = 'org-a';
 const ORG_B = 'org-b';
@@ -69,14 +71,14 @@ describe('resolveAdminScope — course_admin', () => {
     expect(scope).toEqual({ kind: 'none', actorId: 'lead-1', reason: 'no_membership' });
   });
 
-  it('fails closed (none/no_membership) and logs a warn when scopes span multiple orgs', async () => {
+  it('fails closed (none/ambiguous_org_course_lead) and logs a warn when scopes span multiple orgs', async () => {
     mocks.writableScopesFor.mockResolvedValue([
       { organizationId: ORG_A, collectionKey: 'course-a', programId: 'p1', displayName: 'Course A' },
       { organizationId: ORG_B, collectionKey: 'course-b', programId: 'p2', displayName: 'Course B' },
     ]);
 
     const scope = await resolveAdminScope(session('course_lead', 'lead-1'));
-    expect(scope).toEqual({ kind: 'none', actorId: 'lead-1', reason: 'no_membership' });
+    expect(scope).toEqual({ kind: 'none', actorId: 'lead-1', reason: 'ambiguous_org_course_lead' });
     expect(mocks.logEvent).toHaveBeenCalledWith('warn', 'system', expect.stringContaining('multiple organizations'), expect.anything());
   });
 });
@@ -112,11 +114,61 @@ describe('resolveAdminScope — mentor', () => {
     expect(scope).toEqual({ kind: 'none', actorId: 'mentor-1', reason: 'no_profile' });
   });
 
-  it('fails closed (none/no_profile) and logs an error when the caseload spans multiple orgs', async () => {
+  it('fails closed (none/ambiguous_org_mentor) and logs an error when the caseload spans multiple orgs', async () => {
     mocks.mentorCaseloadScope.mockResolvedValue({ status: 'ambiguous_org', organizationIds: [ORG_A, ORG_B] });
     const scope = await resolveAdminScope(session('mentor', 'mentor-1'));
-    expect(scope).toEqual({ kind: 'none', actorId: 'mentor-1', reason: 'no_profile' });
+    expect(scope).toEqual({ kind: 'none', actorId: 'mentor-1', reason: 'ambiguous_org_mentor' });
     expect(mocks.logEvent).toHaveBeenCalledWith('error', 'system', expect.stringContaining('multiple organizations'), expect.anything());
+  });
+});
+
+/**
+ * Exact-reason-string pins, one assertion each, so a future edit that
+ * collapses two of these back onto a shared string fails here first rather
+ * than being noticed only when someone tries to alert on the anomaly cases
+ * and can't tell them apart from the ordinary empty ones.
+ */
+describe('resolveAdminScope — none.reason is distinct per path, not shared', () => {
+  it('mentor-no-caseload -> no_caseload', async () => {
+    mocks.mentorCaseloadScope.mockResolvedValue({ status: 'no_caseload' });
+    const scope = await resolveAdminScope(session('mentor', 'm1'));
+    expect(scope.kind).toBe('none');
+    expect((scope as { reason: string }).reason).toBe('no_caseload');
+  });
+
+  it('mentor-ambiguous-org -> ambiguous_org_mentor', async () => {
+    mocks.mentorCaseloadScope.mockResolvedValue({ status: 'ambiguous_org', organizationIds: [ORG_A, ORG_B] });
+    const scope = await resolveAdminScope(session('mentor', 'm1'));
+    expect(scope.kind).toBe('none');
+    expect((scope as { reason: string }).reason).toBe('ambiguous_org_mentor');
+  });
+
+  it('course_lead-no-membership -> no_membership', async () => {
+    mocks.writableScopesFor.mockResolvedValue([]);
+    const scope = await resolveAdminScope(session('course_lead', 'l1'));
+    expect(scope.kind).toBe('none');
+    expect((scope as { reason: string }).reason).toBe('no_membership');
+  });
+
+  it('course_lead-multi-org -> ambiguous_org_course_lead', async () => {
+    mocks.writableScopesFor.mockResolvedValue([
+      { organizationId: ORG_A, collectionKey: 'course-a', programId: 'p1', displayName: 'Course A' },
+      { organizationId: ORG_B, collectionKey: 'course-b', programId: 'p2', displayName: 'Course B' },
+    ]);
+    const scope = await resolveAdminScope(session('course_lead', 'l1'));
+    expect(scope.kind).toBe('none');
+    expect((scope as { reason: string }).reason).toBe('ambiguous_org_course_lead');
+  });
+
+  it('all five reason strings are pairwise distinct', () => {
+    const reasons: AdminScopeNoneReason[] = [
+      'no_caseload',
+      'no_profile',
+      'no_membership',
+      'ambiguous_org_mentor',
+      'ambiguous_org_course_lead',
+    ];
+    expect(new Set(reasons).size).toBe(reasons.length);
   });
 });
 
