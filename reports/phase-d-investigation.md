@@ -119,3 +119,19 @@ can't open either admin surface, cross-org write → AuditLog row, assistant too
 confirmation, `adjust_learner_overrides` visibly changes tutor output).
 
 Starting with D.2.
+
+## D.3 — complete (2026-09-04)
+
+All four pieces shipped: `SliderPanel.tsx` deleted (override machinery kept), `/chat` nav link hidden
+for `mentor` only, `/dashboard` now defaults mentors to `/dashboard/alerts` (Michael confirmed;
+`course_lead`/`admin` unaffected — `/dashboard/alerts` isn't scoped for `course_lead` yet), and the
+embedded assistant (inline action-card confirmation, Michael's choice) with all five tools from the
+plan. See commits for detail. `resolve_flag`/`snooze_flag` add a tenant-safety check the original
+per-flag routes didn't need (flag must belong to *this* socio, not just to a socio the mentor owns) —
+covered in `execute.test.ts`.
+
+Remaining Phase D work: D.4 (system-admin guard naming/`repo/system/` formalization — still just a
+naming exercise per the D.2 finding, fold in whenever a genuinely new cross-org method needs it) and
+the mentor-assignment write-scoping that stays deliberately unbuilt pending the
+`CourseStaffAssignment`/`ProgramMembership` reconciliation with the concurrent Auth & Login track (see
+memory: `course-staff-assignment-vs-program-membership`).
