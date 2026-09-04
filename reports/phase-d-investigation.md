@@ -49,13 +49,28 @@ confirmed-tool machinery (`adjust_learner_overrides`/`draft_message_to_learner`/
 from-scratch build, not a refactor, and it's the one piece of Phase D most likely to need a UX decision
 (confirmation flow shape) before or during the build rather than purely mechanical work.
 
-## Concurrent work in this repo (unrelated to Phase D)
+## Concurrent work in this repo (unrelated to Phase D, except one real collision)
 
 `reports/l0-auth-login-investigation.md` appeared mid-investigation, untracked — a separate "Auth &
 Login Restructure" (L0/L1/L2) track, clearly from a different, currently-running session (there's a
-live `.claude/scheduled_tasks.lock` in this working directory). It touches session/role/redirect code
-(`token.ts`, `session.ts`, `proxy.ts`) that Phase D's guard work also touches. Worth knowing about to
-avoid stepping on the same files — not something to act on here.
+live `.claude/scheduled_tasks.lock` in this working directory). Its Plan v1.1 was shown to this session
+on 2026-09-04. Mostly non-colliding — it owns `proxy.ts`/`lib/auth/*` session/role/redirect plumbing,
+Phase D doesn't touch those. Its own sequencing table says as much: "L5 builds the relation, D builds
+the dashboards it belongs in."
+
+**One real collision, found by comparing the plan against code Phase D just shipped:** L5.2 proposes a
+new `CourseStaffAssignment(mentorId, collectionKey, role: MENTOR | COURSE_ADMIN)` table as *"the same
+table that assigns mentors ... no second mechanism"* for course-admin scope. But `course_lead` scope
+resolution already runs on `ProgramMembership` today (`writableScopesFor` in `courseScope.ts`) — the
+exact mechanism D.1's `resolveAdminScope` and D.2's socios/mentors scoping (this phase) are built on.
+L5.2's plan doesn't mention `ProgramMembership` at all, so as written it would introduce a second
+course-admin-scope table alongside the live one — the same failure shape L5.1 itself warns about
+(`MentoringRelationship`: populated, schema-blessed, unread), just introduced from the other direction.
+Addendum written to `reports/l0-auth-login-investigation.md` flagging this for whoever builds L5.2;
+not blocking on it here, but Phase D should **not** build `requireCourseAdmin`/mentor-assignment-write
+scoping independently — L11 already names that exact route (`PATCH /api/admin/socios`) as its target,
+and building it twice under two mechanisms is the thing both plans exist to prevent. D.3/D.4 below are
+unaffected and proceed as planned.
 
 ## Proposed staging for the rest of Phase D
 
