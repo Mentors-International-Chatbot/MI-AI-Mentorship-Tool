@@ -40,12 +40,18 @@ export default async function DashboardLayout({
               >
                 {t.sociosTitle}
               </Link>
-              <Link
-                href="/chat"
-                className="text-sm text-gray-300 hover:text-white transition-colors"
-              >
-                {t.navWebChat}
-              </Link>
+              {/* D.3: a mentor's own web-chat access is removed from their nav —
+                  chat is the learner surface, not a mentor tool. Course leads
+                  and admins keep it (e.g. for testing a course as a learner
+                  would experience it). */}
+              {session?.role !== 'mentor' && (
+                <Link
+                  href="/chat"
+                  className="text-sm text-gray-300 hover:text-white transition-colors"
+                >
+                  {t.navWebChat}
+                </Link>
+              )}
               {canOpenAdmin && (
                 <Link
                   href="/admin"

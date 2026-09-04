@@ -15,7 +15,6 @@ import { ChatHistory } from './ChatHistory';
 import { ActivityStrip } from './ActivityStrip';
 import { BlockAnswersPanel } from './BlockAnswersPanel';
 import { SendMessageForm } from './SendMessageForm';
-import { SliderPanel } from './SliderPanel';
 import { FlagsPanel } from './FlagsPanel';
 import { LessonProgressPanel } from './LessonProgressPanel';
 import { SummaryPanel } from './SummaryPanel';
@@ -98,8 +97,6 @@ export default async function SocioDetailPage({
 
   const latestFeedback = feedback[0] ?? null;
 
-  const overrides = (socio.promptOverrides ?? {}) as Record<string, number | string | undefined>;
-
   const serializedMessages = messages.map(m => ({
     id: m.id,
     role: m.role,
@@ -177,13 +174,12 @@ export default async function SocioDetailPage({
 
         {/* Right column: mentor tooling, then the course's declared panels */}
         <div className="space-y-6">
-          {/* Not panels — mentor controls that apply to every course. */}
-          <SliderPanel
-            socioId={id}
-            initialComplexity={(overrides.complexity as number) ?? 0.5}
-            initialWarmth={(overrides.warmth as number) ?? 0.5}
-            initialPositivity={(overrides.positivity as number) ?? 0.5}
-          />
+          {/* D.3: direct slider UI removed — a mentor no longer hand-tunes
+              complexity/warmth/positivity. The underlying mechanism (Socio.
+              promptOverrides, written via PATCH /api/mentor/socios/[id]) is
+              unchanged and is what the embedded assistant's
+              adjust_learner_overrides tool will write to on the mentor's
+              confirmed behalf. */}
           <FlagsPanel flags={serializedFlags} socioId={id} />
 
           {panels.map((panel, i) => {
