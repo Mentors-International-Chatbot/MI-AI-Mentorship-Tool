@@ -15,7 +15,13 @@ import { activeFlagWhere } from '@/lib/flags/active';
  * Pagination is deliberately not represented here — rollups are computed over
  * the whole filtered set, never over one page.
  */
-export function buildSocioWhere(params: URLSearchParams): Prisma.SocioWhereInput {
+export function buildSocioWhere(
+  params: URLSearchParams,
+  // Course-lead read scope: restricts the list to collections the caller may
+  // see, independent of and combined with (AND) the `collectionKey` query
+  // param below. Admin passes undefined — no restriction beyond archivedAt.
+  restrictToCollectionKeys?: string[],
+): Prisma.SocioWhereInput {
   const status = params.get('status');
   const search = params.get('search');
   const mentorId = params.get('mentorId');
@@ -38,9 +44,22 @@ export function buildSocioWhere(params: URLSearchParams): Prisma.SocioWhereInput
     where.mentorId = mentorId === 'unassigned' ? null : mentorId;
   }
   if (collectionKey) {
-    // "No course" is a real selection, not the absence of one.
+    // "No course" is a real selection, not the absence of one. A course lead
+    // picking a specific course they own is still bounded by
+    // restrictToCollectionKeys below via AND, not replaced by it.
     where.curriculumCollectionKey =
       collectionKey === UNASSIGNED_COURSE_KEY ? null : collectionKey;
+  }
+  if (restrictToCollectionKeys) {
+    // A course lead with zero writable collections must see zero socios, not
+    // "no filter" — an empty `in` correctly matches nothing rather than being
+    // mistaken for "no restriction" the way an absent filter would be. AND'd
+    // against any `collectionKey` selection above rather than overwriting it,
+    // so a course lead can't widen their own scope by naming another course.
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      { curriculumCollectionKey: { in: restrictToCollectionKeys } },
+    ];
   }
   if (search) {
     where.OR = [

@@ -49,3 +49,32 @@ describe('buildSocioWhere — composition', () => {
     expect(where('')).toEqual({ archivedAt: null });
   });
 });
+
+describe('buildSocioWhere — D.2 course-lead scope restriction', () => {
+  it('restricts to the given collections when no collectionKey is selected', () => {
+    const result = buildSocioWhere(new URLSearchParams(''), ['course-a', 'course-b']);
+    expect(result.AND).toEqual([{ curriculumCollectionKey: { in: ['course-a', 'course-b'] } }]);
+  });
+
+  it('a course lead with zero writable collections sees zero socios, not everyone', () => {
+    const result = buildSocioWhere(new URLSearchParams(''), []);
+    expect(result.AND).toEqual([{ curriculumCollectionKey: { in: [] } }]);
+  });
+
+  it('ANDs the restriction with an explicit collectionKey selection, never overwrites it', () => {
+    const result = buildSocioWhere(new URLSearchParams('collectionKey=course-a'), ['course-a', 'course-b']);
+    expect(result.curriculumCollectionKey).toBe('course-a');
+    expect(result.AND).toEqual([{ curriculumCollectionKey: { in: ['course-a', 'course-b'] } }]);
+  });
+
+  it('naming a course outside the restriction yields a contradiction (empty results), not a leak', () => {
+    const result = buildSocioWhere(new URLSearchParams('collectionKey=other-course'), ['course-a']);
+    expect(result.curriculumCollectionKey).toBe('other-course');
+    expect(result.AND).toEqual([{ curriculumCollectionKey: { in: ['course-a'] } }]);
+  });
+
+  it('admin (undefined restriction) is unaffected — no AND clause at all', () => {
+    const result = buildSocioWhere(new URLSearchParams('collectionKey=course-a'));
+    expect(result).not.toHaveProperty('AND');
+  });
+});

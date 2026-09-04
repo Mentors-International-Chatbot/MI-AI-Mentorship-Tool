@@ -1,16 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
-import { requireAdmin } from '@/lib/auth/adminGuard';
+import { requireAdmin, requireCourseConfigurer } from '@/lib/auth/adminGuard';
 import { activeFlagWhere } from '@/lib/flags/active';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { anchorMentorProfile } from '@/lib/tenancy/mentorAnchor';
+import { resolveAdminScope } from '@/lib/auth/adminScope';
+import type { Prisma } from '@prisma/client';
 
 export async function GET() {
-  const auth = await requireAdmin();
+  // D.2: readable by admin (every mentor) and course_lead (mentors anchored
+  // to their own organization only). Writes below stay requireAdmin-only.
+  const auth = await requireCourseConfigurer();
   if (!auth.authorized) return auth.response;
 
+  const scope = await resolveAdminScope(auth.session);
+  if (scope.kind === 'none') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  // A course lead sees only mentors anchored (via MentorProfile) to their own
+  // org. An unanchored mentor has no organizationId to compare against, so it
+  // correctly never appears in a course lead's roster — only admin's
+  // unrestricted `where: {}` sees unanchored mentors at all.
+  const where: Prisma.MentorWhereInput =
+    scope.kind === 'course_admin' ? { mentorProfile: { organizationId: scope.organizationId } } : {};
+
   const mentors = await prisma.mentor.findMany({
+    where,
     include: {
       // A.3: archived socios excluded from the mentor roster's caseload count
       _count: { select: { socios: { where: { archivedAt: null } } } },

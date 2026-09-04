@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { buildSocioWhere } from './filters';
-import { requireAdmin } from '@/lib/auth/adminGuard';
+import { requireAdmin, requireCourseConfigurer } from '@/lib/auth/adminGuard';
 import { activeFlagWhere } from '@/lib/flags/active';
 import { anchorMentorProfile } from '@/lib/tenancy/mentorAnchor';
+import { resolveAdminScope } from '@/lib/auth/adminScope';
 
 const SOCIO_LIST_INCLUDE = {
   progress: true,
@@ -37,15 +38,24 @@ function mapSocioLatestRating(s: SocioListRow) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin();
+  // D.2: readable by admin (unrestricted) and course_lead (scoped to their
+  // own collections). Writes below (PATCH/DELETE) stay requireAdmin-only —
+  // course-scoped write authority is not yet built.
+  const auth = await requireCourseConfigurer();
   if (!auth.authorized) return auth.response;
+
+  const scope = await resolveAdminScope(auth.session);
+  if (scope.kind === 'none') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  const restrictToCollectionKeys = scope.kind === 'course_admin' ? scope.collectionKeys : undefined;
 
   const params = request.nextUrl.searchParams;
   const sortBy = params.get('sortBy'); // "messagesThisWeek"
   const page = Math.max(1, Number(params.get('page') ?? 1));
   const pageSize = Math.min(100, Math.max(1, Number(params.get('pageSize') ?? 50)));
 
-  const where = buildSocioWhere(params);
+  const where = buildSocioWhere(params, restrictToCollectionKeys);
 
   // For messagesThisWeek sort, we need a raw approach
   if (sortBy === 'messagesThisWeek') {
