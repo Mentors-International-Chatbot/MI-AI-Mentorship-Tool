@@ -42,12 +42,41 @@ rename pass.
 
 ## Mentor dashboard: current state vs. plan
 
-Current: `/dashboard/learners` (list), `/dashboard/learners/[id]` (chat, `SliderPanel.tsx`, flags, lesson
-progress), `/dashboard/alerts`. **No flag-triage inbox (severity×age), no embedded assistant, no
-confirmed-tool machinery (`adjust_learner_overrides`/`draft_message_to_learner`/`resolve_flag`/
-`snooze_flag`/`summarize_history`) exist at all** — grepped for all of these, zero hits. This is a
-from-scratch build, not a refactor, and it's the one piece of Phase D most likely to need a UX decision
-(confirmation flow shape) before or during the build rather than purely mechanical work.
+**Correction (2026-09-04, D.3 investigation) — the D.0 claim below was wrong.** A literal grep for
+`resolve_flag`/`snooze_flag`-shaped strings found nothing because `FlagsPanel.tsx`
+(`dashboard/learners/[id]/FlagsPanel.tsx`) builds its fetch URL dynamically
+(`` `/api/dashboard/flags/${flagId}/${action}` ``) — the grep pattern never matched. Reading the file
+directly turned up a fully-built, fully-wired flag triage flow:
+
+- `/dashboard/alerts` (`AlertSnapshot.tsx` + `lib/signals/zones.ts`) — a real severity-grouped triage
+  view. Zones: `asked_for_you` (help requests, oldest-first — age-sorted by design, the code comment
+  explains why), `needs_you_now`/`watching` (RED/YELLOW, most-recent-signal-first), `good_news`
+  (derived positive signals). Every card links through to `/dashboard/learners/[id]`.
+- `FlagsPanel.tsx` on the learner page — full acknowledge/snooze(1/3/7/30d)/resolve(disposition +
+  required note on RED) actions, already calling the existing
+  `/api/dashboard/flags/[id]/{acknowledge,snooze,resolve}` routes, with optimistic UI state and a
+  "jump to the message that raised this" affordance.
+
+This is "severity×age" triage, end to end, already shipped — not a gap. What actually remains from
+the plan's D.3 bullet:
+
+1. **`SliderPanel.tsx` deletion** (keep the underlying `/api/mentor/socios/[id]` PATCH — the "override
+   machinery" to keep) — still true, not done.
+2. **Remove web-chat nav link for mentors** — `dashboard/layout.tsx` shows `/chat` to every role
+   unconditionally; plan wants it gone specifically for `mentor`. Not done.
+3. **Whether `/dashboard/alerts` becomes the default landing page** — today `/dashboard` redirects to
+   `/dashboard/learners` (roster), with a code comment: *"Additive: /dashboard/learners stays the
+   landing page until the signals view is proven."* Flipping this is reversing a previously-made
+   staging decision, not a gap — flagging for Michael rather than silently overriding it.
+4. **Embedded assistant with confirmed tool calls is the only genuinely unbuilt piece** — but it is
+   smaller than the original D.0 pass assumed, because its likely tool set already has working
+   implementations to wrap: `adjust_learner_overrides` → `/api/mentor/socios/[id]` PATCH,
+   `resolve_flag`/`snooze_flag` → the two routes `FlagsPanel` already calls,
+   `draft_message_to_learner` → `/api/dashboard/socios/[id]/message`,
+   `summarize_history` → `/api/dashboard/socios/[id]/summaries`. The new work is the LLM tool-calling
+   loop and the confirm-before-execute UI, not the actions themselves. Still needs its own
+   investigation (does any Claude tool-use wiring already exist in this codebase to build on?) and
+   the UX-confirmation-flow decision flagged earlier.
 
 ## Concurrent work in this repo (unrelated to Phase D, except one real collision)
 
