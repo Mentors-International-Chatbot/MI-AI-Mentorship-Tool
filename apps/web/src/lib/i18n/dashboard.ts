@@ -134,6 +134,17 @@ export interface DashboardStrings {
   positivity: string;
   realistic: string;
   positive: string;
+  // D.3 embedded assistant
+  assistantTitle: string;
+  assistantEmpty: string;
+  assistantThinking: string;
+  assistantPlaceholder: string;
+  assistantSend: string;
+  assistantProposalLabel: string;
+  assistantConfirm: string;
+  assistantCancel: string;
+  assistantCancelled: string;
+  assistantError: string;
   // Flags
   alertsTitle: string;
   noAlerts: string;
@@ -355,6 +366,16 @@ const es: DashboardStrings = {
   positivity: 'Positividad',
   realistic: 'Realista',
   positive: 'Positivo',
+  assistantTitle: 'Asistente',
+  assistantEmpty: 'Pregúntale algo sobre este aprendiz o pídele que haga algo.',
+  assistantThinking: 'Pensando…',
+  assistantPlaceholder: 'Escribe un mensaje…',
+  assistantSend: 'Enviar',
+  assistantProposalLabel: 'El asistente quiere',
+  assistantConfirm: 'Confirmar',
+  assistantCancel: 'Cancelar',
+  assistantCancelled: 'Cancelado.',
+  assistantError: 'El asistente no está disponible en este momento.',
   alertsTitle: 'Alertas',
   noAlerts: 'Sin alertas.',
   resolved: 'Resuelta',
@@ -559,6 +580,16 @@ const en: DashboardStrings = {
   positivity: 'Positivity',
   realistic: 'Realistic',
   positive: 'Positive',
+  assistantTitle: 'Assistant',
+  assistantEmpty: 'Ask something about this learner, or ask it to do something.',
+  assistantThinking: 'Thinking…',
+  assistantPlaceholder: 'Type a message…',
+  assistantSend: 'Send',
+  assistantProposalLabel: 'The assistant wants to',
+  assistantConfirm: 'Confirm',
+  assistantCancel: 'Cancel',
+  assistantCancelled: 'Cancelled.',
+  assistantError: 'The assistant is unavailable right now.',
   alertsTitle: 'Alerts',
   noAlerts: 'No alerts.',
   resolved: 'Resolved',
@@ -763,6 +794,16 @@ const pt: DashboardStrings = {
   positivity: 'Positividade',
   realistic: 'Realista',
   positive: 'Positivo',
+  assistantTitle: 'Assistente',
+  assistantEmpty: 'Pergunte algo sobre este aprendiz ou peça para fazer algo.',
+  assistantThinking: 'Pensando…',
+  assistantPlaceholder: 'Escreva uma mensagem…',
+  assistantSend: 'Enviar',
+  assistantProposalLabel: 'O assistente quer',
+  assistantConfirm: 'Confirmar',
+  assistantCancel: 'Cancelar',
+  assistantCancelled: 'Cancelado.',
+  assistantError: 'O assistente não está disponível no momento.',
   alertsTitle: 'Alertas',
   noAlerts: 'Sem alertas.',
   resolved: 'Resolvida',

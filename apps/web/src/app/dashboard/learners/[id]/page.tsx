@@ -16,6 +16,7 @@ import { ActivityStrip } from './ActivityStrip';
 import { BlockAnswersPanel } from './BlockAnswersPanel';
 import { SendMessageForm } from './SendMessageForm';
 import { FlagsPanel } from './FlagsPanel';
+import { AssistantPanel } from './AssistantPanel';
 import { LessonProgressPanel } from './LessonProgressPanel';
 import { SummaryPanel } from './SummaryPanel';
 import { RevenueChart } from './RevenueChart';
@@ -181,6 +182,13 @@ export default async function SocioDetailPage({
               adjust_learner_overrides tool will write to on the mentor's
               confirmed behalf. */}
           <FlagsPanel flags={serializedFlags} socioId={id} />
+
+          {/* D.3: mentor-only — its API guard (verifyMentorOwnership) also
+              authorizes admin, but not course_lead, so this must not render
+              for a role the backend would 403. */}
+          {(session.role === 'mentor' || session.role === 'admin') && (
+            <AssistantPanel socioId={id} />
+          )}
 
           {panels.map((panel, i) => {
             switch (panel.type) {

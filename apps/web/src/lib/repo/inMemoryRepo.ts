@@ -626,6 +626,12 @@ export const inMemoryRepo: Repo = {
         return null;
     },
 
+    async createAuditLog() {
+        // No in-memory audit log store exists yet — nothing reads one back in
+        // tests today. Intentionally a no-op rather than silently dropped:
+        // add a backing array here the day a test needs to assert on it.
+    },
+
     async recordMilestoneReached(data) {
         const key = `${data.socioId}:${data.collectionKey}:${data.milestoneKey}`;
         const existing = milestoneProgress.get(key);

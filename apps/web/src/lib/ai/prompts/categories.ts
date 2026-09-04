@@ -123,6 +123,13 @@ export const PROMPT_CATEGORIES: readonly PromptCategoryMeta[] = [
       "Pulls a learner's name out of their first reply during onboarding. Returns a bare string, not prose.",
     scope: 'platform',
   },
+  {
+    category: 'mentor_assistant',
+    label: 'Mentor assistant',
+    description:
+      "D.3 embedded assistant on a learner's dashboard page. Never shown to a learner and not course-specific, so it stays platform-wide like sentiment/name_extraction. Proposes tool calls; never executes one directly.",
+    scope: 'platform',
+  },
 ] as const;
 
 /** Fast membership check for validation at the API boundary. */

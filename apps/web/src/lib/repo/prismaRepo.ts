@@ -924,6 +924,18 @@ export const prismaRepo: Repo = {
         return flag ? { ...toSocioFlag(flag), socio: toSocio(flag.socio) } : null;
     },
 
+    async createAuditLog(entry) {
+        await prisma.auditLog.create({
+            data: {
+                actorId: entry.actorId,
+                action: entry.action,
+                targetType: entry.targetType,
+                targetId: entry.targetId,
+                metadata: entry.metadata as Prisma.InputJsonValue | undefined,
+            },
+        });
+    },
+
     async setSocioCurriculum(socioId, collectionKey) {
         const socio = await prisma.socio.update({
             where: { id: socioId },

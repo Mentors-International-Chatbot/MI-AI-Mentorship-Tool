@@ -28,7 +28,8 @@ export type AiOperation =
   | 'assessment_sensing'
   | 'sentiment'
   | 'summary'
-  | 'onboarding';
+  | 'onboarding'
+  | 'mentor_assistant';
 
 /** Subset of { core, context, task, content, language, evaluator } that applies. */
 export type PromptVersionMap = Record<string, string>;

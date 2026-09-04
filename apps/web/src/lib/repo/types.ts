@@ -459,6 +459,21 @@ export interface Repo {
     getFlagById(flagId: string): Promise<SocioFlag | null>;
     getFlagWithSocio(flagId: string): Promise<(SocioFlag & { socio: Socio }) | null>;
 
+    /**
+     * The single write path for `AuditLog`, so a `/dashboard/*` route can
+     * record one without the `no-restricted-syntax` prisma ban forcing it to
+     * either skip the log or become an `/admin/*`-only exemption. Fire-and-
+     * write semantics are the caller's choice, not this method's — it does
+     * not swallow errors.
+     */
+    createAuditLog(entry: {
+        actorId: string;
+        action: string;
+        targetType: string;
+        targetId?: string;
+        metadata?: Record<string, unknown>;
+    }): Promise<void>;
+
     // Curriculum selection
     setSocioCurriculum(socioId: string, collectionKey: string): Promise<Socio>;
 
