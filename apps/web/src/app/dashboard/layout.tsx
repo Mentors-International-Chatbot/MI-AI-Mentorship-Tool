@@ -26,8 +26,11 @@ export default async function DashboardLayout({
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <h1 className="text-xl font-bold">{t.panelTitle}</h1>
             <div className="flex items-center gap-4">
-              {/* Additive: /dashboard/learners stays the landing page until the
-                  signals view is proven. */}
+              {/* D.3: /dashboard now defaults mentors here (dashboard/page.tsx).
+                  Still shown to course_lead/admin, who land on /dashboard/
+                  learners instead — /dashboard/alerts is not yet scoped for
+                  a course_lead session (it resolves org via a MentorProfile
+                  lookup). */}
               <Link
                 href="/dashboard/alerts"
                 className="text-sm text-gray-300 hover:text-white transition-colors"
