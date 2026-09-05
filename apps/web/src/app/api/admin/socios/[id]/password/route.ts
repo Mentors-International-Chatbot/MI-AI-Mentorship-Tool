@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
-import { requireAdmin } from '@/lib/auth/adminGuard';
+import { requireSystemAdmin } from '@/lib/auth/adminGuard';
 
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireAdmin();
+  const auth = await requireSystemAdmin();
   if (!auth.authorized) return auth.response;
 
   const { id } = await params;

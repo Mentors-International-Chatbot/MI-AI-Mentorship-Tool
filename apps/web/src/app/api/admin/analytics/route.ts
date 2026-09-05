@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireAdmin } from '@/lib/auth/adminGuard';
+import { requireSystemAdmin } from '@/lib/auth/adminGuard';
 import { activeFlagWhere } from '@/lib/flags/active';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const auth = await requireAdmin();
+  const auth = await requireSystemAdmin();
   if (!auth.authorized) return auth.response;
 
   const now = new Date();

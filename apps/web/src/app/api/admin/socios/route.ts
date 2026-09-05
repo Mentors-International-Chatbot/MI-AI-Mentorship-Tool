@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { buildSocioWhere } from './filters';
-import { requireAdmin, requireCourseConfigurer } from '@/lib/auth/adminGuard';
+import { requireSystemAdmin, requireCourseConfigurer } from '@/lib/auth/adminGuard';
 import { activeFlagWhere } from '@/lib/flags/active';
 import { anchorMentorProfile } from '@/lib/tenancy/mentorAnchor';
 import { resolveAdminScope } from '@/lib/auth/adminScope';
@@ -39,7 +39,7 @@ function mapSocioLatestRating(s: SocioListRow) {
 
 export async function GET(request: NextRequest) {
   // D.2: readable by admin (unrestricted) and course_lead (scoped to their
-  // own collections). Writes below (PATCH/DELETE) stay requireAdmin-only —
+  // own collections). Writes below (PATCH/DELETE) stay requireSystemAdmin-only —
   // course-scoped write authority is not yet built.
   const auth = await requireCourseConfigurer();
   if (!auth.authorized) return auth.response;
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireSystemAdmin();
   if (!auth.authorized) return auth.response;
 
   const body = await request.json();
@@ -156,7 +156,7 @@ export async function PATCH(request: NextRequest) {
 const BATCH_DELETE_MAX = 100;
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireSystemAdmin();
   if (!auth.authorized) return auth.response;
 
   const body = (await request.json()) as { socioId?: string; socioIds?: string[] };

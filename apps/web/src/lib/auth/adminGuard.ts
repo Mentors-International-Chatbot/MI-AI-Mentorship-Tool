@@ -39,8 +39,15 @@ function forbidden(): AdminAuthResult {
  *
  * Use for anything that reaches across tenants or touches credentials and
  * accounts: users, mentors, password resets, cross-org analytics, deletes.
+ *
+ * D.4: renamed from `requireAdmin` — the stored role string is still
+ * `'admin'` (D6/L4: session role vocabulary doesn't change), but the guard's
+ * name now matches what it actually gates: cross-org reach. Both the
+ * Platform Restructure plan (D6) and the concurrent Auth & Login plan (L12)
+ * refer to this guard as `requireSystemAdmin`; it did not exist under that
+ * name until now.
  */
-export async function requireAdmin(): Promise<AdminAuthResult> {
+export async function requireSystemAdmin(): Promise<AdminAuthResult> {
   const session = await verifySession();
   if (!session) return unauthorized();
   if (session.role !== 'admin') return forbidden();

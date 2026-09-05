@@ -22,11 +22,11 @@ import {
 } from '@/app/dashboard/learners/courseRollup';
 import { getCourseSummaries } from '@/lib/journey-package/course-summaries';
 import { buildSocioWhere } from '../filters';
-import { requireAdmin } from '@/lib/auth/adminGuard';
+import { requireSystemAdmin } from '@/lib/auth/adminGuard';
 import { activeFlagWhere } from '@/lib/flags/active';
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireSystemAdmin();
   if (!auth.authorized) return auth.response;
 
   const where = buildSocioWhere(request.nextUrl.searchParams);

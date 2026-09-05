@@ -104,7 +104,7 @@ export async function resolveAdminScope(session: SessionPayload): Promise<AdminS
   }
 
   // A socio session has no admin-surface scope at all. Should never reach
-  // here in practice (requireAdmin/requireCourseConfigurer already gate the
+  // here in practice (requireSystemAdmin/requireCourseConfigurer already gate the
   // route before this runs) — 'no_membership' is the closest fit of the
   // three reasons for "this role has nothing to resolve," not a claim that a
   // socio is a course-membership case.

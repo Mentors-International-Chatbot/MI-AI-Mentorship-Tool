@@ -44,7 +44,7 @@ describe('/admin access coherence', () => {
 
   it('keeps a course lead confined to the configuration pages', () => {
     // A course lead configures courses; learner records, mentors and user
-    // accounts stay admin-only, which requireAdmin enforces server-side.
+    // accounts stay admin-only, which requireSystemAdmin enforces server-side.
     expect(proxySource).toContain("'/admin/config'");
     expect(proxySource).toContain("'/admin/prompts'");
   });

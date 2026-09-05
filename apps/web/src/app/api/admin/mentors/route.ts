@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
-import { requireAdmin, requireCourseConfigurer } from '@/lib/auth/adminGuard';
+import { requireSystemAdmin, requireCourseConfigurer } from '@/lib/auth/adminGuard';
 import { activeFlagWhere } from '@/lib/flags/active';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
 import { anchorMentorProfile } from '@/lib/tenancy/mentorAnchor';
@@ -10,7 +10,7 @@ import type { Prisma } from '@prisma/client';
 
 export async function GET() {
   // D.2: readable by admin (every mentor) and course_lead (mentors anchored
-  // to their own organization only). Writes below stay requireAdmin-only.
+  // to their own organization only). Writes below stay requireSystemAdmin-only.
   const auth = await requireCourseConfigurer();
   if (!auth.authorized) return auth.response;
 
@@ -75,7 +75,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireSystemAdmin();
   if (!auth.authorized) return auth.response;
 
   const body = await request.json();
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
 const BATCH_DELETE_MAX = 100;
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireSystemAdmin();
   if (!auth.authorized) return auth.response;
 
   const body = (await request.json()) as { id?: string; ids?: string[] };

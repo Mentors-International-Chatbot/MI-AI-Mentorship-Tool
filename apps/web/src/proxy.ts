@@ -133,7 +133,7 @@ export async function proxy(req: NextRequest) {
     //
     // This is defence in depth, not the enforcement point: middleware sees page
     // paths, and the real guarantee lives in the route handlers themselves
-    // (`requireAdmin` / `requireCourseConfigurer` in src/lib/auth/adminGuard.ts),
+    // (`requireSystemAdmin` / `requireCourseConfigurer` in src/lib/auth/adminGuard.ts),
     // because /api/* never matches these prefixes.
     if (session.role === 'course_lead') {
       const allowed = ['/admin/config', '/admin/prompts'];

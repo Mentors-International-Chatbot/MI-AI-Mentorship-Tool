@@ -30,7 +30,7 @@ const API_DIR = join(process.cwd(), 'src', 'app', 'api');
  */
 const AUTHORIZATION_SIGNALS = [
   'verifySession',
-  'requireAdmin',
+  'requireSystemAdmin', // D.4: renamed from requireAdmin
   'requireCourseConfigurer',
   'verifyMentorOwnership',
   'verifyMentorOrAdmin',

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth/adminGuard";
+import { requireSystemAdmin } from "@/lib/auth/adminGuard";
 import { prisma } from "@/lib/db";
 import { resolveDelivery } from "@/lib/journey-package/delivery";
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireSystemAdmin();
   if (!auth.authorized) return auth.response;
   try {
     const body = await req.json() as {
