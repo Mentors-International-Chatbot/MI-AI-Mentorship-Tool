@@ -135,3 +135,26 @@ naming exercise per the D.2 finding, fold in whenever a genuinely new cross-org 
 the mentor-assignment write-scoping that stays deliberately unbuilt pending the
 `CourseStaffAssignment`/`ProgramMembership` reconciliation with the concurrent Auth & Login track (see
 memory: `course-staff-assignment-vs-program-membership`).
+
+## D.4 — complete (2026-09-05)
+
+`requireAdmin` renamed to `requireSystemAdmin` everywhere (8 call sites + comments + the
+`routeAuthorization.test.ts` signal allowlist, which would have silently stopped recognizing every
+admin route as authorized otherwise — the old literal string is not a substring of the new name).
+Pure rename: the stored session role string stays `'admin'`.
+
+`repo/system/` established with a real first module rather than an empty scaffold:
+`getSystemAnalytics()` in `lib/repo/system/analytics.ts`, moved out of `/api/admin/analytics/route.ts`
+verbatim (same shape, same queries, all genuinely cross-org — no `organizationId` filter anywhere).
+No eslint change needed; `src/lib/repo/**` already covers the subdirectory. Deliberately did not move
+`courseScope.ts`'s admin-branch cross-org query — that file has its own documented reason to run
+pre-tenant-context and is already correctly eslint-exempted where it is; forcing it into `repo/system/`
+would fight that reasoning rather than serve it.
+
+Phase D is now functionally complete except: the mentor-assignment write path (`PATCH
+/api/admin/socios`), left untouched pending the `CourseStaffAssignment`/`ProgramMembership`
+reconciliation (see memory), and course-scoped analytics for `course_lead` (blocked on the same
+course-identity non-uniformity A.7 exists to resolve — see D.2 section above).
+
+tsc, full suite (164 files / 1821-1822 passed depending on run), eslint, and `npm run build` all clean
+throughout.
