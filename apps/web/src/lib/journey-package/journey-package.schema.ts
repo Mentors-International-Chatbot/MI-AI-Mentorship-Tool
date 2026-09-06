@@ -464,6 +464,26 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
      * a floor against silently discarding what someone typed.
      */
     expectsResponse: z.boolean().default(false),
+    /**
+     * C.1 (Phase C, renumbered ahead of the plan's original C.2 per the
+     * investigation): the block-level interleaving mechanism itself. When
+     * this block completes, the player writes a `MilestoneProgress` row for
+     * `milestoneRef` (via the same write path chat-surface courses already
+     * use) and shows `interleavePrompt` with a done/skip affordance before
+     * advancing. Must reference a key declared in `outcome.milestones` —
+     * checked package-wide, not just shaped here. The author decides project
+     * timing this way; the AI never does.
+     *
+     * `interleavePrompt` is required whenever `milestoneRef` is set — an
+     * authored string shown verbatim, never generated from the milestone's
+     * `name`/`checkDescription` (those exist for a different reader: the AI
+     * prompt layer, not the learner).
+     */
+    milestoneRef: key.optional(),
+    interleavePrompt: z.string().optional(),
+  }).refine((b) => Boolean(b.milestoneRef) === Boolean(b.interleavePrompt), {
+    message: "milestoneRef and interleavePrompt must be set together, or neither",
+    path: ["interleavePrompt"],
   }),
 
   /**
@@ -1517,6 +1537,28 @@ export const journeyPackageSchema = z
             code: "custom",
             message: `mentorResource references unknown milestone "${r.milestoneKey}"`,
           });
+        }
+      }
+      for (const l of pkg.curriculum.lessons) {
+        for (const b of l.blocks) {
+          if (b.blockType === "teach" && b.milestoneRef && !milestoneKeys.has(b.milestoneRef)) {
+            ctx.addIssue({
+              code: "custom",
+              message: `block "${b.id}" (lesson "${l.key}") milestoneRef "${b.milestoneRef}" not found in outcome.milestones`,
+            });
+          }
+        }
+      }
+    } else {
+      // No outcome at all — any milestoneRef is a reference to nothing.
+      for (const l of pkg.curriculum.lessons) {
+        for (const b of l.blocks) {
+          if (b.blockType === "teach" && b.milestoneRef) {
+            ctx.addIssue({
+              code: "custom",
+              message: `block "${b.id}" (lesson "${l.key}") sets milestoneRef "${b.milestoneRef}" but the package declares no outcome.milestones at all`,
+            });
+          }
         }
       }
     }

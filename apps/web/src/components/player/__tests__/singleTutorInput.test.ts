@@ -213,15 +213,19 @@ describe("expectsResponse blocks offer exactly one way forward", () => {
   it("drops the card's own button on those blocks, so there is no skip", () => {
     // Gated by the outer `!submittedComplete` on the teach branch itself
     // (same as quiz_checkpoint and drag_order), not repeated on the button.
-    expect(source).toMatch(/current\.blockType === "teach" && !submittedComplete\.has\(current\.id\) && <><ReactMarkdown remarkPlugins=\{\[remarkGfm\]\}>\{\(current as Teach\)\.content\}<\/ReactMarkdown>\{!requiresResponse && <button disabled=\{busy\} onClick=\{\(\) => advance\(\{ acknowledged: true \}\)\}>/);
-    // No control renders that label any more, on any block.
+    // Also gated on `pendingInterleave` (C.1) not being open for this block —
+    // an orthogonal, later addition that must not reopen this door either.
+    expect(source).toMatch(/current\.blockType === "teach" && !submittedComplete\.has\(current\.id\) && pendingInterleave\?\.blockId !== current\.id && <><ReactMarkdown remarkPlugins=\{\[remarkGfm\]\}>\{\(current as Teach\)\.content\}<\/ReactMarkdown>\{!requiresResponse && <button disabled=\{busy\} onClick=\{\(\) => advance\(\{ acknowledged: true \}\)\}>/);
+    // No control renders that label any more, on any block. C.1's milestone
+    // checkpoint is a deliberately different, always-optional affordance —
+    // labeled "Not now" specifically so it doesn't reuse the retired phrase.
     expect(code).not.toMatch(/Skip for now/);
   });
 
   it("hides the block's own content once reviewed, same as quiz_checkpoint and drag_order", () => {
     // Once `submittedComplete`, the exchange already lives in the thread; the
     // card must not re-show the authored teach content underneath it.
-    expect(source).toMatch(/\{current\.blockType === "teach" && !submittedComplete\.has\(current\.id\) && <>/);
+    expect(source).toMatch(/\{current\.blockType === "teach" && !submittedComplete\.has\(current\.id\) && pendingInterleave\?\.blockId !== current\.id && <>/);
   });
 
   it("puts the single control under the input and disables it while the box is empty", () => {

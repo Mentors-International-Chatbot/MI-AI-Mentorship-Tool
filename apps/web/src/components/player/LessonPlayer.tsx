@@ -58,7 +58,13 @@ type LessonDto = {
   dashboard?: LessonDashboard | null;
   progress: ProgressItem[];
 };
-type CompleteBlockResult = { completed: boolean; feedback?: unknown; reviewPending?: boolean };
+type CompleteBlockResult = {
+  completed: boolean;
+  feedback?: unknown;
+  reviewPending?: boolean;
+  /** C.1: a teach block's milestoneRef checkpoint, unresolved. Null once done/skip is recorded. */
+  interleave?: { milestoneKey: string; prompt: string } | null;
+};
 type ParentIntent = "question" | "teach_back" | "lesson_entry" | "capstone";
 const PARENT_INTENTS: ParentIntent[] = ["question", "teach_back", "lesson_entry", "capstone"];
 
@@ -334,6 +340,8 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
   const [teachBackTurn, setTeachBackTurn] = useState(1);
   const [submittedComplete, setSubmittedComplete] = useState<Set<string>>(new Set());
   const [surveyStepIndex, setSurveyStepIndex] = useState(0);
+  /** C.1: the current block's milestoneRef checkpoint, held until Done/Skip. */
+  const [pendingInterleave, setPendingInterleave] = useState<{ blockId: string; prompt: string } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   useEffect(() => {
@@ -384,7 +392,7 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
     const savedTurn = data?.progress.find((item) => item.blockId === current?.id)?.state?.turnCount;
     const savedStepIndex = data?.progress.find((item) => item.blockId === current?.id)?.state?.stepIndex;
     const savedFeedback = data?.progress.find((item) => item.blockId === current?.id)?.feedback;
-    setAnswers({}); setFeedback(savedFeedback === undefined || !current ? {} : { [current.id]: savedFeedback }); setTeachBackTurn(savedTurn === 1 ? 2 : 1); setSurveyStepIndex(typeof savedStepIndex === "number" ? savedStepIndex : 0); setSendFailures(0);
+    setAnswers({}); setFeedback(savedFeedback === undefined || !current ? {} : { [current.id]: savedFeedback }); setTeachBackTurn(savedTurn === 1 ? 2 : 1); setSurveyStepIndex(typeof savedStepIndex === "number" ? savedStepIndex : 0); setSendFailures(0); setPendingInterleave(null);
   }, [current, data]);
 
   async function complete(response?: unknown): Promise<CompleteBlockResult | null> {
@@ -397,7 +405,13 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       });
       setFeedback((value) => ({ ...value, [current.id]: result.feedback }));
       if (result.completed) {
-        if (result.reviewPending) {
+        if (result.interleave) {
+          // Holds the block open on its milestone checkpoint instead of
+          // advancing — mirrors reviewPending's "server-authoritative pause"
+          // shape, just for a done/skip decision instead of graded feedback.
+          setPendingInterleave({ blockId: current.id, prompt: result.interleave.prompt });
+          setGatedStreak(0);
+        } else if (result.reviewPending) {
           // Server-authoritative review state. This covers graded feedback and
           // unanswered mentor questions, and survives a reload through progress.
           setSubmittedComplete((value) => new Set(value).add(current.id));
@@ -506,6 +520,24 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
       setCompleted((value) => new Set(value).add(current.id));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save review progress");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** C.1: "done" records the milestone reached; "skip" just moves on. Either way the block advances. */
+  async function resolveInterleave(action: "done" | "skip") {
+    if (!current) return;
+    setBusy(true); setError("");
+    try {
+      await playerFetch(`/api/learn/${course}/${lessonKey}/blocks/${current.id}/complete`, {
+        method: "POST",
+        body: JSON.stringify({ interleaveAction: action }),
+      });
+      setPendingInterleave(null);
+      setCompleted((value) => new Set(value).add(current.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to save milestone check-in");
     } finally {
       setBusy(false);
     }
@@ -922,7 +954,14 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
             onReturnToThread={advanceReviewedBlock}
           />
         ) : <>
-        {current.blockType === "teach" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
+        {current.blockType === "teach" && !submittedComplete.has(current.id) && pendingInterleave?.blockId !== current.id && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
+        {/* C.1: milestoneRef checkpoint — the authored prompt plus its
+            done/skip affordance, holding the block open until one is chosen. */}
+        {current.blockType === "teach" && pendingInterleave?.blockId === current.id && <div className="player-interleave">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{pendingInterleave.prompt}</ReactMarkdown>
+          <button disabled={busy} onClick={() => resolveInterleave("done")}>Done</button>
+          <button className="player-secondary" disabled={busy} onClick={() => resolveInterleave("skip")}>Not now</button>
+        </div>}
         {current.blockType === "project" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Project).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
         {/* The counter above collapses lesson-step and survey-step into one
             line for this block type; see its render higher up. */}

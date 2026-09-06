@@ -11,11 +11,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cou
       response?: unknown;
       openQuestionGateEnabled?: boolean;
       acknowledgeReview?: boolean;
+      interleaveAction?: "done" | "skip";
     };
     const access = await resolvePlayerAccess(identity, course);
     return NextResponse.json(await completeBlock(access, lesson, blockId, body.response, {
       openQuestionGateEnabled: body.openQuestionGateEnabled,
       acknowledgeReview: body.acknowledgeReview,
+      interleaveAction: body.interleaveAction,
     }));
   } catch (error) {
     if (error instanceof PlayerError) return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });

@@ -73,7 +73,9 @@ describe("server-authoritative open-question review", () => {
     expect(fn).toMatch(/const boundedReturnReview = grade\.complete && block\.assessment !== undefined;/);
     expect(fn).toMatch(/const reviewPending = grade\.complete && \(!!grade\.feedback \|\| openQuestionReview \|\| boundedReturnReview\);/);
     expect(fn).toMatch(/\.\.\.\(reviewPending \? \{ reviewPending: true \} : \{\}\)/);
-    expect(fn).toMatch(/return \{ blockId, completed: grade\.complete, score: grade\.score, feedback: grade\.feedback, reviewPending, lessonComplete \};/);
+    // C.1: reformatted multi-line to add `interleave`; reviewPending is still
+    // one of the returned fields, which is what this test actually pins.
+    expect(fn).toMatch(/return \{\s*blockId,\s*completed: grade\.complete,\s*score: grade\.score,\s*feedback: grade\.feedback,\s*reviewPending,\s*lessonComplete,/);
   });
 
   it("persists the same review hold for completed teach-backs", () => {

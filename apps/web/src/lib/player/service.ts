@@ -1,5 +1,5 @@
 import { playerRuntimeRepo } from "@/lib/repo/playerRuntimeRepo";
-import { tenantRepo } from "@/lib/repo";
+import { repo, tenantRepo } from "@/lib/repo";
 import { createTenantContext } from "@/lib/repo/tenantContext";
 import type { RequestIdentity } from "@/lib/auth/requestIdentity";
 import { resolveCourseCode } from "@/lib/courses/resolver";
@@ -956,7 +956,28 @@ type CompleteBlockOptions = {
   openQuestionGateEnabled?: boolean;
   /** Explicit Continue from a block already saved as complete. */
   acknowledgeReview?: boolean;
+  /**
+   * C.1: resolves the interleave prompt a `teach` block with `milestoneRef`
+   * shows on completion. "done" records the milestone as reached (source
+   * `learner_confirmed`); "skip" advances without recording — the milestone
+   * stays reachable later some other way, this block just isn't the only
+   * door to it. Requires the block to already be completed, same precondition
+   * as `acknowledgeReview`.
+   */
+  interleaveAction?: "done" | "skip";
 };
+
+/** What the interleave prompt endpoint needs to render Done/Skip. Null once resolved or not applicable. */
+export type InterleavePrompt = { milestoneKey: string; prompt: string } | null;
+
+async function pendingInterleave(access: PlayerAccess, block: LessonBlock): Promise<InterleavePrompt> {
+  if (block.blockType !== "teach" || !block.milestoneRef) return null;
+  const reached = await playerRuntimeRepo.milestoneProgress.findFirst({
+    where: { enrollmentId: access.enrollmentId, milestoneKey: block.milestoneRef },
+  });
+  if (reached) return null;
+  return { milestoneKey: block.milestoneRef, prompt: block.interleavePrompt ?? "" };
+}
 
 function progressState(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -1095,7 +1116,28 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
       where: { id: existing.id },
       data: { state: { ...progressState(existing.state), reviewPending: false } },
     });
-    return { blockId, completed: true, score: existing.score, feedback: null, reviewPending: false, lessonComplete: false };
+    return { blockId, completed: true, score: existing.score, feedback: null, reviewPending: false, lessonComplete: false, interleave: await pendingInterleave(access, block) };
+  }
+  if (options.interleaveAction) {
+    if (existing?.contentVersion !== block.contentVersion || !existing.completedAt) {
+      throw new PlayerError(409, "review_not_ready", "This block is not ready for its milestone check-in");
+    }
+    if (block.blockType !== "teach" || !block.milestoneRef) {
+      throw new PlayerError(400, "invalid_context", "This block has no milestone check-in");
+    }
+    if (options.interleaveAction === "done") {
+      await repo.recordMilestoneReached({
+        socioId: access.socioId,
+        organizationId: access.organizationId,
+        collectionKey: access.collectionKey,
+        milestoneKey: block.milestoneRef,
+        enrollmentId: access.enrollmentId,
+        source: "learner_confirmed",
+      });
+    }
+    const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: access.enrollmentId, lessonKey } });
+    const lessonComplete = lesson.blocks.every((item) => progress.some((entry) => entry.blockId === item.id && entry.contentVersion === item.contentVersion && entry.completedAt));
+    return { blockId, completed: true, score: existing.score, feedback: null, reviewPending: progressState(existing.state).reviewPending === true, lessonComplete, interleave: null };
   }
   // Attempts survive on the progress row, so a reload between tries cannot
   // hand the learner a fresh set of them. Counted per content version: an
@@ -1117,6 +1159,7 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
       feedback: existingGrade.feedback,
       reviewPending: progressState(existing.state).reviewPending === true,
       lessonComplete,
+      interleave: await pendingInterleave(access, block),
     };
   }
   const attempt = priorAttempts + 1;
@@ -1168,7 +1211,15 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
       update: { completedAt: now },
     });
   }
-  return { blockId, completed: grade.complete, score: grade.score, feedback: grade.feedback, reviewPending, lessonComplete };
+  return {
+    blockId,
+    completed: grade.complete,
+    score: grade.score,
+    feedback: grade.feedback,
+    reviewPending,
+    lessonComplete,
+    interleave: grade.complete ? await pendingInterleave(access, block) : null,
+  };
 }
 
 /**
