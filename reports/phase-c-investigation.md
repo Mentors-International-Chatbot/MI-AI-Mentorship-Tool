@@ -76,3 +76,24 @@ message — a genuinely new player-surface interaction, not an extension of the 
   queue (oldest-unreviewed first). Canvas AGS stays a documented seam, no code, per the plan.
 
 Starting with C.1 (renumbered — the milestone write path).
+
+## C.1 — complete (2026-09-05)
+
+Shipped: `teach` blocks gain optional `milestoneRef`/`interleavePrompt` (required together, validated
+against `outcome.milestones`); `completeBlock` surfaces a pending `interleave` prompt and resolves it
+via an explicit `interleaveAction: "done" | "skip"` — the write to `MilestoneProgress` only ever
+happens on "done," never implicitly. `LessonPlayer.tsx` holds the block open with Done/"Not now"
+buttons until resolved. AI Essentials Aug 2026's 5 milestones are now reachable for the first time —
+authoring the actual `milestoneRef` links onto those blocks is separate follow-up content work, not
+code, and hasn't been done yet.
+
+One real design note: labeled the decline option "Not now," not "Skip for now" — that exact phrase is
+retired in this codebase (`LessonPlayer.tsx`'s own test history) for a specific, different hazard, an
+abandon-button on a block that requires a response. This checkpoint is always optional by design, so
+it isn't that hazard, but reusing the phrase would read as if it were.
+
+Remaining: C.2 (revisit whether the `project` block needs structured authoring fields, now that
+real milestone-linked authoring exists to test the question against) and C.3 (`ProjectSubmission` —
+model, migration, submission form UI, mentor review queue). Both still fully unbuilt; C.3 in particular
+is a genuinely new player-surface interaction (a form, not the existing chat-textarea path), not an
+extension of anything unwired.
