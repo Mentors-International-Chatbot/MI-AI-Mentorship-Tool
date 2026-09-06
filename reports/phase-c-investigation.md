@@ -92,8 +92,61 @@ retired in this codebase (`LessonPlayer.tsx`'s own test history) for a specific,
 abandon-button on a block that requires a response. This checkpoint is always optional by design, so
 it isn't that hazard, but reusing the phrase would read as if it were.
 
-Remaining: C.2 (revisit whether the `project` block needs structured authoring fields, now that
-real milestone-linked authoring exists to test the question against) and C.3 (`ProjectSubmission` —
-model, migration, submission form UI, mentor review queue). Both still fully unbuilt; C.3 in particular
-is a genuinely new player-surface interaction (a form, not the existing chat-textarea path), not an
-extension of anything unwired.
+### C.1 was on the BYU pilot's critical path — confirmed, and the fix needed a second half
+
+Michael asked whether `apps/web/src/lib/lti/ags.ts`'s Canvas score payload is milestone-derived, since
+if so, the original framing ("no AI Guidance learner could graduate") undersold what was broken. It is:
+`buildScorePayload`/`queueMilestoneGrade` (`lib/lti/grades.ts`) computes the capstone grade entirely
+from `MilestoneProgress` count — `scoreGiven = count * 20`, `scoreMaximum = 100`, `activityProgress`
+flips to "Completed" only at `count >= 5`. No lesson completion, block score, or assessment result
+factors in at all. This was previously undocumented anywhere; now written on `queueMilestoneGrade`'s
+own doc comment.
+
+Confirming that surfaced a second gap, identically shaped to the first: `queueMilestoneGrade` — the
+function that actually reads the count and enqueues the Canvas score — was *also* only ever called
+from `messaging/handler.ts` (chat surface), never the player surface. So C.1 alone was necessary but
+not sufficient: a BYU learner's "done" click would have written the `MilestoneProgress` row (the fix
+already shipped) but queued no Canvas grade delivery, leaving the capstone line item silently
+un-posted — exactly the "green retry queue, zero score" failure mode Michael named, just one call
+further down the same pipeline. Fixed in the same stage (same fire-and-forget call, mirroring the
+chat-surface site exactly) rather than left half-closed. See the `queueMilestoneGrade` doc comment for
+a third, related but out-of-scope finding: the `>= 5`/`> 5` thresholds hardcode "this course has
+exactly 5 milestones" as shared code, not config — true for AI Essentials Aug 2026 today, a latent
+defect for the next course with a different milestone count. Flagged, not fixed, in that comment.
+
+## Phase C pauses after C.2 — decision (2026-09-05)
+
+C.2 (the `project` block authoring-shape decision) proceeds now, immediately below — it's a decision,
+not a build, and gets more expensive to make well once the journey-package spec hardens in Phase E.
+C.3 does not proceed now. Two reasons, one per half:
+
+- **Term-deadline load.** Three phases would otherwise run concurrently against the BYU pilot deadline
+  (B, the Auth & Login track, and C) — B and the Auth & Login track already share a declared collision
+  on the D15 constraints. C.1 fixed something broken (a launch-blocking grade/graduation gap); C.3 is a
+  new feature. The pilot needs launch, identity, and grades to work — not a submission review workflow.
+- **C.3 splits into two pieces with different, real blockers**, not one uniform "not now":
+  - **C.3a (`ProjectSubmission` + learner submission form)** is self-contained and touches nothing in
+    flight, but must stay **link-only** if it starts. `url`/`note` are fine; `fileRef` is not, until
+    L0.1.4 (data residency / transcript retention) has a named BYU owner — student file uploads are
+    education records, and building a storage path before BYU answers residency risks building it
+    twice.
+  - **C.3b (mentor review queue)** is genuinely blocked, not just deprioritized. "Submissions for their
+    assigned learners" is exactly the phrase L5 is redefining — from `Socio.mentorId` to the
+    `Enrollment ⋈ CourseStaffAssignment` join. A reader built against the current relation now either
+    sits on infrastructure L5 is about to replace, or becomes a fourth definition of "this mentor's
+    learners" alongside the three that already disagree — the August bug, rebuilt on purpose. The
+    restructure plan also has this queue slotting into Phase D's course-scoped dashboard once that
+    ships, so a standalone surface built first is double work on top of the blocker. This collision is
+    recorded in the Auth & Login plan's own sequencing table, not just here.
+
+Not started: C.3a and C.3b both remain fully unbuilt. Revisit C.3a once L0.1.4 has an owner (link-only
+is still safe to build sooner if the term timeline demands it); revisit C.3b once L5 ships.
+
+## UX copy rule (added 2026-09-05)
+
+**Never reuse a UI string this codebase has deliberately retired**, even for a feature that seems
+unrelated. A retired phrase carries the meaning it was retired for — the next reader infers that
+meaning from the words, not from which feature they're reading. ("Skip for now" was retired for the
+`expectsResponse` abandon-button hazard; C.1's milestone checkpoint is optional by design and isn't
+that hazard, but reusing the exact phrase would read as if it were — hence "Not now" instead.) Grep the
+codebase's own retired-phrase history before landing on copy for a new optional/declining control.

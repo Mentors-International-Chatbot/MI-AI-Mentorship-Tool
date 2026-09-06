@@ -384,6 +384,13 @@ the spec and informed by D.3 funnel data. **Do not start without `Course_Builder
    Sole exception: `repo/system/` behind `requireSystemAdmin`.
 6. Configuration over custom code: a per-course `if` outside test fixtures is a defect.
 7. Authored strings are derived verbatim, never generated.
+8. Never reuse a UI string this codebase has deliberately retired, even on an unrelated feature. A
+   retired phrase carries the meaning it was retired for — the next reader infers that meaning from the
+   words, not from which feature they're reading. *(C.1: "Skip for now" was retired for the
+   `expectsResponse` abandon-button hazard; the milestone checkpoint's decline control is optional by
+   design and isn't that hazard, but reusing the phrase would read as if it were — labeled "Not now"
+   instead.)* Grep the codebase's own retired-phrase history before landing on copy for a new
+   optional/declining control.
 
 ## Sequencing
 
