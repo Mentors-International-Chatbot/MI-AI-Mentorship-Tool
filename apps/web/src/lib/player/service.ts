@@ -12,6 +12,7 @@ import { getCurrentLearnerProject, learnerProjectSelectionRequired } from "./lea
 import { buildLessonDashboard, type LessonDashboard, type DashboardProjectInput } from "./dashboard";
 import { createAssessmentSession } from "@/lib/ai/assessment/createAssessmentSession";
 import { gradeQuizQuestion } from "./quizGrading";
+import { queueMilestoneGrade } from "@/lib/lti/grades";
 
 export class PlayerError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -1134,6 +1135,17 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
         enrollmentId: access.enrollmentId,
         source: "learner_confirmed",
       });
+      // The other half of the same gap this stage exists to close:
+      // queueMilestoneGrade was, like recordMilestoneReached, only ever
+      // called from the chat-surface handler. Writing MilestoneProgress
+      // without this queues nothing for Canvas — a BYU learner's capstone
+      // line item would stay silently un-posted even after "done" recorded
+      // the milestone. Fire-and-forget, same as the chat-surface call site:
+      // a grade-queueing failure must not fail the learner's own action.
+      // No-ops safely for non-LTI courses (no matching resourceLink).
+      queueMilestoneGrade(access.socioId, access.collectionKey).catch((error) =>
+        console.error(`[LTI Grade] queue failed for socio=${access.socioId} milestone=${block.milestoneRef}:`, error)
+      );
     }
     const progress = await playerRuntimeRepo.blockProgress.findMany({ where: { enrollmentId: access.enrollmentId, lessonKey } });
     const lessonComplete = lesson.blocks.every((item) => progress.some((entry) => entry.blockId === item.id && entry.contentVersion === item.contentVersion && entry.completedAt));

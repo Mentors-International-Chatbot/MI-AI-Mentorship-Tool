@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   messageFindFirst: vi.fn(),
   milestoneProgressFindFirst: vi.fn(),
   recordMilestoneReached: vi.fn(),
+  queueMilestoneGrade: vi.fn(),
 }));
 
 vi.mock("@/lib/repo/playerRuntimeRepo", () => ({
@@ -37,6 +38,13 @@ vi.mock("@/lib/repo", () => ({
   repo: { recordMilestoneReached: mocks.recordMilestoneReached },
   tenantRepo: {},
 }));
+
+// The other half of the same gap: queueMilestoneGrade reads MilestoneProgress
+// and enqueues the Canvas score. It was, like recordMilestoneReached, only
+// ever called from the chat-surface handler — mocked here so "done" writing
+// a milestone with no grade queued (the silent-zero-grade risk) is asserted
+// against directly, not left to an unmocked real call in a unit test.
+vi.mock("@/lib/lti/grades", () => ({ queueMilestoneGrade: mocks.queueMilestoneGrade }));
 
 import { completeBlock, PlayerError } from "@/lib/player/service";
 import type { PlayerAccess } from "@/lib/player/service";
@@ -73,6 +81,7 @@ beforeEach(() => {
   mocks.blockProgressUpdate.mockResolvedValue({});
   mocks.messageFindFirst.mockResolvedValue(null);
   mocks.milestoneProgressFindFirst.mockResolvedValue(null);
+  mocks.queueMilestoneGrade.mockResolvedValue(undefined);
   mocks.contentLessonFindMany.mockResolvedValue([
     { slug: "l1", orderIndex: 0, versions: [{ body: lessonBody() }] },
   ]);
@@ -118,12 +127,34 @@ describe("completeBlock — milestoneRef interleave", () => {
     expect(result.completed).toBe(true);
   });
 
-  it('interleaveAction "skip" advances without recording anything', async () => {
+  it('interleaveAction "done" also queues the Canvas grade — the other half of the same gap', async () => {
+    // recordMilestoneReached alone writes the row; queueMilestoneGrade is
+    // what actually enqueues the score delivery. Missing this call is
+    // exactly how a BYU learner's capstone line item stays silently
+    // un-posted even after "done" recorded the milestone.
+    mocks.blockProgressFindUnique.mockResolvedValue({ contentVersion: 1, completedAt: new Date(), score: 1, response: {}, state: null });
+
+    await completeBlock(access(), "l1", "teach1", undefined, { interleaveAction: "done" });
+
+    expect(mocks.queueMilestoneGrade).toHaveBeenCalledWith("socio-a", "ai-essentials");
+  });
+
+  it('interleaveAction "skip" advances without recording anything or queuing a grade', async () => {
     mocks.blockProgressFindUnique.mockResolvedValue({ contentVersion: 1, completedAt: new Date(), score: 1, response: {}, state: null });
 
     const result = await completeBlock(access(), "l1", "teach1", undefined, { interleaveAction: "skip" });
 
     expect(mocks.recordMilestoneReached).not.toHaveBeenCalled();
+    expect(mocks.queueMilestoneGrade).not.toHaveBeenCalled();
+    expect(result.completed).toBe(true);
+  });
+
+  it('a grade-queueing failure does not fail the learner\'s "done" action', async () => {
+    mocks.blockProgressFindUnique.mockResolvedValue({ contentVersion: 1, completedAt: new Date(), score: 1, response: {}, state: null });
+    mocks.queueMilestoneGrade.mockRejectedValue(new Error("Canvas token request failed"));
+
+    const result = await completeBlock(access(), "l1", "teach1", undefined, { interleaveAction: "done" });
+
     expect(result.completed).toBe(true);
   });
 
