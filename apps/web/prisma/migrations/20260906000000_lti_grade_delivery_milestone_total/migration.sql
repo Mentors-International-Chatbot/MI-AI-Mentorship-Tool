@@ -1,0 +1,19 @@
+-- Config-driven milestone grading, closing a gap flagged in C.1's
+-- investigation before E.1 makes it live: queueMilestoneGrade/buildScorePayload
+-- hardcoded ">= 5" / "> 5" as "this course has exactly 5 milestones," true only
+-- because AI Essentials Aug 2026 is the only course that has ever driven this
+-- pipeline. Phase E's importer exists specifically to let someone author a
+-- course with a different milestone count — the day that happens, every
+-- learner in it either can't reach "Completed" or the grade caps early.
+--
+-- scoreGiven is already frozen at queue time (computed once, never
+-- re-derived at delivery). milestoneTotal follows the same rule for
+-- consistency: it is resolved from outcome.milestones.length when the
+-- delivery row is created, not re-read from config at delivery time, so a
+-- mid-flight republish can't change what "Completed" meant for an
+-- already-queued delivery.
+--
+-- DEFAULT 5 backfills any existing row under the same assumption the
+-- hardcoded threshold already made for every row ever written — there is no
+-- other course this could have graded.
+ALTER TABLE "lti_grade_deliveries" ADD COLUMN "milestone_total" INTEGER NOT NULL DEFAULT 5;

@@ -2,12 +2,20 @@ import { ltiRuntimeRepo } from "@/lib/repo/ltiRuntimeRepo";
 import { signLtiJwt } from "./crypto";
 import { LTI_SCORE_SCOPE } from "./constants";
 
-export function buildScorePayload(input: { subject: string; scoreGiven: number; milestoneCount: number; timestamp?: Date }) {
+/**
+ * `milestoneTotal` is read off the delivery row, frozen at the moment
+ * `queueMilestoneGrade` created it — never re-resolved from the course's
+ * current config here. See `LtiGradeDelivery.milestoneTotal`'s schema
+ * comment for why: `scoreGiven` is already frozen the same way, and a
+ * mid-flight republish must not change what "Completed" meant for an
+ * already-queued delivery.
+ */
+export function buildScorePayload(input: { subject: string; scoreGiven: number; milestoneCount: number; milestoneTotal: number; timestamp?: Date }) {
   return {
     userId: input.subject,
     scoreGiven: input.scoreGiven,
     scoreMaximum: 100,
-    activityProgress: input.milestoneCount >= 5 ? "Completed" : "InProgress",
+    activityProgress: input.milestoneCount >= input.milestoneTotal ? "Completed" : "InProgress",
     gradingProgress: "FullyGraded",
     timestamp: (input.timestamp ?? new Date()).toISOString(),
   };
@@ -40,7 +48,7 @@ export async function deliverGrade(deliveryId: string) {
   const response = await fetch(scoreUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/vnd.ims.lis.v1.score+json" },
-    body: JSON.stringify(buildScorePayload({ subject: identity.subject, scoreGiven: delivery.scoreGiven, milestoneCount: delivery.milestoneCount })),
+    body: JSON.stringify(buildScorePayload({ subject: identity.subject, scoreGiven: delivery.scoreGiven, milestoneCount: delivery.milestoneCount, milestoneTotal: delivery.milestoneTotal })),
   });
   if (!response.ok) throw new Error(`Canvas score delivery failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
 }

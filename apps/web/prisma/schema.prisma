@@ -1206,6 +1206,13 @@ model LtiGradeDelivery {
   resourceLinkId String    @map("resource_link_id")
   socioId        String    @map("socio_id")
   milestoneCount Int       @map("milestone_count")
+  /// Config-driven, resolved from outcome.milestones.length when this row is
+  /// created — not re-read at delivery time, same "frozen at queue time"
+  /// rule scoreGiven already follows. See the migration's own comment for
+  /// why this exists: the ">= 5" Canvas "Completed" threshold used to be
+  /// hardcoded, correct only because exactly one course has ever driven
+  /// this pipeline.
+  milestoneTotal Int       @default(5) @map("milestone_total")
   scoreGiven     Float     @map("score_given")
   status         String    @default("pending") // pending | delivering | delivered | failed
   attemptCount   Int       @default(0) @map("attempt_count")
