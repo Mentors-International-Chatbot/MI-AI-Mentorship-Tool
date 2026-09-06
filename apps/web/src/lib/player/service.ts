@@ -958,8 +958,10 @@ type CompleteBlockOptions = {
   /** Explicit Continue from a block already saved as complete. */
   acknowledgeReview?: boolean;
   /**
-   * C.1: resolves the interleave prompt a `teach` block with `milestoneRef`
-   * shows on completion. "done" records the milestone as reached (source
+   * C.1 (extended to `project` blocks in C.2, once real content showed the
+   * milestone checkpoints are authored as those, not `teach`): resolves the
+   * interleave prompt a `teach`/`project` block with `milestoneRef` shows on
+   * completion. "done" records the milestone as reached (source
    * `learner_confirmed`); "skip" advances without recording — the milestone
    * stays reachable later some other way, this block just isn't the only
    * door to it. Requires the block to already be completed, same precondition
@@ -972,7 +974,7 @@ type CompleteBlockOptions = {
 export type InterleavePrompt = { milestoneKey: string; prompt: string } | null;
 
 async function pendingInterleave(access: PlayerAccess, block: LessonBlock): Promise<InterleavePrompt> {
-  if (block.blockType !== "teach" || !block.milestoneRef) return null;
+  if ((block.blockType !== "teach" && block.blockType !== "project") || !block.milestoneRef) return null;
   const reached = await playerRuntimeRepo.milestoneProgress.findFirst({
     where: { enrollmentId: access.enrollmentId, milestoneKey: block.milestoneRef },
   });
@@ -1123,7 +1125,7 @@ export async function completeBlock(access: PlayerAccess, lessonKey: string, blo
     if (existing?.contentVersion !== block.contentVersion || !existing.completedAt) {
       throw new PlayerError(409, "review_not_ready", "This block is not ready for its milestone check-in");
     }
-    if (block.blockType !== "teach" || !block.milestoneRef) {
+    if ((block.blockType !== "teach" && block.blockType !== "project") || !block.milestoneRef) {
       throw new PlayerError(400, "invalid_context", "This block has no milestone check-in");
     }
     if (options.interleaveAction === "done") {

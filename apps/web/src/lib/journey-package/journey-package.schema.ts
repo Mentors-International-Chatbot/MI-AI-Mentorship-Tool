@@ -609,6 +609,16 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
     content: z.string().min(1),
     requiresSubmission: z.boolean().default(false),
     blocking: z.boolean().optional(),
+    /**
+     * C.2 correction to C.1: AI Essentials Aug 2026's real milestone
+     * checkpoints (e.g. block b1-11, titled "Milestone 1" in its own
+     * content) are `project` blocks, not `teach` blocks — the plan's "teach
+     * blocks get optional milestoneRef" text didn't match the content it
+     * was meant to serve. Same field, same pairing rule, same package-wide
+     * validation as `teach`'s — see that block's doc comment.
+     */
+    milestoneRef: key.optional(),
+    interleavePrompt: z.string().optional(),
   }).superRefine((block, ctx) => {
     if (block.blocking === true && block.requiresSubmission === false) {
       ctx.addIssue({
@@ -622,6 +632,13 @@ export const lessonBlockSchema = z.discriminatedUnion("blockType", [
         code: "custom",
         message: "a project block cannot set requiresSubmission: true with blocking: false yet — the player does not persist a non-blocking submission anywhere retrievable, so this would silently collect nothing. Not supported until that storage ships.",
         path: ["blocking"],
+      });
+    }
+    if (Boolean(block.milestoneRef) !== Boolean(block.interleavePrompt)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "milestoneRef and interleavePrompt must be set together, or neither",
+        path: ["interleavePrompt"],
       });
     }
   }),
@@ -1541,7 +1558,7 @@ export const journeyPackageSchema = z
       }
       for (const l of pkg.curriculum.lessons) {
         for (const b of l.blocks) {
-          if (b.blockType === "teach" && b.milestoneRef && !milestoneKeys.has(b.milestoneRef)) {
+          if ((b.blockType === "teach" || b.blockType === "project") && b.milestoneRef && !milestoneKeys.has(b.milestoneRef)) {
             ctx.addIssue({
               code: "custom",
               message: `block "${b.id}" (lesson "${l.key}") milestoneRef "${b.milestoneRef}" not found in outcome.milestones`,
@@ -1553,7 +1570,7 @@ export const journeyPackageSchema = z
       // No outcome at all — any milestoneRef is a reference to nothing.
       for (const l of pkg.curriculum.lessons) {
         for (const b of l.blocks) {
-          if (b.blockType === "teach" && b.milestoneRef) {
+          if ((b.blockType === "teach" || b.blockType === "project") && b.milestoneRef) {
             ctx.addIssue({
               code: "custom",
               message: `block "${b.id}" (lesson "${l.key}") sets milestoneRef "${b.milestoneRef}" but the package declares no outcome.milestones at all`,

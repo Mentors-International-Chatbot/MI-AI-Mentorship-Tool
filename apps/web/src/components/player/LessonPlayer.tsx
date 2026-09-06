@@ -955,14 +955,17 @@ export function LessonPlayer({ course, lessonKey }: { course: string; lessonKey:
           />
         ) : <>
         {current.blockType === "teach" && !submittedComplete.has(current.id) && pendingInterleave?.blockId !== current.id && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Teach).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
-        {/* C.1: milestoneRef checkpoint — the authored prompt plus its
-            done/skip affordance, holding the block open until one is chosen. */}
-        {current.blockType === "teach" && pendingInterleave?.blockId === current.id && <div className="player-interleave">
+        {/* C.1/C.2: milestoneRef checkpoint — teach and project blocks both
+            author one (real content puts these on project blocks, e.g. AI
+            Essentials' "Milestone 1" block, not teach). The authored prompt
+            plus its done/skip affordance, holding the block open until one
+            is chosen. */}
+        {(current.blockType === "teach" || current.blockType === "project") && pendingInterleave?.blockId === current.id && <div className="player-interleave">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{pendingInterleave.prompt}</ReactMarkdown>
           <button disabled={busy} onClick={() => resolveInterleave("done")}>Done</button>
           <button className="player-secondary" disabled={busy} onClick={() => resolveInterleave("skip")}>Not now</button>
         </div>}
-        {current.blockType === "project" && !submittedComplete.has(current.id) && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Project).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
+        {current.blockType === "project" && !submittedComplete.has(current.id) && pendingInterleave?.blockId !== current.id && <><ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as Project).content}</ReactMarkdown>{!requiresResponse && <button disabled={busy} onClick={() => advance({ acknowledged: true })}>{primaryLabel(question)}</button>}</>}
         {/* The counter above collapses lesson-step and survey-step into one
             line for this block type; see its render higher up. */}
         {current.blockType === "onboarding_survey" && !submittedComplete.has(current.id) && <ReactMarkdown remarkPlugins={[remarkGfm]}>{(current as OnboardingSurvey).steps[Math.min(surveyStepIndex, (current as OnboardingSurvey).steps.length - 1)]?.prompt ?? ""}</ReactMarkdown>}

@@ -1,10 +1,15 @@
 /**
- * C.1 — block-level `milestoneRef` on `teach` blocks.
+ * C.1/C.2 — block-level `milestoneRef` on `teach` and `project` blocks.
  * ----------------------------------------------------------------------------
  * The investigation (reports/phase-c-investigation.md) found the write path
  * for player-surface milestones didn't exist at all. This schema is the
- * authoring half of the fix: an author links a `teach` block to a milestone,
- * with a required, verbatim `interleavePrompt` — never a generated string.
+ * authoring half of the fix: an author links a block to a milestone, with a
+ * required, verbatim `interleavePrompt` — never a generated string.
+ *
+ * `project`, not just `teach`, carries this field because real content (AI
+ * Essentials Aug 2026's block b1-11, authored before this field existed,
+ * titled "Milestone 1" in its own content) authors its milestone checkpoints
+ * as `project` blocks — a C.2 correction to C.1's teach-only scope.
  */
 import { describe, it, expect } from "vitest";
 import { journeyPackageSchema, SCHEMA_VERSION, type JourneyPackageInput } from "../journey-package.schema";
@@ -127,5 +132,38 @@ describe("teach block milestoneRef", () => {
     if (!result.success) {
       expect(result.error.issues.some((i) => i.message.includes("declares no outcome.milestones at all"))).toBe(true);
     }
+  });
+
+  it("accepts milestoneRef on a project block, same rules as teach", () => {
+    const pkg = makeBasePackage();
+    pkg.curriculum.lessons[0].blocks.push({
+      id: "b2", order: 2, blockType: "project", content: "Your gameplan — Milestone 1.",
+      requiresSubmission: true, blocking: true,
+      milestoneRef: "milestone-1", interleavePrompt: "Nice — that's milestone 1.",
+    });
+    pkg.outcome = {
+      project: { title: "Final project", deliverables: [] },
+      milestones: [{ key: "milestone-1", name: "First milestone", availability: { type: "immediate" } }],
+      mentorResources: [],
+    };
+
+    const result = journeyPackageSchema.safeParse(pkg);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects milestoneRef without interleavePrompt on a project block too", () => {
+    const pkg = makeBasePackage();
+    pkg.curriculum.lessons[0].blocks.push({
+      id: "b2", order: 2, blockType: "project", content: "Your gameplan — Milestone 1.",
+      milestoneRef: "milestone-1",
+    });
+    pkg.outcome = {
+      project: { title: "Final project", deliverables: [] },
+      milestones: [{ key: "milestone-1", name: "First milestone", availability: { type: "immediate" } }],
+      mentorResources: [],
+    };
+
+    const result = journeyPackageSchema.safeParse(pkg);
+    expect(result.success).toBe(false);
   });
 });

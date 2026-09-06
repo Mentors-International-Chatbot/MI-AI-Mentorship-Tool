@@ -60,6 +60,14 @@ function lessonBody(teachOverrides: Record<string, unknown> = {}) {
         ...teachOverrides,
       },
       { id: "teach2", order: 2, blockType: "teach", contentVersion: 1, concepts: [], role: "explanation", content: "Next block" },
+      // C.2: real content (AI Essentials b1-11) authors its milestone
+      // checkpoints as `project` blocks, not `teach` — mirrored here rather
+      // than only on a synthetic teach block.
+      {
+        id: "proj1", order: 3, blockType: "project", contentVersion: 1, concepts: [],
+        content: "Your gameplan and project process — Milestone 1.", requiresSubmission: true, blocking: true,
+        milestoneRef: "milestone-1", interleavePrompt: "Nice work — that's milestone 1.",
+      },
     ],
   };
 }
@@ -174,5 +182,22 @@ describe("completeBlock — milestoneRef interleave", () => {
       completeBlock(access(), "l1", "teach2", undefined, { interleaveAction: "done" }),
     ).rejects.toBeInstanceOf(PlayerError);
     expect(mocks.recordMilestoneReached).not.toHaveBeenCalled();
+  });
+});
+
+describe("completeBlock — milestoneRef on project blocks (C.2)", () => {
+  it("a submission-required project block still returns its interleave prompt on completion", async () => {
+    const result = await completeBlock(access(), "l1", "proj1", { acknowledged: true, note: "my process" });
+    expect(result.interleave).toEqual({ milestoneKey: "milestone-1", prompt: "Nice work — that's milestone 1." });
+  });
+
+  it('interleaveAction "done" on a project block records the milestone and queues the grade', async () => {
+    mocks.blockProgressFindUnique.mockResolvedValue({ contentVersion: 1, completedAt: new Date(), score: 1, response: {}, state: null });
+
+    const result = await completeBlock(access(), "l1", "proj1", undefined, { interleaveAction: "done" });
+
+    expect(mocks.recordMilestoneReached).toHaveBeenCalledWith(expect.objectContaining({ milestoneKey: "milestone-1" }));
+    expect(mocks.queueMilestoneGrade).toHaveBeenCalledWith("socio-a", "ai-essentials");
+    expect(result.interleave).toBeNull();
   });
 });
