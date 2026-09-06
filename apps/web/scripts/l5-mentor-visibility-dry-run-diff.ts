@@ -2,25 +2,46 @@
  * L5 stage 3 of 5 — the dry-run diff (the gate).
  * ═══════════════════════════════════════════════════════════════════════════
  * See reports/l0.2.6-mentorid-reader-classification.md for the full staged
- * plan. This script writes nothing, ever — pure analysis, computing today's
- * (stage 2) roster semantics against what the `Enrollment ⋈
- * CourseStaffAssignment` join (stage 4) would produce, without switching
- * anything live. Three deltas are expected; only one is a plausible
- * stop-ship:
+ * plan and "delta four" (the status-filtering axis this script accounts for
+ * below). Writes nothing, ever — pure analysis.
  *
- *   WIDENS  — a learner assigned to another mentor in the same course
- *             becomes visible. Intended (L5.3's shared model), but a mentor
- *             going from a caseload of 12 to 60 should be a decision made on
- *             purpose, not discovered after the swap. Reported per mentor.
- *   NARROWS — the mentorId===null org-wide fallback (verifyMentorOwnership)
- *             goes away. An unassigned socio in a course no mentor is
- *             staffed on becomes unreachable by *anyone*, not just one
- *             mentor — the fallback L5.4 already planned to delete, landing
- *             here instead of at UI time.
- *   BREAKS  — any socio with no ACTIVE Enrollment vanishes from every
- *             mentor's view under the join. Expected zero. THE ONE TO STOP
- *             SHIP ON IF NON-ZERO. Do not infer this from Phase A's August
- *             backfill history — run it against production, today.
+ * Runs standalone, before the stage 1 backfill has written a single row.
+ * Rather than reading the real `CourseStaffAssignment` table, it derives the
+ * same hypothetical mapping the backfill script would produce (each mentor's
+ * staffed courses = the distinct collectionKeys of their own currently-
+ * assigned socios' enrollments) directly from `Socio`/`Enrollment`. This is
+ * exactly Michael's ask: "if it computes both sides from raw SQL... it may
+ * run before the backfill." After the backfill actually runs, the real table
+ * should match this derivation exactly (nothing else writes it yet) — running
+ * this script again post-backfill is a cheap way to confirm that.
+ *
+ * ── Delta four: status is a second axis, separate from membership ─────────
+ * `Enrollment.status` is `active | paused | completed | dropped` (not the
+ * three-value `ACTIVE | ARCHIVED | COMPLETED` shorthand — `dropped` is what
+ * the schema calls a retired/superseded enrollment; there is no literal
+ * "archived" value today). Stage 2 found three readers (`getSociosForMentor`,
+ * `mentorCaseloadScope`, the derived id-list) filter Socio.status=ACTIVE with
+ * no enrollment-status opinion at all, while three others
+ * (`verifyMentorOwnership`, the flag routes, the learner page) apply no
+ * status filter whatsoever. Naively joining on `status: 'active'` enrollments
+ * only would narrow every one of those six — a mentor could no longer open a
+ * learner who *finished* the course, which is plainly wrong: completion is
+ * the normal, expected end state, not an edge case.
+ *
+ * So this script's roster comparison — matching what a stage 4 "roster
+ * listing" predicate should be — includes both `active` and `completed`
+ * enrollments. `paused` is included too (a paused learner is still enrolled,
+ * not gone) pending an explicit decision; `dropped` is excluded from the
+ * roster comparison but would belong in a separate, broader "reachability"
+ * predicate (open lookup by id, not list membership) per D10 — not modeled
+ * here since this script diffs *rosters*, not per-socio reachability.
+ *
+ * ── Running order ──────────────────────────────────────────────────────────
+ * See backfill-course-staff-assignment.ts's header for the full sequence
+ * (Neon branch snapshot first — this migration is insert-only, which is not
+ * the same as reversible). This script itself is safe to run standalone,
+ * before or after the backfill, on a branch or on production directly — it
+ * never writes.
  *
  * Usage:
  *   npx tsx scripts/l5-mentor-visibility-dry-run-diff.ts
@@ -35,14 +56,17 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+// Roster-listing statuses (delta four). Not 'dropped' — see header comment.
+const ROSTER_ENROLLMENT_STATUSES = ['active', 'completed', 'paused'] as const;
+
 async function main() {
   // ── Old roster: strict Socio.mentorId match, ACTIVE + unarchived ─────────
   // Mirrors mentorSocioWhere() in lib/repo/mentorVisibility.ts exactly —
   // this script intentionally does not import application code, so it stays
-  // correct even if that file's predicate changes before stage 4 runs.
+  // correct even if that predicate changes before stage 4 runs.
   const assignedSocios = await prisma.socio.findMany({
     where: { mentorId: { not: null }, status: 'ACTIVE', archivedAt: null },
-    select: { id: true, mentorId: true, participantProfile: { select: { id: true } } },
+    select: { id: true, mentorId: true },
   });
 
   const oldRosterByMentor = new Map<string, Set<string>>();
@@ -58,41 +82,56 @@ async function main() {
     select: { id: true },
   });
 
-  // ── New roster: Enrollment(learner, course) join CourseStaffAssignment(mentor, course) ──
-  const assignments = await prisma.courseStaffAssignment.findMany({
-    where: { endedAt: null },
-    select: { mentorId: true, collectionKey: true },
-  });
-  const collectionKeysByMentor = new Map<string, Set<string>>();
-  for (const a of assignments) {
-    if (!collectionKeysByMentor.has(a.mentorId)) collectionKeysByMentor.set(a.mentorId, new Set());
-    collectionKeysByMentor.get(a.mentorId)!.add(a.collectionKey);
-  }
-
-  const activeEnrollments = await prisma.enrollment.findMany({
-    where: { status: 'active' },
+  // ── Enrollments feeding the join, at roster-listing statuses (delta four) ─
+  const rosterEnrollments = await prisma.enrollment.findMany({
+    where: { status: { in: [...ROSTER_ENROLLMENT_STATUSES] } },
     select: { collectionKey: true, participant: { select: { socioId: true } } },
   });
-  // All socioIds with ANY active enrollment in ANY course — used for BREAKS.
-  const sociosWithActiveEnrollment = new Set(
-    activeEnrollments.map((e) => e.participant.socioId).filter((id): id is string => id !== null),
+  // Any enrollment at all (including 'dropped'), for the BREAKS check only —
+  // a socio who dropped one enrollment but has an active/completed one
+  // elsewhere is not broken; a socio with literally zero enrollment rows is.
+  const anyEnrollments = await prisma.enrollment.findMany({
+    select: { participant: { select: { socioId: true } } },
+  });
+  const sociosWithAnyEnrollment = new Set(
+    anyEnrollments.map((e) => e.participant.socioId).filter((id): id is string => id !== null),
   );
-  // socioId sets per collectionKey, for building each mentor's new roster.
+
   const socioIdsByCollectionKey = new Map<string, Set<string>>();
-  for (const e of activeEnrollments) {
+  for (const e of rosterEnrollments) {
     if (!e.participant.socioId || !e.collectionKey) continue;
     if (!socioIdsByCollectionKey.has(e.collectionKey)) socioIdsByCollectionKey.set(e.collectionKey, new Set());
     socioIdsByCollectionKey.get(e.collectionKey)!.add(e.participant.socioId);
   }
 
-  const allMentorIds = new Set([...oldRosterByMentor.keys(), ...collectionKeysByMentor.keys()]);
+  // ── Hypothetical CourseStaffAssignment, derived exactly as the stage 1 ────
+  // backfill script derives it — NOT read from the real table. See header.
+  const collectionKeysByEnrollmentForSocio = new Map<string, Set<string>>();
+  for (const e of rosterEnrollments) {
+    if (!e.participant.socioId || !e.collectionKey) continue;
+    if (!collectionKeysByEnrollmentForSocio.has(e.participant.socioId)) {
+      collectionKeysByEnrollmentForSocio.set(e.participant.socioId, new Set());
+    }
+    collectionKeysByEnrollmentForSocio.get(e.participant.socioId)!.add(e.collectionKey);
+  }
+  const collectionKeysByMentor = new Map<string, Set<string>>();
+  for (const [mentorId, socioIds] of oldRosterByMentor) {
+    const keys = new Set<string>();
+    for (const socioId of socioIds) {
+      for (const key of collectionKeysByEnrollmentForSocio.get(socioId) ?? []) keys.add(key);
+    }
+    if (keys.size > 0) collectionKeysByMentor.set(mentorId, keys);
+  }
 
   console.log('═'.repeat(78));
   console.log('WIDENS — per-mentor roster growth (new roster minus old roster)');
+  console.log('Read this with your own eyes, not just the count: 12 -> 60 is the shared-');
+  console.log('model feature working. 12 -> 400 means a mentor\'s assigned socios span an');
+  console.log('unexpectedly large set of courses, or those courses have unexpectedly large');
+  console.log('rosters themselves — look at *why* before accepting either number.');
   console.log('═'.repeat(78));
   let anyWiden = false;
-  for (const mentorId of allMentorIds) {
-    const oldSet = oldRosterByMentor.get(mentorId) ?? new Set<string>();
+  for (const [mentorId, oldSet] of oldRosterByMentor) {
     const newSet = new Set<string>();
     for (const key of collectionKeysByMentor.get(mentorId) ?? []) {
       for (const socioId of socioIdsByCollectionKey.get(key) ?? []) newSet.add(socioId);
@@ -100,40 +139,57 @@ async function main() {
     const widened = [...newSet].filter((id) => !oldSet.has(id));
     if (widened.length > 0) {
       anyWiden = true;
-      console.log(`  mentor=${mentorId}  ${oldSet.size} -> ${newSet.size}  (+${widened.length})`);
+      const courses = [...(collectionKeysByMentor.get(mentorId) ?? [])];
+      console.log(`  mentor=${mentorId}  ${oldSet.size} -> ${newSet.size}  (+${widened.length})  courses=[${courses.join(', ')}]`);
     }
   }
   if (!anyWiden) console.log('  (no mentor gains anyone)');
 
   console.log('\n' + '═'.repeat(78));
-  console.log('NARROWS — unassigned socios reachable today only via the org-wide fallback,');
-  console.log('unreachable by anyone once that fallback is removed');
+  console.log('NARROWS — two kinds, do not conflate them');
   console.log('═'.repeat(78));
-  // A currently-unassigned socio is reachable today by ANY mentor sharing its
-  // org (verifyMentorOwnership's fallback). Under the join it needs an
-  // active enrollment in a course SOME mentor is staffed on. Report the
-  // ones that would have nobody.
+
+  // Kind 1: expected — the mentorId===null org-wide fallback going away.
   let orphanedByFallbackRemoval = 0;
   for (const socio of unassignedSocios) {
-    const enrolled = activeEnrollments.filter((e) => e.participant.socioId === socio.id);
-    const reachableUnderJoin = enrolled.some((e) =>
-      [...collectionKeysByMentor.values()].some((keys) => e.collectionKey && keys.has(e.collectionKey)),
+    const keys = collectionKeysByEnrollmentForSocio.get(socio.id) ?? new Set<string>();
+    const reachableUnderJoin = [...keys].some((key) =>
+      [...collectionKeysByMentor.values()].some((mentorKeys) => mentorKeys.has(key)),
     );
     if (!reachableUnderJoin) orphanedByFallbackRemoval++;
   }
-  console.log(`  unassigned, ACTIVE socios today : ${unassignedSocios.length}`);
-  console.log(`  becomes unreachable by anyone   : ${orphanedByFallbackRemoval}`);
+  console.log(`  (1) expected — unassigned-socio fallback removal`);
+  console.log(`      unassigned, ACTIVE socios today : ${unassignedSocios.length}`);
+  console.log(`      becomes unreachable by anyone   : ${orphanedByFallbackRemoval}`);
+
+  // Kind 2: NOT expected — an old-roster member who disappears from the new
+  // roster for a reason other than the fallback (e.g. a status/derivation
+  // gap — "delta four showing up early" if this is ever non-zero).
+  let unexpectedNarrow = 0;
+  for (const [mentorId, oldSet] of oldRosterByMentor) {
+    const newSet = new Set<string>();
+    for (const key of collectionKeysByMentor.get(mentorId) ?? []) {
+      for (const socioId of socioIdsByCollectionKey.get(key) ?? []) newSet.add(socioId);
+    }
+    for (const socioId of oldSet) {
+      if (!newSet.has(socioId)) unexpectedNarrow++;
+    }
+  }
+  console.log(`  (2) UNEXPECTED — old-roster member absent from the new roster for any other`);
+  console.log(`      reason (should be 0; every old-roster socio has this mentor staffed on`);
+  console.log(`      at least one of their own enrollment's courses, by construction of the`);
+  console.log(`      hypothetical derivation above)`);
+  console.log(`      count : ${unexpectedNarrow}${unexpectedNarrow > 0 ? '  <-- investigate before stage 4' : ''}`);
 
   console.log('\n' + '═'.repeat(78));
-  console.log('BREAKS — assigned socios with no ACTIVE Enrollment at all (vanish under the join)');
+  console.log('BREAKS — assigned socios with NO enrollment at all (vanish under the join)');
+  console.log('Includes completed/paused/dropped enrollments in the "has one" check — only');
+  console.log('a socio with zero enrollment rows of any status counts as broken.');
   console.log('EXPECTED ZERO. STOP SHIP ON STAGE 4 IF NON-ZERO.');
   console.log('═'.repeat(78));
-  const brokenSocioIds: string[] = [];
-  for (const s of assignedSocios) {
-    if (!sociosWithActiveEnrollment.has(s.id)) brokenSocioIds.push(s.id);
-  }
+  const brokenSocioIds = assignedSocios.filter((s) => !sociosWithAnyEnrollment.has(s.id)).map((s) => s.id);
   console.log(`  assigned ACTIVE socios total     : ${assignedSocios.length}`);
-  console.log(`  with no ACTIVE enrollment at all : ${brokenSocioIds.length}`);
+  console.log(`  with no enrollment at all        : ${brokenSocioIds.length}`);
   if (brokenSocioIds.length > 0) {
     console.log('\n  Would vanish from every mentor\'s view under the join:');
     for (const id of brokenSocioIds) console.log(`      socio=${id}`);
@@ -142,9 +198,10 @@ async function main() {
   console.log('\n' + '═'.repeat(78));
   console.log('SUMMARY');
   console.log('═'.repeat(78));
-  console.log(`  mentors with any assignment (old or new) : ${allMentorIds.size}`);
-  console.log(`  unassigned-socio fallback removals       : ${orphanedByFallbackRemoval}`);
-  console.log(`  BREAKS (stop-ship if > 0)                : ${brokenSocioIds.length}`);
+  console.log(`  mentors with an old-roster socio           : ${oldRosterByMentor.size}`);
+  console.log(`  unassigned-socio fallback removals (kind 1) : ${orphanedByFallbackRemoval}`);
+  console.log(`  unexpected narrows (kind 2, delta four)     : ${unexpectedNarrow}`);
+  console.log(`  BREAKS (stop-ship if > 0)                   : ${brokenSocioIds.length}`);
 
   await prisma.$disconnect();
 }
