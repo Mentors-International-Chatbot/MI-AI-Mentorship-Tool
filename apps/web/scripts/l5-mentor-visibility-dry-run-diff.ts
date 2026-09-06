@@ -28,13 +28,23 @@
  * learner who *finished* the course, which is plainly wrong: completion is
  * the normal, expected end state, not an edge case.
  *
- * So this script's roster comparison — matching what a stage 4 "roster
- * listing" predicate should be — includes both `active` and `completed`
- * enrollments. `paused` is included too (a paused learner is still enrolled,
- * not gone) pending an explicit decision; `dropped` is excluded from the
- * roster comparison but would belong in a separate, broader "reachability"
- * predicate (open lookup by id, not list membership) per D10 — not modeled
- * here since this script diffs *rosters*, not per-socio reachability.
+ * Decided (2026-09-06): status is purely a *roster display* filter — it
+ * never gates reachability at all. There is no enrollment status where the
+ * right answer is "a mentor may not open a learner in a course they teach":
+ * a completed learner gets reviewed, a dropped one gets asked why they
+ * left, a paused one is the reason the dashboard exists. This is also why
+ * the six readers that never filtered status (`mentorOwnsSocio`/
+ * `mentorCanReachSocio` and everything built on them) weren't an oversight
+ * stage 2 happened to preserve — they were already correct, and needed no
+ * change now that reachability is decided to have no status filter at all.
+ *
+ * The roster-listing side (this script's comparison, and
+ * `getSociosForMentor`-shaped readers) is narrower on purpose: default view
+ * = `active` + `paused` (paused is the database's literal representation of
+ * a stalled learner — "who is stuck" is the dashboard's whole job, so it
+ * belongs in the default, not behind a toggle), `completed` behind an
+ * explicit toggle, `dropped` excluded entirely. `ROSTER_ENROLLMENT_STATUSES`
+ * below already reflects this.
  *
  * ── Running order ──────────────────────────────────────────────────────────
  * See backfill-course-staff-assignment.ts's header for the full sequence
@@ -56,7 +66,12 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// Roster-listing statuses (delta four). Not 'dropped' — see header comment.
+// Every status the roster UI could ever show, default view or behind the
+// completed-toggle — the union, not just the default (active+paused). This
+// diff measures "does this socio remain visible via *some* roster view",
+// which is the fair comparison against the old roster (Socio.mentorId-based,
+// with no enrollment-status opinion at all — a completed learner already
+// appears there today). Not 'dropped' — see header comment.
 const ROSTER_ENROLLMENT_STATUSES = ['active', 'completed', 'paused'] as const;
 
 async function main() {
