@@ -1,7 +1,7 @@
 # Phase C — Project, milestone interleaving, submission: Investigation
 
 Date: 2026-09-05
-Status: Investigation complete. One finding reframes priority within the phase; nothing here blocks starting.
+Status: C.1 and C.2 complete. Phase C paused after C.2 by decision — see "Phase C pauses here" below.
 
 ## What already exists
 
@@ -141,6 +141,43 @@ C.3 does not proceed now. Two reasons, one per half:
 
 Not started: C.3a and C.3b both remain fully unbuilt. Revisit C.3a once L0.1.4 has an owner (link-only
 is still safe to build sooner if the term timeline demands it); revisit C.3b once L5 ships.
+
+## C.2 — decision: keep the `project` block's single-`content`-string shape (2026-09-05)
+
+**Question:** does `project` need structured authoring fields (overview/steps/skills/software/
+submit-how, per the plan's original text), or does the existing single-`content`-string shape suffice?
+
+**Decision: no new structured fields.** The existing shape stays.
+
+**Why, now that real content exists to test the question against:**
+
+1. **Consistency.** Every other block type that carries authored prose — `teach`, `teach_back`,
+   `resource` — uses one string, not a multi-field form. A `project` block authored as five separate
+   fields would be the only block type shaped that way, and "the odd one out is where the next bug
+   lives" has already proven true once this session (the same reasoning the Auth & Login plan uses for
+   why `SocioDimensionState` should be enrollment-scoped like everything else, not the exception).
+2. **The real evidence is already in.** AI Essentials Aug 2026 has 11 authored `project` blocks,
+   including the one that matters most for this question — b1-11, "Your gameplan, and your project
+   process — Milestone 1" — and every one of them conveys overview/steps/what's-being-asked through
+   plain markdown (bold headers, numbered lists) inside one string, successfully, already shipped.
+   Nothing about the real authoring experience asked for separate fields; the plan's original text
+   predated that experience.
+3. **Cost.** Structured fields mean schema, converter, renderer, and progress-semantics work for a
+   shape nothing has needed yet — the same tradeoff Track E's own doc comments already reasoned through
+   for a different block type (why `onboarding_survey`'s chips stayed out of block-level structure).
+4. **The part of C.1's text this was meant to solve is already solved differently.** "Config references
+   the course milestone set" is now `milestoneRef` (C.1/C.2 above) — a mechanism, not a content shape.
+   The authoring-shape question and the milestone-linking question turned out to be orthogonal; only
+   the second one needed new schema.
+
+This closes Phase C's open decision. Nothing else changes as a result — no migration, no schema
+change, no re-authoring of existing content.
+
+## Phase C pauses here
+
+C.1 and C.2 (plus the C.1 corrections both raised) are done. C.3a/C.3b are deliberately not started —
+see the split/defer section above. Next work on this phase resumes when either blocker clears
+(L0.1.4 ownership for C.3a, L5 for C.3b), not on a fixed schedule.
 
 ## UX copy rule (added 2026-09-05)
 
