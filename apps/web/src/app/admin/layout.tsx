@@ -10,9 +10,12 @@ type NavItem =
   | { href: string; label: string }
   | { label: string; key: string; children: NavChild[] };
 
+// D.3/C: "Web chat" removed per plan text ("remove web-chat links from
+// mentor and admin navs") — this layout is shared by admin and course_lead,
+// and course_lead isn't named either way, so it drops for both rather than
+// threading role awareness into what's otherwise a static client nav.
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/learners', label: 'Mentor dashboard' },
-  { href: '/chat', label: 'Web chat' },
   { href: '/admin', label: 'Overview' },
   {
     key: 'config',

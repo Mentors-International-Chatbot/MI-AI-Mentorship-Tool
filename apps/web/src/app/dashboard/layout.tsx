@@ -43,11 +43,11 @@ export default async function DashboardLayout({
               >
                 {t.sociosTitle}
               </Link>
-              {/* D.3: a mentor's own web-chat access is removed from their nav —
-                  chat is the learner surface, not a mentor tool. Course leads
-                  and admins keep it (e.g. for testing a course as a learner
-                  would experience it). */}
-              {session?.role !== 'mentor' && (
+              {/* Plan text: "remove web-chat links from mentor and admin
+                  navs" — chat is the learner surface, not a staff tool.
+                  course_lead isn't named either way, so it keeps the link
+                  (e.g. for testing a course as a learner would experience it). */}
+              {session?.role !== 'mentor' && session?.role !== 'admin' && (
                 <Link
                   href="/chat"
                   className="text-sm text-gray-300 hover:text-white transition-colors"
