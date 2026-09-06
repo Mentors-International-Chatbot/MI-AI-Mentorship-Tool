@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { repo } from '@/lib/repo';
 import { tenantPrismaRepo } from '@/lib/repo/tenantPrismaRepo';
+import { mentorCanReachSocio } from '@/lib/repo/mentorVisibility';
 import { verifySession } from '@/lib/auth/session';
 import { computeSocioHealth, formatHealthReason } from '@/lib/health';
 import { getDashboardStrings } from '@/lib/i18n/dashboard';
@@ -47,25 +48,12 @@ export default async function SocioDetailPage({
   const socio = await repo.getSocioById(id);
   if (!socio) notFound();
 
-  // Mentors can only view their assigned socios, or an unassigned one in their
-  // own organization — unassigned player learners (`/join` signups, LTI
-  // provisioning) never get a `mentorId` and would otherwise be permanently
-  // unreachable. Same posture as `verifyMentorOwnership` and the alerts-page
-  // zone 0 org-wide fallback.
-  if (session.role === 'mentor' && socio.mentorId !== session.userId) {
-    let reachable = false;
-    if (socio.mentorId === null) {
-      const mentorOrgId = await tenantPrismaRepo.getOrganizationIdByMentorId(session.userId);
-      if (mentorOrgId) {
-        try {
-          const { organizationId } = await tenantPrismaRepo.resolveOrganizationForSocio(id);
-          reachable = organizationId === mentorOrgId;
-        } catch {
-          reachable = false;
-        }
-      }
-    }
-    if (!reachable) notFound();
+  // L5 stage 2: shared predicate — see lib/repo/mentorVisibility.ts. This was
+  // a second, independent copy of verifyMentorOwnership's exact two-part
+  // check (own it outright, or reach it org-wide if unassigned) before the
+  // collapse — same posture as the alerts-page zone 0 org-wide fallback.
+  if (session.role === 'mentor' && !(await mentorCanReachSocio(socio, session.userId))) {
+    notFound();
   }
 
   // Collection slugs are only unique within an organization, so the course

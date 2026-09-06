@@ -3,17 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   verifySession: vi.fn(),
   getSocioById: vi.fn(),
-  getOrganizationIdByMentorId: vi.fn(),
-  resolveOrganizationForSocio: vi.fn(),
+  mentorCanReachSocio: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/session", () => ({ verifySession: mocks.verifySession }));
 vi.mock("@/lib/repo", () => ({
   repo: { getSocioById: mocks.getSocioById },
-  tenantRepo: {
-    getOrganizationIdByMentorId: mocks.getOrganizationIdByMentorId,
-    resolveOrganizationForSocio: mocks.resolveOrganizationForSocio,
-  },
+}));
+vi.mock("@/lib/repo/mentorVisibility", () => ({
+  mentorCanReachSocio: mocks.mentorCanReachSocio,
 }));
 
 import { verifyMentorOwnership } from "../ownership";
@@ -22,12 +20,12 @@ import { verifyMentorOwnership } from "../ownership";
  * Mentor reachability for player-surface learners
  * ═══════════════════════════════════════════════════════════════════════════
  * `verifyMentorOwnership` gates 8 dashboard routes (message, ai-toggle,
- * conversation, overrides, summaries, ...). Before this fix it 404'd any
- * mentor whose `mentorId` did not exactly match the socio — which every
- * web/`/join` signup and LTI-provisioned player learner fails by
- * construction, since nothing ever sets `mentorId` for them. The fallback
- * here mirrors the alerts-page zone 0 org-wide fallback: an unassigned socio
- * is reachable by any mentor in the same organization, not by nobody.
+ * conversation, overrides, summaries, ...). L5 stage 2 collapsed its
+ * ownership decision — including the org-wide fallback for an unassigned
+ * socio — into the shared `mentorCanReachSocio` (lib/repo/mentorVisibility.ts),
+ * which has its own dedicated tests covering every fallback edge case. This
+ * file now only proves `verifyMentorOwnership`'s own job: role gating, and
+ * delegating the actual ownership question correctly.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 function socio(overrides: Partial<{ id: string; mentorId: string | null }> = {}) {
@@ -61,75 +59,33 @@ describe("verifyMentorOwnership — admin", () => {
   });
 });
 
-describe("verifyMentorOwnership — mentor, assigned socio", () => {
-  it("authorizes when mentorId matches, without touching org resolution", async () => {
-    mocks.verifySession.mockResolvedValue({ userId: "mentor-1", role: "mentor" });
-    mocks.getSocioById.mockResolvedValue(socio({ mentorId: "mentor-1" }));
-
-    const result = await verifyMentorOwnership("socio-1");
-
-    expect(result.authorized).toBe(true);
-    expect(mocks.getOrganizationIdByMentorId).not.toHaveBeenCalled();
-  });
-
-  it("404s when mentorId belongs to a different mentor", async () => {
-    mocks.verifySession.mockResolvedValue({ userId: "mentor-1", role: "mentor" });
-    mocks.getSocioById.mockResolvedValue(socio({ mentorId: "mentor-2" }));
-
-    const result = await verifyMentorOwnership("socio-1");
-
-    expect(result.authorized).toBe(false);
-  });
-
-  it("404s when the socio does not exist", async () => {
+describe("verifyMentorOwnership — mentor", () => {
+  it("404s when the socio does not exist, without ever calling mentorCanReachSocio", async () => {
     mocks.verifySession.mockResolvedValue({ userId: "mentor-1", role: "mentor" });
     mocks.getSocioById.mockResolvedValue(null);
 
     const result = await verifyMentorOwnership("socio-1");
 
     expect(result.authorized).toBe(false);
+    expect(mocks.mentorCanReachSocio).not.toHaveBeenCalled();
   });
-});
 
-describe("verifyMentorOwnership — mentor, unassigned socio (org-wide fallback)", () => {
-  it("authorizes a mentor reaching an unassigned socio in their own organization", async () => {
+  it("authorizes when mentorCanReachSocio says yes", async () => {
     mocks.verifySession.mockResolvedValue({ userId: "mentor-1", role: "mentor" });
-    mocks.getSocioById.mockResolvedValue(socio({ mentorId: null }));
-    mocks.getOrganizationIdByMentorId.mockResolvedValue("org-a");
-    mocks.resolveOrganizationForSocio.mockResolvedValue({ organizationId: "org-a", source: "collection_key" });
+    const s = socio({ mentorId: "mentor-1" });
+    mocks.getSocioById.mockResolvedValue(s);
+    mocks.mentorCanReachSocio.mockResolvedValue(true);
 
     const result = await verifyMentorOwnership("socio-1");
 
     expect(result.authorized).toBe(true);
+    expect(mocks.mentorCanReachSocio).toHaveBeenCalledWith(s, "mentor-1");
   });
 
-  it("404s when the unassigned socio resolves to a different organization", async () => {
+  it("404s when mentorCanReachSocio says no", async () => {
     mocks.verifySession.mockResolvedValue({ userId: "mentor-1", role: "mentor" });
-    mocks.getSocioById.mockResolvedValue(socio({ mentorId: null }));
-    mocks.getOrganizationIdByMentorId.mockResolvedValue("org-a");
-    mocks.resolveOrganizationForSocio.mockResolvedValue({ organizationId: "org-b", source: "collection_key" });
-
-    const result = await verifyMentorOwnership("socio-1");
-
-    expect(result.authorized).toBe(false);
-  });
-
-  it("404s when the mentor has no resolvable organization at all", async () => {
-    mocks.verifySession.mockResolvedValue({ userId: "mentor-1", role: "mentor" });
-    mocks.getSocioById.mockResolvedValue(socio({ mentorId: null }));
-    mocks.getOrganizationIdByMentorId.mockResolvedValue(null);
-
-    const result = await verifyMentorOwnership("socio-1");
-
-    expect(result.authorized).toBe(false);
-    expect(mocks.resolveOrganizationForSocio).not.toHaveBeenCalled();
-  });
-
-  it("fails closed when the socio's organization cannot be resolved at all", async () => {
-    mocks.verifySession.mockResolvedValue({ userId: "mentor-1", role: "mentor" });
-    mocks.getSocioById.mockResolvedValue(socio({ mentorId: null }));
-    mocks.getOrganizationIdByMentorId.mockResolvedValue("org-a");
-    mocks.resolveOrganizationForSocio.mockRejectedValue(new Error("no resolvable tenant"));
+    mocks.getSocioById.mockResolvedValue(socio({ mentorId: "mentor-2" }));
+    mocks.mentorCanReachSocio.mockResolvedValue(false);
 
     const result = await verifyMentorOwnership("socio-1");
 

@@ -16,7 +16,7 @@
  * stronger signal than a MentorProfile row that may not exist.
  * ═══════════════════════════════════════════════════════════════════════════
  */
-import { prisma } from '@/lib/db';
+import { getMentorCaseloadSocios } from '@/lib/repo/mentorVisibility';
 
 export type MentorCaseloadResult =
   | { status: 'ok'; organizationId: string; socioIds: string[]; collectionKeys: string[] }
@@ -30,21 +30,8 @@ export type MentorCaseloadResult =
   | { status: 'ambiguous_org'; organizationIds: string[] };
 
 export async function mentorCaseloadScope(mentorId: string): Promise<MentorCaseloadResult> {
-  const socios = await prisma.socio.findMany({
-    where: { mentorId, status: 'ACTIVE', archivedAt: null },
-    select: {
-      id: true,
-      participantProfile: {
-        select: {
-          organizationId: true,
-          enrollments: {
-            where: { status: { not: 'dropped' } },
-            select: { collectionKey: true },
-          },
-        },
-      },
-    },
-  });
+  // L5 stage 2: shared predicate — see lib/repo/mentorVisibility.ts.
+  const socios = await getMentorCaseloadSocios(mentorId);
 
   if (socios.length === 0) return { status: 'no_caseload' };
 

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import type { TenantContext } from './tenantContext';
 import { TenantIsolationError } from './tenantContext';
+import { mentorSocioWhere } from './mentorVisibility';
 import type {
   TenantRepo,
   Organization,
@@ -1708,14 +1709,11 @@ export const tenantPrismaRepo: TenantRepo = {
     return socios.map(toSocio);
   },
 
+  // L5 stage 2: shared predicate — see lib/repo/mentorVisibility.ts's own
+  // doc comment for why this collapsed from its own inline where-clause.
   async getSociosForMentor(organizationId, mentorId) {
     const socios = await prisma.socio.findMany({
-      where: {
-        status: 'ACTIVE',
-        archivedAt: null, // A.3: see getSociosForOrganization
-        mentorId,
-        participantProfile: { organizationId },
-      },
+      where: mentorSocioWhere(mentorId, organizationId),
       orderBy: { updatedAt: 'desc' },
     });
     return socios.map(toSocio);

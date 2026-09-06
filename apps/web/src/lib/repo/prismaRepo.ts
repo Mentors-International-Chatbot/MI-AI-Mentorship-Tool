@@ -547,6 +547,15 @@ export const prismaRepo: Repo = {
         }));
     },
 
+    // L5 stage 2: NOT migrated to the shared mentorSocioWhere predicate.
+    // Found during the collapse: this is a third variant — a bare
+    // `socio: { mentorId }` nested filter with no `status`/`archivedAt`
+    // constraint, unlike mentorSocioWhere's ACTIVE+unarchived rule. No test
+    // exists to prove forcing it onto the shared predicate is behavior-
+    // preserving, and this route has no UI caller today (dead code, per
+    // reports/l0.2.6-mentorid-reader-classification.md), so there is nothing
+    // to gain by guessing. Left as-is; resolves by construction at stage 4
+    // when the join defines "visible" uniformly for every reader.
     async getUnresolvedFlagsByMentor(mentorId: string) {
         const flags = await prisma.socioFlag.findMany({
             where: {

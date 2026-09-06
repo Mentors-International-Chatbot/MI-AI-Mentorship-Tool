@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { repo } from '@/lib/repo';
 import { verifyMentorOrAdmin } from '@/lib/auth/ownership';
+import { mentorOwnsSocio } from '@/lib/repo/mentorVisibility';
 
 /**
  * "I've seen this." Records that a mentor looked at the alert without claiming
@@ -18,7 +19,7 @@ export async function POST(
   // For mentors, verify the flag belongs to one of their socios
   if (auth.session.role === 'mentor') {
     const flagWithSocio = await repo.getFlagWithSocio(id);
-    if (!flagWithSocio || flagWithSocio.socio.mentorId !== auth.session.userId) {
+    if (!flagWithSocio || !mentorOwnsSocio(flagWithSocio.socio, auth.session.userId)) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
   }
