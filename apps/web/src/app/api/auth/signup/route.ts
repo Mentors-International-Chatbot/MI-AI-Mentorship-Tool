@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
 import { createSession, type SessionIdentity } from '@/lib/auth/session';
+import { findOrCreatePrincipal } from '@/lib/auth/principal';
 
 export async function POST(req: NextRequest) {
   try {
@@ -106,6 +107,20 @@ export async function POST(req: NextRequest) {
         name,
       };
     }
+
+    // Signup never re-verifies a password (there's nothing to verify against
+    // yet), so it calls findOrCreatePrincipal directly rather than going
+    // through PasswordProvider — same "password" provider convention
+    // (subject = the account's own id) as a subsequent login for this same
+    // account will resolve to.
+    const principal = await findOrCreatePrincipal({
+      provider: 'password',
+      subject: session.userId,
+      role: session.role,
+      socioId: session.role === 'socio' ? session.userId : undefined,
+      mentorId: session.role !== 'socio' ? session.userId : undefined,
+    });
+    session.principalId = principal.id;
 
     // Fresh signups default to remembered: the user just proved intent, and this
     // is exactly the population that re-registers rather than re-logging-in when

@@ -6,12 +6,16 @@ const mocks = vi.hoisted(() => {
   return {
     createSession: vi.fn(),
     provisionLearner: vi.fn(),
+    findOrCreatePrincipal: vi.fn(),
     ProvisionError,
   };
 });
 
 vi.mock("@/lib/auth/session", () => ({
   createSession: mocks.createSession,
+}));
+vi.mock("@/lib/auth/principal", () => ({
+  findOrCreatePrincipal: mocks.findOrCreatePrincipal,
 }));
 vi.mock("@/lib/repo/devTestLearnerRepo", () => ({
   provisionDevAiEssentialsLearner: mocks.provisionLearner,
@@ -38,6 +42,7 @@ beforeEach(() => {
     organizationId: "acceptance-org",
     programVersionId: "aiess-version",
   });
+  mocks.findOrCreatePrincipal.mockResolvedValue({ id: "principal-test-1" });
 });
 
 afterEach(() => {
@@ -64,15 +69,22 @@ describe("POST /api/auth/test-login", () => {
     expect(mocks.provisionLearner).not.toHaveBeenCalled();
   });
 
-  it("provisions the database-backed learner and creates its socio session", async () => {
+  it("provisions the database-backed learner and creates its socio session with a resolved principalId", async () => {
     const response = await POST(request("socio"));
 
     expect(response.status).toBe(200);
     expect(mocks.provisionLearner).toHaveBeenCalledOnce();
+    expect(mocks.findOrCreatePrincipal).toHaveBeenCalledWith({
+      provider: "password",
+      subject: "real-socio-id",
+      role: "socio",
+      socioId: "real-socio-id",
+    });
     expect(mocks.createSession).toHaveBeenCalledWith({
       userId: "real-socio-id",
       role: "socio",
       name: "AI Essentials Test Learner",
+      principalId: "principal-test-1",
     }, false);
     await expect(response.json()).resolves.toEqual({
       success: true,
@@ -92,6 +104,18 @@ describe("POST /api/auth/test-login", () => {
     expect(mocks.createSession).toHaveBeenNthCalledWith(2, expect.objectContaining({
       userId: "real-socio-id",
     }), false);
+  });
+
+  it("leaves the hardcoded mentor test identity claim-less rather than violating Principal.mentorId's FK", async () => {
+    const response = await POST(request("mentor"));
+
+    expect(response.status).toBe(200);
+    expect(mocks.findOrCreatePrincipal).not.toHaveBeenCalled();
+    expect(mocks.createSession).toHaveBeenCalledWith({
+      userId: "test-mentor-001",
+      role: "mentor",
+      name: "Test Mentor",
+    }, false);
   });
 
   it("fails closed when the acceptance publication cannot be selected safely", async () => {

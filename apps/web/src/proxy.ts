@@ -10,8 +10,16 @@ import {
   verifyToken,
   type VerifiedSession,
 } from '@/lib/auth/token';
+import { resolvePrincipalForSession, PrincipalNotFoundError } from '@/lib/auth/principal';
 
-// Routes that don't require authentication
+// Routes that don't require authentication. '/login' must stay public —
+// removing it would redirect an unauthenticated visitor to /login?redirect=
+// /login, looping forever. That also means a session-aware "already
+// authenticated, bounce away from /login" check placed after the public-path
+// early return below can never run for this path — L1.e found one written
+// exactly there and removed it as dead code; that redirect is real and
+// correctly implemented, but only in login/page.tsx (a server component,
+// checked directly against homePathForRole), not here.
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth',
@@ -41,8 +49,23 @@ async function getSession(req: NextRequest): Promise<VerifiedSession | null> {
  * Re-issue a session that is past the halfway point of its lifetime, so an
  * actively-used session never expires out from under the user. Stops at the
  * absolute cap (measured from `sessionStart`, which refresh never resets), so
- * the session eventually expires and forces a real re-login. Re-signing
- * failures are non-fatal: the existing cookie is still valid.
+ * the session eventually expires and forces a real re-login.
+ *
+ * Also resolves the session's current Principal on every refresh and writes
+ * its id into the re-signed token (`refreshedPayload`'s second argument) —
+ * this, not a fresh login, is what actually retires a claim-less
+ * (pre-Principal) session: an actively-used one refreshes well before the
+ * 90-day absolute cap, so it acquires a real `principalId` within days
+ * instead of waiting for the cap to force re-authentication.
+ *
+ * `PrincipalNotFoundError` (a `principalId` claim that no longer resolves —
+ * a deleted row, or a database restored to a point before it existed) is
+ * rethrown for `proxy()` to turn into a sign-out-and-redirect, deliberately
+ * NOT swallowed here: unlike a signing hiccup, the session's identity is
+ * actually gone, and continuing to serve the stale cookie would just defer
+ * the same failure to the next authenticated action. Any other failure
+ * (resolving the principal, signing) is non-fatal: the existing cookie is
+ * still valid.
  *
  * Middleware cannot use `cookies()` from next/headers — the cookie is set on
  * the outgoing NextResponse.
@@ -56,16 +79,33 @@ async function withRefreshedSession(
   if (isPastAbsoluteCap(session, now)) return res;
 
   try {
-    const token = await signSessionToken(refreshedPayload(session));
+    const principal = await resolvePrincipalForSession(session);
+    const token = await signSessionToken(refreshedPayload(session, principal.id));
     res.cookies.set(
       COOKIE_NAME,
       token,
       cookieOptions(sessionMaxAge(session.rememberMe)),
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof PrincipalNotFoundError) throw error;
     // Keep serving the request on the current cookie.
   }
 
+  return res;
+}
+
+/**
+ * The session's Principal is gone (see `withRefreshedSession`) — clear the
+ * cookie and send the user to log in again, same shape as the no-session
+ * redirect below. The alternative (letting the error propagate) is a 500 for
+ * every active user simultaneously if this ever fires from a real incident
+ * (e.g. a Neon branch restore), which is the worst possible time for it.
+ */
+function redirectToLoginAndClearSession(req: NextRequest, pathname: string): NextResponse {
+  const loginUrl = new URL('/login', req.url);
+  loginUrl.searchParams.set('redirect', pathname);
+  const res = NextResponse.redirect(loginUrl);
+  res.cookies.delete(COOKIE_NAME);
   return res;
 }
 
@@ -89,12 +129,6 @@ export async function proxy(req: NextRequest) {
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
-  }
-
-  // If logged in and visiting /login, redirect to appropriate home
-  if (pathname === '/login') {
-    const home = session.role === 'socio' ? '/home' : '/dashboard/learners';
-    return NextResponse.redirect(new URL(home, req.url));
   }
 
   // Route-level role checks
@@ -143,7 +177,14 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  return withRefreshedSession(NextResponse.next(), session);
+  try {
+    return await withRefreshedSession(NextResponse.next(), session);
+  } catch (error) {
+    if (error instanceof PrincipalNotFoundError) {
+      return redirectToLoginAndClearSession(req, pathname);
+    }
+    throw error;
+  }
 }
 
 export const config = {

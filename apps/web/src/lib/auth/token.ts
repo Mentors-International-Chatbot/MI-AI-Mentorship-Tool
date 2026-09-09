@@ -3,7 +3,12 @@
  *
  * Deliberately free of `next/headers` so the request proxy (edge/middleware)
  * can import it directly instead of re-declaring the secret and cookie name.
- * Cookie-store helpers live in `session.ts`.
+ * Cookie-store helpers live in `session.ts`. Note this module still isn't
+ * safe for plain client components to import despite that — `SECRET` is
+ * computed eagerly at load (`resolveSecret()` throws outside production
+ * without `AUTH_SECRET`, which browsers never have). `homePathForRole`
+ * needs to work in both worlds, so it lives in `./roleDestination` instead,
+ * re-exported here for server-side callers.
  */
 import { SignJWT, jwtVerify } from 'jose';
 
@@ -56,6 +61,17 @@ export type SessionIdentity = {
   userId: string;
   role: SessionRole;
   name: string;
+  /**
+   * L1.a/L1.b (Auth & Login Restructure). Absent on tokens signed before
+   * Principal existed and on any token this module signs directly (this
+   * file has no DB access, deliberately — see the file header). Set at
+   * login by whichever provider authenticated the request (via
+   * `findOrCreatePrincipal`), and refreshed on every sliding-refresh cycle
+   * by `refreshedPayload`'s caller — see `src/lib/auth/principal.ts` for
+   * the resolver and the "resolve on the fly" decision that makes an
+   * absent claim here safe rather than stale.
+   */
+  principalId?: string;
 };
 
 export type SessionPayload = SessionIdentity & {
@@ -144,13 +160,36 @@ export function isPastAbsoluteCap(
   return now - session.sessionStart >= SESSION_ABSOLUTE_CAP;
 }
 
-/** Build the payload for a refreshed token: identity and clock preserved. */
-export function refreshedPayload(session: VerifiedSession): SessionPayload {
+/**
+ * Build the payload for a refreshed token: identity and clock preserved,
+ * `principalId` set — not merely carried forward from `session`. A session
+ * refreshes on every active use well inside the 90-day absolute cap, so a
+ * caller that resolves the current Principal on each refresh (see
+ * `resolvePrincipalForSession` in `principal.ts`) and passes its id here is
+ * what actually retires a claim-less session in days, not quarters; a
+ * version that only preserved whatever `session.principalId` already held
+ * would leave every session that predates this claim without one until it
+ * hit the absolute cap and forced a real re-login. Resolution itself is the
+ * caller's job, not this function's — this file stays free of DB access
+ * (see file header).
+ */
+export function refreshedPayload(session: VerifiedSession, principalId: string): SessionPayload {
   return {
     userId: session.userId,
     role: session.role,
     name: session.name,
     rememberMe: session.rememberMe,
     sessionStart: session.sessionStart,
+    principalId,
   };
 }
+
+/**
+ * L1.e (Auth & Login Restructure) — the redirect collapse's shared function.
+ * Lives in `./roleDestination` (see that file's header for why: this
+ * module's eager `SECRET` computation is server-only, but the function
+ * itself needs to be safely importable from client components too).
+ * Re-exported here so existing server-side importers of `token.ts` (e.g.
+ * `proxy.ts`) don't need a second import line.
+ */
+export { homePathForRole } from './roleDestination';

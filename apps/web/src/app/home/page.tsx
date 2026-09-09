@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { verifySession } from '@/lib/auth/session';
+import { verifySession, homePathForRole } from '@/lib/auth/session';
 import { resolveLearnerHome } from '@/lib/courses/learnerHome';
 
 /**
@@ -43,8 +43,5 @@ export default async function HomePage() {
       </ul>
     );
   }
-  if (session.role === 'admin') {
-    redirect('/admin');
-  }
-  redirect('/dashboard/learners');
+  redirect(homePathForRole(session.role));
 }

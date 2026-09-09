@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSession, type SessionIdentity } from '@/lib/auth/session';
+import { findOrCreatePrincipal } from '@/lib/auth/principal';
 import {
   DevTestLearnerProvisionError,
   provisionDevAiEssentialsLearner,
@@ -56,6 +57,25 @@ export async function POST(req: NextRequest) {
       : sessions[role];
     if (!session) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+    }
+
+    // Only the learner branch has a real backing Socio row (provisioned
+    // above). The hardcoded mentor/admin test identities ('test-mentor-001',
+    // 'test-admin-001') have no corresponding Mentor row and never will —
+    // giving them a Principal here would violate Principal.mentorId's FK on
+    // every single test-login call, not just eventually. Left claim-less
+    // instead: resolvePrincipalForSession's on-the-fly fallback hits the
+    // same FK constraint on refresh, but that failure is already non-fatal
+    // there (see proxy.ts's withRefreshedSession) — acceptable for
+    // development-only tooling that these sessions already are.
+    if (learner) {
+      const principal = await findOrCreatePrincipal({
+        provider: 'password',
+        subject: session.userId,
+        role: session.role,
+        socioId: session.userId,
+      });
+      session.principalId = principal.id;
     }
 
     await createSession(session, false);

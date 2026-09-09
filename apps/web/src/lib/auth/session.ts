@@ -3,6 +3,7 @@ import {
   COOKIE_NAME,
   SECRET,
   cookieOptions,
+  homePathForRole,
   nowSeconds,
   sessionMaxAge,
   signSessionToken,
@@ -14,12 +15,10 @@ import {
 
 export type { SessionIdentity, SessionPayload, VerifiedSession };
 
-/** Post-login landing path for each role (dashboard, admin, or socio chat). */
-export function homePathForRole(role: SessionPayload['role']): string {
-  if (role === 'socio') return '/home';
-  if (role === 'admin') return '/admin';
-  return '/dashboard/learners';
-}
+/** Re-exported from `token.ts`, which has no `next/headers` dependency and
+ * so can also be imported directly by `proxy.ts` (middleware) and by plain
+ * client components — see that file for why it doesn't live here. */
+export { homePathForRole };
 
 export async function createSession(
   identity: SessionIdentity,

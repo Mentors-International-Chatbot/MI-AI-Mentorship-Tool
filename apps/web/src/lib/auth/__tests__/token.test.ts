@@ -102,7 +102,7 @@ describe('refresh round-trip', () => {
       exp: NOW + SESSION_REMEMBER_MAX_AGE,
     });
 
-    const token = await signSessionToken(refreshedPayload(remembered));
+    const token = await signSessionToken(refreshedPayload(remembered, 'principal-1'));
     const verified = await verifyToken(token);
 
     expect(verified?.rememberMe).toBe(true);
@@ -117,7 +117,7 @@ describe('refresh round-trip', () => {
     const startedAt = Math.floor(Date.now() / 1000) - 40 * DAY;
     const original = session({ sessionStart: startedAt });
 
-    const token = await signSessionToken(refreshedPayload(original));
+    const token = await signSessionToken(refreshedPayload(original, 'principal-1'));
     const verified = await verifyToken(token);
 
     expect(verified?.sessionStart).toBe(startedAt);
@@ -127,11 +127,27 @@ describe('refresh round-trip', () => {
 
   it('preserves identity claims', async () => {
     const original = session({ userId: 'mentor-9', role: 'admin', name: 'Rosa' });
-    const verified = await verifyToken(await signSessionToken(refreshedPayload(original)));
+    const verified = await verifyToken(await signSessionToken(refreshedPayload(original, 'principal-1')));
 
     expect(verified?.userId).toBe('mentor-9');
     expect(verified?.role).toBe('admin');
     expect(verified?.name).toBe('Rosa');
+  });
+
+  it('sets principalId from the argument, not merely from whatever the session already carried', async () => {
+    // A claim-less session (principalId undefined) refreshing must still come
+    // out the other side WITH a principalId — the caller resolved one for
+    // this request and refreshedPayload's job is to write it in, not to
+    // leave the field exactly as it found it.
+    const claimless = session({ principalId: undefined });
+    const verified = await verifyToken(await signSessionToken(refreshedPayload(claimless, 'principal-resolved')));
+    expect(verified?.principalId).toBe('principal-resolved');
+
+    // And a session already carrying a (possibly stale) principalId gets the
+    // freshly-resolved one, not whatever it walked in with.
+    const stale = session({ principalId: 'principal-old' });
+    const reVerified = await verifyToken(await signSessionToken(refreshedPayload(stale, 'principal-current')));
+    expect(reVerified?.principalId).toBe('principal-current');
   });
 });
 

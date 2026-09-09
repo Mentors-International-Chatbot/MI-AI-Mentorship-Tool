@@ -104,6 +104,7 @@ model Socio {
   diagnosticAttempts DiagnosticAttempt[]
   ltiIdentities      LtiIdentity[]
   gradeDeliveries    LtiGradeDelivery[]
+  principals         Principal[]
 
   @@unique([channelType, externalId], map: "socios_channel_external_id_key")
   @@index([mentorId, status])
@@ -138,8 +139,45 @@ model Mentor {
   mentorProfile MentorProfile?
   ltiIdentities LtiIdentity[]
   courseStaffAssignments CourseStaffAssignment[]
+  principals    Principal[]
 
   @@map("mentors")
+}
+
+/// L1.a (Auth & Login Restructure). The stable identity a session ultimately
+/// resolves to, independent of which provider authenticated it — one row per
+/// (provider, subject). `provider`/`subject` are provider-specific: a
+/// password login is keyed on the account's own id (there is no separate
+/// external identifier to key on), an LTI launch on the Canvas `sub` claim,
+/// a future CAS login on whatever `CAS_ATTRIBUTE_MAP` names as the subject
+/// (NetID, BYU ID, or person ID — BYU's answer, not ours, which is exactly
+/// why that mapping is config and not a column here). Exactly one of
+/// socioId/mentorId is set, mirroring LtiIdentity's existing shape rather
+/// than inventing a second convention for the same idea.
+///
+/// status: PENDING is reserved for a future staff-approval gate (see
+/// l0-auth-login-investigation.md's "Signup surface" finding — mentor/admin
+/// self-signup and LTI auto-provisioning both need reconciling with an
+/// approval step). Not enforced anywhere yet; ACTIVE is the only value
+/// written today.
+model Principal {
+  id        String   @id @default(uuid())
+  provider  String   // "password" | "lti" | "cas"
+  subject   String   // provider-specific stable identifier, see model doc
+  role      String   // SessionRole: "socio" | "mentor" | "admin" | "course_lead"
+  status    String   @default("ACTIVE") // "PENDING" | "ACTIVE"
+  socioId   String?  @map("socio_id")
+  mentorId  String?  @map("mentor_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  socio  Socio?  @relation(fields: [socioId], references: [id], onDelete: Cascade)
+  mentor Mentor? @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@index([socioId])
+  @@index([mentorId])
+  @@map("principals")
 }
 
 /// L5 (Auth & Login Restructure) stage 1: table + backfill, nothing reads

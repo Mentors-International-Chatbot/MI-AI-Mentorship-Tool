@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { homePathForRole } from '@/lib/auth/roleDestination';
 import { ForgotPasswordLink } from './ForgotPasswordModal';
 
 export default function LoginForm() {
@@ -57,12 +58,8 @@ export default function LoginForm() {
 
       if (redirect && !redirect.startsWith('/login')) {
         router.push(redirect);
-      } else if (data.role === 'socio') {
-        router.push('/home');
-      } else if (data.role === 'admin') {
-        router.push('/admin');
       } else {
-        router.push('/dashboard/learners');
+        router.push(homePathForRole(data.role));
       }
     } catch {
       setError('Something went wrong. Please try again.');
@@ -85,9 +82,7 @@ export default function LoginForm() {
         setLoading(false);
         return;
       }
-      if (data.role === 'socio') router.push('/home');
-      else if (data.role === 'admin') router.push('/admin');
-      else router.push('/dashboard/learners');
+      router.push(homePathForRole(data.role));
     } catch {
       setError('Test login failed');
       setLoading(false);
